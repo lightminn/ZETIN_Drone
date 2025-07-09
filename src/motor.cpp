@@ -1,6 +1,7 @@
 #include "../lib/motor.h"
 #include <Arduino.h>
 #include <algorithm>
+#include <iostream>
 #include <cmath>
 
 namespace
@@ -87,7 +88,7 @@ void Motor::setVoltage(float v_x, float v_y, float v_z,
     for (int m = 0; m < 4; ++m)
     {
         dV[m] = std::clamp(dV[m], -dVmax, dVmax);
-        voltage[m] = std::clamp(voltage[m] + dV[m], 0.f, vMax);
+        voltage[m] = clamp(voltage[m] + dV[m], 0.f, vMax);
 
         float duty = voltage[m] / vMax; // 0‥1
         uint16_t cnt = static_cast<uint16_t>(duty * PWM_RES);
