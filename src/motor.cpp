@@ -87,7 +87,7 @@ void Motor::setVoltage(float v_x, float v_y, float v_z,
     /* 4) 증분·전압·PWM 포화 후 하드웨어 적용 */
     for (int m = 0; m < 4; ++m)
     {
-        dV[m] = std::clamp(dV[m], -dVmax, dVmax);
+        dV[m] = clamp(dV[m], -dVmax, dVmax);
         voltage[m] = clamp(voltage[m] + dV[m], 0.f, vMax);
 
         float duty = voltage[m] / vMax; // 0‥1
@@ -98,3 +98,4 @@ void Motor::setVoltage(float v_x, float v_y, float v_z,
 
 void Motor::start() { /* 필요 시 ESC 암·시작 코드 */ }
 void Motor::stop() { /* 모터 컷오프 코드 */ }
+
