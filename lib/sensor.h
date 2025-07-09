@@ -1,31 +1,24 @@
 #ifndef SENSOR_H
 #define SENSOR_H
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <memory>
+// 필요한 라이브러리들을 헤더 파일에 포함시킵니다.
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 
-class SensorData {
-public:
-    SensorData(int id, const std::string& type, const std::string& location)
-        : id_(id), type_(type), location_(location) {}
+// --- 전역 객체 및 변수 선언 (extern) ---
+// 다른 파일에서 이 변수들을 사용할 수 있도록 '선언'만 합니다.
+// 실제 변수는 메인 .cpp 파일에 있습니다.
+extern Adafruit_MPU6050 mpu;
+extern float angle_roll;
+extern float angle_pitch;
+extern float angle_yaw;
+extern unsigned long loop_timer;
+extern float dt;
 
-    int getId() const { return id_; }
-    std::string getType() const { return type_; }
-    std::string getLocation() const { return location_; }
-
-private:
-    int id_;
-    std::string type_;
-    std::string location_;
-};
-
-class SensorDataFactory {
-public:
-    static std::unique_ptr<SensorData> createSensorData(int id, const std::string& type, const std::string& location) {
-        return std::make_unique<SensorData>(id, type, location);
-    }
-};
+// --- 전역 함수 원형 선언 ---
+// 메인 파일에 있는 setup()과 loop() 함수를 선언합니다.
+void setup(void);
+void loop(void);
 
 #endif // SENSOR_H
