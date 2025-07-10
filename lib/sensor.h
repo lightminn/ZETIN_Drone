@@ -18,7 +18,6 @@ extern float dt;
 
 // --- 전역 함수 원형 선언 ---
 // 메인 파일에 있는 setup()과 loop() 함수를 선언합니다.
-void setup(void);
-void loop(void);
+void updateSensor();
 
 #endif // SENSOR_H

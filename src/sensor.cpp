@@ -24,36 +24,12 @@ float angle_yaw = 0; // Yaw는 가속도계로 보정 불가하여 드리프트 
 unsigned long loop_timer;
 float dt; // 루프 실행 시간 (초)
 
-//==================================================================================
-//  SETUP 함수
-//==================================================================================
-void setup(void)
-{
-    Serial.begin(115200);
-    while (!Serial)
-        ;
 
-    // MPU6500 초기화 건너뛰기 (센서 없이 테스트용)
-    Serial.println("MPU6500 초기화 건너뜀 (센서 없이 테스트 모드).");
-
-    // 센서 범위 설정
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG); // 이전 대화에서 확인된 상수 사용
-    mpu.setFilterBandwidth(MPU6050_BAND_44_HZ);
-
-    delay(100);
-
-    // 첫 루프의 dt 계산을 위한 타이머 초기화
-    loop_timer = micros();
-
-    // CSV 출력 헤더
-    Serial.println("Roll,Pitch,Yaw");
-}
 
 //==================================================================================
-//  LOOP 함수
+//  updateSensor 함수
 //==================================================================================
-void loop()
+void updateSensor()
 {
     // --- 1. 시간차 계산 (dt) ---
     // 이전 루프와 현재 루프 사이의 시간차를 초 단위로 계산
