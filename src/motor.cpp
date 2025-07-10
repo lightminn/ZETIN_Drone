@@ -24,6 +24,11 @@ namespace
     constexpr float R[4] = {0.01f, 0.01f, 0.01f, 0.01f};
 
     constexpr uint16_t PWM_RES = 8191; // ESP32 LEDC 13-bit
+
+    template <typename T>
+    constexpr const T& custom_clamp(const T& v, const T& lo, const T& hi) {
+        return (v < lo) ? lo : (hi < v) ? hi : v;
+    }
 }
 
 /* ── 생성자/소멸자는 그대로 ───────────────────────────────────────── */
@@ -88,8 +93,8 @@ void Motor::setVoltage(float v_x, float v_y, float v_z,
     /* 4) 증분·전압·PWM 포화 후 하드웨어 적용 */
     for (int m = 0; m < 4; ++m)
     {
-        dV[m] = std::clamp(dV[m], -dVmax, dVmax);
-        voltage[m] = std::clamp(voltage[m] + dV[m], 0.f, vMax);
+        dV[m] = custom_clamp(dV[m], -dVmax, dVmax);
+        voltage[m] = custom_clamp(voltage[m] + dV[m], 0.f, vMax);
 
         float duty = voltage[m] / vMax; // 0‥1
         uint16_t cnt = static_cast<uint16_t>(duty * PWM_RES);
