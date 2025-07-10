@@ -9,6 +9,7 @@
 // --- 전역 객체 및 변수 선언 (extern) ---
 // 다른 파일에서 이 변수들을 사용할 수 있도록 '선언'만 합니다.
 // 실제 변수는 메인 .cpp 파일에 있습니다.
+extern float COMPLEMENTARY_FILTER_ALPHA;
 extern Adafruit_MPU6050 mpu;
 extern float angle_roll;
 extern float angle_pitch;
