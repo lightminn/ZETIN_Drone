@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include "../lib/sensor.h"
 
 //--- ★★★★★ 사용자 설정 부분 ★★★★★ ---
 const char *ssid = "zetin";         // 본인의 스마트폰 핫스팟 이름
@@ -12,6 +13,22 @@ WiFiServer server(TCP_PORT); // TCP 서버 객체 생성
 void setup()
 {
   Serial.begin(115200);
+  // MPU6500 초기화 건너뛰기 (센서 없이 테스트용)
+  Serial.println("MPU6500 초기화 건너뜀 (센서 없이 테스트 모드).");
+
+  // 센서 범위 설정 (실제 센서가 없으므로 의미는 없지만, 코드 구조 유지를 위해 남겨둠)
+  // mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  // mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  // mpu.setFilterBandwidth(MPU6050_BAND_44_HZ);
+
+  delay(100);
+
+  // 첫 루프의 dt 계산을 위한 타이머 초기화
+  loop_timer = micros();
+
+  // CSV 출력 헤더
+  Serial.println("Roll,Pitch,Yaw");
+
   delay(1000);
 
   // Wi-Fi 연결
@@ -34,6 +51,8 @@ void setup()
 
 void loop()
 {
+  updateSensor();
+
   // 접속한 클라이언트가 있는지 확인
   WiFiClient client = server.available();
 
