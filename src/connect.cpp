@@ -2,13 +2,11 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
-//--- ★★★★★ User-configurable settings ★★★★★ ---
-const char *ssid = "zetin";         // Your smartphone hotspot name
-const char *password = "nitez348*"; // Hotspot password
-const int TCP_PORT = 8888;          // Port number for communication
-//--- End of settings ---
+const char *ssid = "zetin";
+const char *password = "nitez348*";
+const int TCP_PORT = 8888;
 
-WiFiServer server(TCP_PORT); // Create TCP server object
+WiFiServer server(TCP_PORT);
 
 void setupWiFi()
 {
@@ -47,13 +45,10 @@ void handleClientConnection()
         Serial.println(line);
 
         client.printf("OK, Command Received: %s\n", line.c_str());
-        break; 
+        break;
       }
     }
     client.stop();
     Serial.println("Client disconnected.");
   }
 }
-
-
-
