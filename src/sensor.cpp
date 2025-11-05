@@ -36,7 +36,7 @@ void updateSensor()
 
     // 3. 가속도계 값으로 각도 계산
     float accel_angle_roll = atan2(simulated_accel_y, simulated_accel_z) * RAD_TO_DEG;
-    float accel_angle_pitch = atan2(-simulated_accel_x, sqrt(simulated_accel_y * simulated_accel_y + simulated_accel_z * simulated_accel_z)) * RAD_TO_DEG;
+    float accel_angle_pitch = atan2(-simulated_accel_x, sqrt(simulated_accel_y * simulated_accel_y + simulated_accel_z * simulated_accel_z)) * RAD_TO_DEG; // 중력 벡터를 Y-Z 평면에 투영시켜 Roll의 영향 배제
 
     // 4. 자이로스코프 값 적분
     angle_roll += simulated_gyro_x * dt;

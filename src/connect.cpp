@@ -2,8 +2,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
-const char *ssid = "zetin";
-const char *password = "nitez348*";
+const char *ssid = "IT-104_2.4G";
+const char *password = "2c2104!!";
 const int TCP_PORT = 8888;
 
 WiFiServer server(TCP_PORT);
