@@ -14,8 +14,9 @@ public:
     void start(); // 모터 시작
     void stop();  // 모터 정지
 
-private:
     float voltage[4]; // 각 모터 현재 전압
+
+private:
     int motor_num;    // (예: 1 ~ 4)
 };
 
