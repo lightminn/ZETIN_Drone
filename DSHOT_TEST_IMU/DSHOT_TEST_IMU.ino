@@ -22,9 +22,9 @@ const float ALPHA = 0.98;
 
 // --- 모터 제어 변수 ---
 const char CONTROL_AXIS = 'Y'; 
-const int MIN_THROTTLE_PERCENT = 5;  
-const int MAX_THROTTLE_PERCENT = 40; 
-const float MAX_ANGLE = 45.0; 
+const int MIN_THROTTLE_PERCENT = 1;  
+const int MAX_THROTTLE_PERCENT = 100; 
+const float MAX_ANGLE = 90.0; 
 
 // --- ★★★ 듀얼 코어용 공유 변수 ★★★ ---
 // 'volatile' 키워드는 두 코어가 데이터를 안전하게 공유하게 함
@@ -39,12 +39,12 @@ void dshot_task(void *pvParameters) {
   // 이 태스크는 Core 1에서 무한 반복
   for (;;) {
     // Core 0에서 계산한 최신 스로틀 값을 읽어서 모터로 전송
-    // motor.sendThrottlePercent(global_throttle_percent);
-        motor.sendThrottlePercent(1);
+    motor.sendThrottlePercent(global_throttle_percent);
+        // motor.sendThrottlePercent(1);
     
     // DShot 신호를 약 250Hz (4ms) 주기로 안정적으로 전송
     // (ESC의 Failsafe 타임아웃 방지)
-    delay(4); 
+    delayMicroseconds(75); 
   }
 }
 
@@ -87,7 +87,7 @@ void setup() {
   xTaskCreatePinnedToCore(
       dshot_task,         // 실행할 함수
       "DShotTask",        // 태스크 이름 (디버깅용)
-      1024,               // 스택 크기
+      4096,               // 스택 크기
       NULL,               // 파라미터 없음
       1,                  // 우선순위 1
       NULL,               // 태스크 핸들 (필요 없음)

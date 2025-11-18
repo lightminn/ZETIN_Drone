@@ -171,7 +171,7 @@ void dshot_task(void *pvParameters) {
     
     // DShot 신호를 250Hz (4ms) 주기로 안정적으로 전송
     // (ESC Failsafe 방지)
-    delayMicroseconds(200); 
+    delayMicroseconds(75); 
   }
 }
 

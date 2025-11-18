@@ -32,7 +32,7 @@ void loop() {
   // delay(1000);
   
   // Serial.println("Stopping motor.");
-  motor.sendThrottlePercent(1);
+  motor.sendThrottlePercent(1.f);
   // Serial.println("a");
 
 
