@@ -1,0 +1,18 @@
+    #include <US_100.h>
+
+    //use GPIO to read tempeature
+    //    US-100   ARDUINO
+    //Pin  Echo      P2
+    //Pin  Trig      P3
+
+    //attach to P2(Echo) and 3(Trig)
+    //wait 50us after send command(shoud be more than 10)
+    US100 mysonic1(18,17,50);
+
+    void setup() {
+    Serial.begin(115200);
+    }
+
+    void loop() {
+    Serial.println(mysonic1.get_Distance());
+    }
