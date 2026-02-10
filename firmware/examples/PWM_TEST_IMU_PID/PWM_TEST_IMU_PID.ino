@@ -198,6 +198,14 @@ void pid_task(void *pvParameters) {
         writeMotor(pinM4, constrain(pwm4, min_throttle, max_throttle));
       }
 
+      udp.beginPacket(laptopIP, laptopPort);
+      
+      // 포맷: "Roll,Pitch,Yaw,Throttle" (CSV 파싱하기 쉽게 콤마로 구분)
+      // 예: "12.5,-3.2,140.1,1050"
+      udp.printf("%.2f,%.2f,%.2f,%d", angleX, angleY, angleZ, base_throttle);
+      
+      udp.endPacket();
+
     } else {
       vTaskDelay(0);
     }
@@ -318,21 +326,21 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastSendTime = 0;
+  // static unsigned long lastSendTime = 0;
   
-  // 0.05초(50ms)마다 전송 (너무 빠르면 파이썬 그래프 렉걸림)
-  if (millis() - lastSendTime > 50) { 
-    lastSendTime = millis();
+  // // 0.05초(50ms)마다 전송 (너무 빠르면 파이썬 그래프 렉걸림)
+  // if (millis() - lastSendTime > 50) { 
+  //   lastSendTime = millis();
 
-    // 노트북이랑 연결된 상태라면 데이터 전송
-    if (connectionEstablished) {
-      udp.beginPacket(laptopIP, laptopPort);
+  //   // 노트북이랑 연결된 상태라면 데이터 전송
+  //   if (connectionEstablished) {
+  //     udp.beginPacket(laptopIP, laptopPort);
       
-      // 포맷: "Roll,Pitch,Yaw,Throttle" (CSV 파싱하기 쉽게 콤마로 구분)
-      // 예: "12.5,-3.2,140.1,1050"
-      udp.printf("%.2f,%.2f,%.2f,%d", angleX, angleY, angleZ, base_throttle);
+  //     // 포맷: "Roll,Pitch,Yaw,Throttle" (CSV 파싱하기 쉽게 콤마로 구분)
+  //     // 예: "12.5,-3.2,140.1,1050"
+  //     udp.printf("%.2f,%.2f,%.2f,%d", angleX, angleY, angleZ, base_throttle);
       
-      udp.endPacket();
-    }
-  }
+  //     udp.endPacket();
+  //   }
+  // }
 }
