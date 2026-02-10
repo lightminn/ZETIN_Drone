@@ -200,9 +200,9 @@ void pid_task(void *pvParameters) {
 
       udp.beginPacket(laptopIP, laptopPort);
       
-      // 포맷: "Roll,Pitch,Yaw,Throttle" (CSV 파싱하기 쉽게 콤마로 구분)
+      // 포맷: "Roll,Pitch,Yaw,gyro_Roll,gyro_Pitch,gyro_Yaw,accel_Roll,accel_Pitch,accel_Yaw,Throttle" (CSV 파싱하기 쉽게 콤마로 구분)
       // 예: "12.5,-3.2,140.1,1050"
-      udp.printf("%.2f,%.2f,%.2f,%d", angleX, angleY, angleZ, base_throttle);
+      udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d", angleX, angleY, angleZ, raw_gx, raw_gy, raw_gz, raw_ax, raw_ay, raw_az, base_throttle);
       
       udp.endPacket();
 
