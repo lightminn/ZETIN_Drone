@@ -52,7 +52,7 @@ private:
     // Q_angle: 가속도계 신뢰도 (높으면 반응 빠름, 낮으면 부드러움)
     float Q_angle = 0.005f;   
     // Q_bias: 자이로 드리프트 추정 속도
-    float Q_bias  = 0.015f;   
+    float Q_bias  = 0.02f;   
     // R_measure: 측정 노이즈 공분산 (높으면 가속도 노이즈 무시)
     float R_measure = 0.01f;  
     
@@ -70,8 +70,8 @@ Kalman kalmanY;
 // [필터 강도 설정] 
 // 칼만 필터를 쓰더라도 가속도 원본 노이즈가 너무 심하면 안 좋으므로
 // 약한 LPF를 거쳐서 칼만에 넣어주는 것이 좋습니다.
-const float LPF_ALPHA_ACC = 0.10; // 가속도 LPF
-const float LPF_ALPHA_GYRO = 0.50; // 자이로 LPF
+const float LPF_ALPHA_ACC = 1.f; // 가속도 LPF
+const float LPF_ALPHA_GYRO = 1.f; // 자이로 LPF
 
 // PID 게인
 volatile float Kp_Roll = 2.5,  Ki_Roll = 0.005, Kd_Roll = 1.2;
@@ -220,9 +220,9 @@ void pid_task(void *pvParameters) {
           if (abs(errorYaw) < 25.0)   errorSumYaw   += errorYaw * dt;
         }
         
-        errorSumRoll  = constrain(errorSumRoll, -15.0, 15.0);
-        errorSumPitch = constrain(errorSumPitch, -15.0, 15.0);
-        errorSumYaw   = constrain(errorSumYaw, -15.0, 15.0);
+        errorSumRoll  = constrain(errorSumRoll, -10.0, 10.0);
+        errorSumPitch = constrain(errorSumPitch, -10.0, 10.0);
+        errorSumYaw   = constrain(errorSumYaw, -10.0, 10.0);
 
         // PID 출력
         float pid_pitch = (errorPitch * Kp_Pitch) + (errorSumPitch * Ki_Pitch) - (lpf_gy * Kd_Pitch);
