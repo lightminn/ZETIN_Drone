@@ -7,7 +7,7 @@ import sys
 # ==========================================
 # 1. 가장 최근 CSV 파일 자동 선택
 # ==========================================
-list_of_files = glob.glob('*.csv') 
+list_of_files = glob.glob('../logs/*.csv') 
 
 if not list_of_files:
     print("❌ 현재 폴더에 CSV 파일이 없습니다.")

@@ -29,7 +29,7 @@ last_trig_R2 = False
 last_hat_state = (0, 0)
 
 # 튜닝 변수
-MAX_ANGLE = 10.0
+MAX_ANGLE = 15.0
 YAW_RATE = 1.0
 
 def send_cmd(cmd):

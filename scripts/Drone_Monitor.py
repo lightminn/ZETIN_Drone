@@ -38,8 +38,8 @@ throttle_data = deque(maxlen=MAX_LEN)
 # ------------------------------------------
 # CSV 파일 준비
 # ------------------------------------------
-filename = f"flight_log_{datetime.datetime.now().strftime('%H%M%S')}.csv"
-csv_file = open(filename, 'w', newline='')
+filename = f"flight_log_{datetime.datetime.now().date()}_{datetime.datetime.now().strftime('%H%M%S')}.csv"
+csv_file = open(f"../logs/{filename}", 'w', newline='')
 csv_writer = csv.writer(csv_file)
 
 # CSV 헤더 작성 (데이터 순서대로)
