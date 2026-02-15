@@ -9,10 +9,11 @@
 // ==========================================================
 class Kalman {
 public:
-    Kalman() {
-        P[0][0] = 0.0f; P[0][1] = 0.0f;
-        P[1][0] = 0.0f; P[1][1] = 0.0f;
-        angle = 0.0f; bias = 0.0f;
+  Kalman() {
+    P[0][0] = 0.1f; P[0][1] = 0.0f;
+    P[1][0] = 0.0f; P[1][1] = 0.1f;
+    angle = 0.0f;
+    bias = 0.0f;
     }
 
     // newAngle: 가속도계 각도, newRate: 자이로 각속도, dt: 시간간격
@@ -321,19 +322,19 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastSendTime = 0;
-  // [중요 수정] 1ms -> 50ms (20Hz)
-  // 너무 빠르면 네트워크가 막혀서 드론 제어가 렉걸립니다.
-  if (millis() - lastSendTime > 10) { 
-    lastSendTime = millis();
-    if (connectionEstablished) {
-      udp.beginPacket(laptopIP, laptopPort);
-      udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d", 
-                 angleX, angleY, angleZ, 
-                 raw_gx, raw_gy, raw_gz, 
-                 raw_ax, raw_ay, raw_az, 
-                 base_throttle);
-      udp.endPacket();
-    }
-  }
+  // static unsigned long lastSendTime = 0;
+  // // [중요 수정] 1ms -> 50ms (20Hz)
+  // // 너무 빠르면 네트워크가 막혀서 드론 제어가 렉걸립니다.
+  // if (millis() - lastSendTime > 10) { 
+  //   lastSendTime = millis();
+  //   if (connectionEstablished) {
+  //     udp.beginPacket(laptopIP, laptopPort);
+  //     udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d", 
+  //                angleX, angleY, angleZ, 
+  //                raw_gx, raw_gy, raw_gz, 
+  //                raw_ax, raw_ay, raw_az, 
+  //                base_throttle);
+  //     udp.endPacket();
+  //   }
+  // }
 }
