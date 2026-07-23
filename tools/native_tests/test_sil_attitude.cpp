@@ -228,8 +228,11 @@ bool injectImuFromPlant(const PlantState &state, uint32_t tick) {
   const double r_dps = state.r * kRadToDeg;
 
   inv_imu_sensor_event_t e1 = {};
-  e1.gyro[0] = roundedRaw(q_dps / GYRO_SCALE, saturated);
-  e1.gyro[1] = roundedRaw(-p_dps / GYRO_SCALE, saturated);
+  // Physics source: invert the validated accel sensor->body rotation for the
+  // roll/pitch gyro too. Do not derive these signs from the firmware gyro map.
+  e1.gyro[0] = roundedRaw(-q_dps / GYRO_SCALE, saturated);
+  e1.gyro[1] = roundedRaw(p_dps / GYRO_SCALE, saturated);
+  // Yaw keeps its separately bench-verified convention.
   e1.gyro[2] = roundedRaw(-r_dps / GYRO_SCALE, saturated);
 
   const double gbx = -std::sin(state.theta);
@@ -509,6 +512,77 @@ RunResult runSil(const RunConfig &config) {
   return result;
 }
 
+struct EstimatorTrackingResult {
+  double estimate_at_ramp_end_deg = 0.0;
+  double estimate_at_deadline_deg = 0.0;
+  uint32_t first_90_percent_tick = std::numeric_limits<uint32_t>::max();
+  bool raw_saturated = false;
+};
+
+EstimatorTrackingResult runPrescribedEstimatorRamp(bool roll) {
+  constexpr uint32_t kRampTicks = 1000;
+  constexpr uint32_t kDeadlineTick = kRampTicks + 150;
+  constexpr double kCommandDeg = 30.0;
+  constexpr double kRampRateDegPerSec =
+      kCommandDeg / (kRampTicks * kDt);
+  constexpr double kNinetyPercentDeg = 0.9 * kCommandDeg;
+
+  PlantState initial;
+  resetFirmwareState(initial);
+
+  EstimatorTrackingResult result;
+  arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+    const double estimate_deg = roll ? angleX : angleY;
+    if (tick == kRampTicks) {
+      result.estimate_at_ramp_end_deg = estimate_deg;
+    }
+    if (tick == kDeadlineTick) {
+      result.estimate_at_deadline_deg = estimate_deg;
+    }
+    if (result.first_90_percent_tick ==
+            std::numeric_limits<uint32_t>::max() &&
+        estimate_deg >= kNinetyPercentDeg) {
+      result.first_90_percent_tick = tick;
+    }
+
+    arduino_fake::millis_value += 1U;
+    arduino_fake::micros_value += 1000U;
+    lastRcMs = millis();
+
+    const double ramp_fraction =
+        std::min(1.0, static_cast<double>(tick) / kRampTicks);
+    PlantState prescribed;
+    if (roll) {
+      prescribed.phi = ramp_fraction * kCommandDeg * kDegToRad;
+      prescribed.p =
+          tick < kRampTicks ? kRampRateDegPerSec * kDegToRad : 0.0;
+    } else {
+      prescribed.theta = ramp_fraction * kCommandDeg * kDegToRad;
+      prescribed.q =
+          tick < kRampTicks ? kRampRateDegPerSec * kDegToRad : 0.0;
+    }
+    result.raw_saturated =
+        injectImuFromPlant(prescribed, tick) || result.raw_saturated;
+  };
+  arduino_fake::tick_limit = kDeadlineTick;
+
+  bool stopped = false;
+  try {
+    pid_task(nullptr);
+  } catch (const arduino_fake::TaskDelayExit &) {
+    stopped = true;
+  } catch (...) {
+    arduino_fake::pre_tick_hook = nullptr;
+    arduino_fake::tick_limit = 0;
+    throw;
+  }
+  arduino_fake::pre_tick_hook = nullptr;
+  arduino_fake::tick_limit = 0;
+
+  CHECK_MSG(stopped, "pid_task did not stop at estimator ramp deadline");
+  return result;
+}
+
 double meanAbsTailDeg(const RunResult &result, bool roll, std::size_t count) {
   CHECK_MSG(!result.samples.empty(), "trajectory is empty");
   count = std::min(count, result.samples.size());
@@ -632,6 +706,46 @@ int main() {
     invalid.plant.phi = std::numeric_limits<double>::quiet_NaN();
     result.samples.push_back(invalid);
     CHECK(!std::isfinite(settlingTime90(result, true, 8.0)));
+  });
+
+  runCase("gyro transform: prescribed +30deg roll tracks by 150ms", [] {
+    constexpr uint32_t kDeadlineTick = 1150;
+    const EstimatorTrackingResult result =
+        runPrescribedEstimatorRamp(true);
+    std::cout << "[SIL] gyro-axis roll estimate@1.000s="
+              << result.estimate_at_ramp_end_deg
+              << "deg estimate@1.150s=" << result.estimate_at_deadline_deg
+              << "deg first>=27deg_tick=" << result.first_90_percent_tick
+              << '\n';
+
+    CHECK_MSG(!result.raw_saturated,
+              "roll prescribed-motion synthetic IMU raw saturated");
+    CHECK_MSG(result.estimate_at_deadline_deg > 0.0,
+              "roll estimate has the wrong sign");
+    CHECK_MSG(result.estimate_at_deadline_deg >= 27.0,
+              "roll estimate did not reach 90% of +30deg");
+    CHECK_MSG(result.first_90_percent_tick <= kDeadlineTick,
+              "roll estimate did not reach 90% by 150ms after the ramp");
+  });
+
+  runCase("gyro transform: prescribed +30deg pitch tracks by 150ms", [] {
+    constexpr uint32_t kDeadlineTick = 1150;
+    const EstimatorTrackingResult result =
+        runPrescribedEstimatorRamp(false);
+    std::cout << "[SIL] gyro-axis pitch estimate@1.000s="
+              << result.estimate_at_ramp_end_deg
+              << "deg estimate@1.150s=" << result.estimate_at_deadline_deg
+              << "deg first>=27deg_tick=" << result.first_90_percent_tick
+              << '\n';
+
+    CHECK_MSG(!result.raw_saturated,
+              "pitch prescribed-motion synthetic IMU raw saturated");
+    CHECK_MSG(result.estimate_at_deadline_deg > 0.0,
+              "pitch estimate has the wrong sign");
+    CHECK_MSG(result.estimate_at_deadline_deg >= 27.0,
+              "pitch estimate did not reach 90% of +30deg");
+    CHECK_MSG(result.first_90_percent_tick <= kDeadlineTick,
+              "pitch estimate did not reach 90% by 150ms after the ramp");
   });
 
   runCase("S1: roll/pitch attitude hold converges", [] {

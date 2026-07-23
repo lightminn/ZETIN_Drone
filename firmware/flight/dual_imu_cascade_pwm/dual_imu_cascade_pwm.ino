@@ -582,10 +582,11 @@ void pid_task(void *pv) {
       continue;
     }
 
-    // 실기 검증된 sensor -> body frame 변환(archive/legacy_flight/dual_imu_pid_pwm과 동일):
-    // body roll X=-sensor Y, pitch Y= sensor X, yaw Z=-sensor Z.
-    const float bodyGx = -fg[1];
-    const float bodyGy =  fg[0];
+    // Roll/pitch gyro now matches the validated accel transform; the inverted
+    // signs caused estimator lag and rate-loop anti-damping.
+    // bodyGz stays unchanged pending separate bench yaw re-verification.
+    const float bodyGx =  fg[1];
+    const float bodyGy = -fg[0];
     const float bodyGz = -fg[2];
     const float bodyAx =  fa[1] * ACCEL_SCALE;
     const float bodyAy = -fa[0] * ACCEL_SCALE;
