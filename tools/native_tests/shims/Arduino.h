@@ -35,8 +35,10 @@ constexpr int LOW = 0x00;
 using TickType_t = uint32_t;
 using BaseType_t = int;
 using TaskFunction_t = void (*)(void *);
+struct portMUX_TYPE {};
 
 constexpr BaseType_t pdPASS = 1;
+inline constexpr portMUX_TYPE portMUX_INITIALIZER_UNLOCKED = {};
 
 namespace arduino_fake {
 
@@ -156,6 +158,8 @@ inline void vTaskDelayUntil(TickType_t *, TickType_t) {
 inline void vTaskDelay(TickType_t) {
   if (arduino_fake::stop_on_task_delay) throw arduino_fake::TaskDelayExit{};
 }
+inline void portENTER_CRITICAL(portMUX_TYPE *) {}
+inline void portEXIT_CRITICAL(portMUX_TYPE *) {}
 
 inline BaseType_t xTaskCreatePinnedToCore(
     TaskFunction_t, const char *, uint32_t, void *, uint32_t, void **,

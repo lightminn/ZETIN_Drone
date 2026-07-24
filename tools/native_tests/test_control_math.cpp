@@ -590,6 +590,94 @@ int main() {
     CHECK_NEAR(targetAngleZ, -7.0f, 1e-6f);
   });
 
+  runCase("mag command enables lazily and disables without changing yaw", [] {
+    mag_enabled = false;
+    mag_ready = false;
+    angleZ = 42.0f;
+    bmm.begin_result = 0;
+
+    sendUdpCommandOnce("mag 1");
+    CHECK(mag_enabled);
+    CHECK(mag_ready);
+    CHECK_NEAR(angleZ, 42.0f, 1e-6f);
+
+    sendUdpCommandOnce("mag 0");
+    CHECK(!mag_enabled);
+    CHECK_NEAR(angleZ, 42.0f, 1e-6f);
+  });
+
+  runCase("mag command rejects values other than zero and one", [] {
+    mag_enabled = false;
+    sendUdpCommandOnce("mag 2");
+    CHECK(!mag_enabled);
+    sendUdpCommandOnce("mag -1");
+    CHECK(!mag_enabled);
+  });
+
+  runCase("magcal collects extrema and prints hard-iron offsets", [] {
+    safety_lock = true;
+    mag_enabled = false;
+    mag_ready = false;
+    mag_calibrating = false;
+    bmm.begin_result = 0;
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("magcal 1");
+    CHECK(mag_calibrating);
+    CHECK(!mag_enabled);
+
+    bmm.next_data.float_x = 10.0f;
+    bmm.next_data.float_y = -4.0f;
+    bmm.next_data.float_z = 8.0f;
+    sampleMagnetometer(20U);
+    bmm.next_data.float_x = -2.0f;
+    bmm.next_data.float_y = 8.0f;
+    bmm.next_data.float_z = -6.0f;
+    sampleMagnetometer(40U);
+
+    arduino_fake::serial_output.clear();
+    sendUdpCommandOnce("magcal 0");
+    CHECK(!mag_calibrating);
+    CHECK(arduino_fake::serial_output.find(
+              "MAG_HARD_IRON_OFFSET_X = 4.000000f") != std::string::npos);
+    CHECK(arduino_fake::serial_output.find(
+              "MAG_HARD_IRON_OFFSET_Y = 2.000000f") != std::string::npos);
+    CHECK(arduino_fake::serial_output.find(
+              "MAG_HARD_IRON_OFFSET_Z = 1.000000f") != std::string::npos);
+  });
+
+  runCase("magcal is refused while armed", [] {
+    safety_lock = false;
+    mag_calibrating = false;
+    mag_ready = false;
+    bmm.begin_result = 0;
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("magcal 1");
+
+    CHECK(!mag_calibrating);
+    CHECK(!mag_ready);
+    CHECK(arduino_fake::serial_output.find(
+              "Magcal refused (armed)") != std::string::npos);
+    safety_lock = true;
+  });
+
+  runCase("start is refused while magcal is active", [] {
+    safety_lock = true;
+    calibration_ok = true;
+    angleX = 0.0f;
+    angleY = 0.0f;
+    imu1_frozen_now = false;
+    imu2_frozen_now = false;
+    imu_disagree_now = false;
+    mag_calibrating = true;
+
+    sendUdpCommandOnce("start");
+
+    CHECK(safety_lock);
+    mag_calibrating = false;
+  });
+
   runCase("compute_alpha: below soft threshold is static", [] {
     CHECK_EQ(compute_alpha(1.0f - ACC_DEV_SOFT * 0.5f, 0, 0), ALPHA_STATIC);
   });

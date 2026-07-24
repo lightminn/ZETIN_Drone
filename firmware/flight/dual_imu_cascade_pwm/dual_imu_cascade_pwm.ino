@@ -1,10 +1,15 @@
 #include <Arduino.h>
 #include <SPI.h>
+#include <Wire.h>
 #include <ICM42670P.h>
+#include <DFRobot_BMM350.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_task_wdt.h>
 #include <errno.h>
+#include <float.h>
+
+#include "mag_yaw_fusion.h"
 
 #ifndef WIFI_LATENCY_DEBUG
 #define WIFI_LATENCY_DEBUG 0
@@ -88,6 +93,9 @@ const int pinM3   = 6;   // FR
 const int pinM4   = 7;   // RL
 const int SPI_CS1 = 10;  // IMU1
 const int SPI_CS2 = 9;   // IMU2
+const int BMM_SDA = 35;
+const int BMM_SCL = 36;
+const int LDO_SHD = 38;
 
 const int ESC_FREQ   = 400;
 const int ESC_RES    = 14;
@@ -101,6 +109,20 @@ const float YAW_DEADZONE = 0.3f;
 const float MAX_TARGET_ANGLE_RP = 30.0f;     // UDP 오입력에 대한 자세 명령 제한
 const float MAX_TARGET_RATE_RP  = 300.0f;    // outer-loop 출력 제한 (deg/s)
 const float MAX_TARGET_RATE_YAW = 180.0f;
+// 250Hz outer loop에서 K=0.001 -> tau ≈ 0.004/K = 4s.
+const float K_MAG = 0.001f;
+const uint32_t MAG_SAMPLE_PERIOD_MS = 20;    // BMM350 read = 50Hz, core 0 only
+const uint32_t MAG_STALE_MS = 100;
+
+// magcal 출력값을 아래 세 상수에 붙여 넣는다. 보정은 raw - offset.
+const float MAG_HARD_IRON_OFFSET_X = 0.0f;
+const float MAG_HARD_IRON_OFFSET_Y = 0.0f;
+const float MAG_HARD_IRON_OFFSET_Z = 0.0f;
+
+// BMM350 축이 기체 축과 다르면 벤치 sign test 뒤 여기만 바꾼다.
+const float MAG_BODY_SIGN_X = 1.0f;
+const float MAG_BODY_SIGN_Y = 1.0f;
+const float MAG_BODY_SIGN_Z = 1.0f;
 
 // IMU2는 x,z축이 IMU1 대비 반전 (y는 동일). 첫 파일 기준 그대로.
 const float IMU2_SIGN_X = -1.0f;
@@ -270,6 +292,7 @@ public:
 
 ICM42670WithLPF IMU1(SPI, SPI_CS1);
 ICM42670WithLPF IMU2(SPI, SPI_CS2);
+DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 
 volatile bool  safety_lock  = true;
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
@@ -280,6 +303,24 @@ volatile float accX   = 0.0f, accY   = 0.0f, accZ   = 0.0f; // 융합 가속도 
 volatile int   motorOut[4] = {1000,1000,1000,1000};
 volatile float tgtRate[3]  = {0,0,0}; // roll,pitch,yaw dps
 volatile int   pidLoopHz   = 0;
+
+// Core 0 writer -> Core 1 reader. 짝수 seq만 완성된 벡터다.
+volatile bool  mag_enabled = false;
+volatile bool  mag_ready = false;
+volatile bool  mag_calibrating = false;
+volatile float magFieldX = 0.0f, magFieldY = 0.0f, magFieldZ = 0.0f;
+volatile float magHeading = 0.0f;
+volatile uint32_t magSampleMs = 0;
+volatile bool magSampleValid = false;
+volatile bool mag_reference_pending = true;
+
+portMUX_TYPE magSnapshotMux = portMUX_INITIALIZER_UNLOCKED;
+float magYawReferenceOffset = 0.0f;
+
+float magCalMin[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+float magCalMax[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+uint32_t magCalSampleCount = 0;
+uint32_t lastMagReadMs = 0;
 
 float iTermRoll = 0.0f, iTermPitch = 0.0f, iTermYaw = 0.0f;  // 적분 기여 (모터 µs)
 
@@ -306,6 +347,103 @@ volatile uint32_t lastRcSeq       = 0;
 volatile bool     rcSeqValid      = false;
 volatile uint32_t rcTotalPkts     = 0;
 volatile uint32_t rcDroppedPkts   = 0;
+
+static inline void publishMagSample(
+    float x, float y, float z, uint32_t sample_ms) {
+  // I2C read happens before this lock. The critical section only publishes
+  // four words, so pid_task never waits on the blocking transaction.
+  portENTER_CRITICAL(&magSnapshotMux);
+  magFieldX = x;
+  magFieldY = y;
+  magFieldZ = z;
+  magSampleMs = sample_ms;
+  magSampleValid = true;
+  portEXIT_CRITICAL(&magSnapshotMux);
+}
+
+static inline bool readMagSnapshot(MagSnapshot &snapshot) {
+  portENTER_CRITICAL(&magSnapshotMux);
+  bool valid = magSampleValid;
+  snapshot.x = magFieldX;
+  snapshot.y = magFieldY;
+  snapshot.z = magFieldZ;
+  snapshot.sample_ms = magSampleMs;
+  portEXIT_CRITICAL(&magSnapshotMux);
+  return valid;
+}
+
+static bool initMagnetometer() {
+  if (mag_ready) return true;
+
+  pinMode(LDO_SHD, OUTPUT);
+  digitalWrite(LDO_SHD, HIGH);
+  delay(100);
+  Wire.begin(BMM_SDA, BMM_SCL);
+  uint8_t status = bmm.begin();
+  if (status != 0) {
+    Serial.printf("[MAG] BMM350 init failed (%u)\n", (unsigned)status);
+    return false;
+  }
+  bmm.setOperationMode(eBmm350NormalMode);
+  bmm.setRate(BMM350_DATA_RATE_50HZ);
+  mag_ready = true;
+  lastMagReadMs = millis() - MAG_SAMPLE_PERIOD_MS;
+  Serial.println("[MAG] BMM350 ready @50Hz");
+  return true;
+}
+
+static void startMagCalibration() {
+  mag_enabled = false;
+  mag_reference_pending = true;
+  mag_calibrating = true;
+  magCalMin[0] = FLT_MAX;
+  magCalMin[1] = FLT_MAX;
+  magCalMin[2] = FLT_MAX;
+  magCalMax[0] = -FLT_MAX;
+  magCalMax[1] = -FLT_MAX;
+  magCalMax[2] = -FLT_MAX;
+  magCalSampleCount = 0;
+  Serial.println("[MAGCAL] rotate drone; send 'magcal 0' when finished");
+}
+
+static void stopMagCalibration() {
+  mag_calibrating = false;
+  if (magCalSampleCount == 0U) {
+    Serial.println("[MAGCAL] no samples");
+    return;
+  }
+  const float offset_x = 0.5f * (magCalMax[0] + magCalMin[0]);
+  const float offset_y = 0.5f * (magCalMax[1] + magCalMin[1]);
+  const float offset_z = 0.5f * (magCalMax[2] + magCalMin[2]);
+  Serial.printf("[MAGCAL] samples=%lu\n", (unsigned long)magCalSampleCount);
+  Serial.printf("const float MAG_HARD_IRON_OFFSET_X = %.6ff;\n", offset_x);
+  Serial.printf("const float MAG_HARD_IRON_OFFSET_Y = %.6ff;\n", offset_y);
+  Serial.printf("const float MAG_HARD_IRON_OFFSET_Z = %.6ff;\n", offset_z);
+}
+
+static void sampleMagnetometer(uint32_t now_ms) {
+  if (!mag_ready || now_ms - lastMagReadMs < MAG_SAMPLE_PERIOD_MS) return;
+  lastMagReadMs = now_ms;
+
+  // Blocking I2C read: caller is udp_task on core 0, never pid_task.
+  sBmm350MagData_t data = bmm.getGeomagneticData();
+  const float raw[3] = {data.float_x, data.float_y, data.float_z};
+  if (!isfinite(raw[0]) || !isfinite(raw[1]) || !isfinite(raw[2])) return;
+
+  if (mag_calibrating) {
+    for (int axis = 0; axis < 3; axis++) {
+      if (raw[axis] < magCalMin[axis]) magCalMin[axis] = raw[axis];
+      if (raw[axis] > magCalMax[axis]) magCalMax[axis] = raw[axis];
+    }
+    magCalSampleCount++;
+  }
+
+  publishMagSample(
+      MAG_BODY_SIGN_X * (raw[0] - MAG_HARD_IRON_OFFSET_X),
+      MAG_BODY_SIGN_Y * (raw[1] - MAG_HARD_IRON_OFFSET_Y),
+      MAG_BODY_SIGN_Z * (raw[2] - MAG_HARD_IRON_OFFSET_Z),
+      now_ms);
+}
 
 // ==========================================================
 // 5. 모터
@@ -461,6 +599,7 @@ void pid_task(void *pv) {
 
   float targetRateRoll = 0, targetRatePitch = 0, targetRateYaw = 0;
   uint8_t outerCnt = 0;
+  uint8_t magFusionCnt = 0;
   uint32_t lastMicros = micros();
   uint32_t loopCount = 0;
   uint32_t loopMarkerMs = millis();
@@ -604,6 +743,32 @@ void pid_task(void *pv) {
     float accAngleY = atan2f(-bodyAx, sqrtf(bodyAy*bodyAy + bodyAz*bodyAz)) * 180.0f / PI;
     angleX = alpha * angleX + (1.0f - alpha) * accAngleX;
     angleY = alpha * angleY + (1.0f - alpha) * accAngleY;
+
+    // outerCnt는 safety-lock 경로에서 매 tick reset되므로 독립 divider를 쓴다.
+    // 이로써 armed/disarmed 모두 정확히 250Hz, K_MAG tau≈4s를 유지한다.
+    if (magFusionCnt == 0 && mag_enabled) {
+      MagSnapshot mag;
+      if (readMagSnapshot(mag)
+          && nowMs - mag.sample_ms <= MAG_STALE_MS
+          && mag.x*mag.x + mag.y*mag.y + mag.z*mag.z > 1e-6f) {
+        float heading = tiltCompensatedMagHeadingDeg(
+            mag.x, mag.y, mag.z, angleX, angleY);
+        if (isfinite(heading)) {
+          magHeading = heading;
+          if (mag_reference_pending) {
+            // Relative heading: enabling mag or resetting angleZ must not
+            // command a turn toward magnetic north.
+            magYawReferenceOffset = wrapDeg(angleZ - heading);
+            mag_reference_pending = false;
+          }
+          float referencedHeading =
+              wrapDeg(heading + magYawReferenceOffset);
+          angleZ += magYawCorrectionDeg(angleZ, referencedHeading, K_MAG);
+        }
+      }
+    }
+    magFusionCnt++;
+    if (magFusionCnt >= OUTER_DIV) magFusionCnt = 0;
 
     // ---------- 안전 검사 ----------
     if (fabsf(angleX) > SAFETY_ANGLE || fabsf(angleY) > SAFETY_ANGLE) {
@@ -835,12 +1000,12 @@ static void handleGainCommand(const char *buf) {
 
 // 첫 14개 필드는 기존 PC 스크립트와 호환된다. 뒤 필드는 cascade 진단 확장:
 // fault_imu1,fault_imu2,fault_disagree,active_imus,scaled,fault_attitude,
-// calibration_ok,armed. 마지막 Armed 필드로 지상국이 START 거부를 감지한다.
+// calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading을 append-only로 보낸다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -851,7 +1016,7 @@ static void sendTelemetry() {
              active_imus, (int)mixer_scaled, (int)fault_attitude,
              (int)calibration_ok, (int)!safety_lock,
              motorOut[0], motorOut[1], motorOut[2], motorOut[3], pidLoopHz,
-             tgtRate[0], tgtRate[1], tgtRate[2]);
+             tgtRate[0], tgtRate[1], tgtRate[2], magHeading);
   udp.endPacket();
 }
 
@@ -900,11 +1065,13 @@ void udp_task(void *pv) {
             // 리셋하는 것을 막는다.
             Serial.println(">>> START ignored (already armed)");
           }
-          else if (!calibration_ok || overTilt || noUsableImu || imu_disagree_now) {
+          else if (!calibration_ok || overTilt || noUsableImu
+                   || imu_disagree_now || mag_calibrating) {
             safety_lock = true;
-            Serial.printf(">>> START REFUSED calib=%d tilt=%d imu=%d disagree=%d\n",
+            Serial.printf(">>> START REFUSED calib=%d tilt=%d imu=%d disagree=%d magcal=%d\n",
                           (int)calibration_ok, (int)overTilt,
-                          (int)noUsableImu, (int)imu_disagree_now);
+                          (int)noUsableImu, (int)imu_disagree_now,
+                          (int)mag_calibrating);
           } else {
             safety_lock = true; // 상태를 모두 초기화한 뒤 마지막에 해제
             fault_rc = false;
@@ -919,6 +1086,7 @@ void udp_task(void *pv) {
             targetAngleX = 0.0f;
             targetAngleY = 0.0f;
             targetAngleZ = 0.0f;
+            mag_reference_pending = true;
             angleZ = 0.0f;
             safety_lock = false;
             Serial.println(">>> START");
@@ -946,6 +1114,34 @@ void udp_task(void *pv) {
             Serial.printf(">>> Yaw %s\n", yaw_enabled ? "ON" : "OFF");
           }
         }
+        else if (strncmp(buf, "magcal", 6) == 0) {
+          long enabled;
+          if (parseIntStrict(buf + 6, enabled) && (enabled == 0 || enabled == 1)) {
+            if (enabled == 0) {
+              stopMagCalibration();
+            } else if (!safety_lock) {
+              Serial.println(">>> Magcal refused (armed)");
+            } else if (initMagnetometer()) {
+              startMagCalibration();
+            }
+          }
+        }
+        else if (strncmp(buf, "mag", 3) == 0) {
+          long enabled;
+          if (parseIntStrict(buf + 3, enabled) && (enabled == 0 || enabled == 1)) {
+            if (enabled == 0) {
+              mag_enabled = false;
+              mag_reference_pending = true;
+              Serial.println(">>> Mag OFF");
+            } else if (mag_calibrating) {
+              Serial.println(">>> Mag refused (magcal active)");
+            } else if (initMagnetometer()) {
+              mag_reference_pending = true;
+              mag_enabled = true;
+              Serial.println(">>> Mag ON");
+            }
+          }
+        }
         else if (strcmp(buf, "gains") == 0) {
           if (connectionEstablished) {
             udp.beginPacket(laptopIP, laptopPort);
@@ -964,6 +1160,7 @@ void udp_task(void *pv) {
     }
 
     uint32_t now = millis();
+    if (mag_enabled || mag_calibrating) sampleMagnetometer(now);
     if (now - lastSend >= 50) {
       lastSend = now;
 #if WIFI_LATENCY_DEBUG
