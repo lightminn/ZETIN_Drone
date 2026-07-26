@@ -640,7 +640,7 @@ int main() {
     base_throttle = 1100;
     min_throttle = 1050;
     max_throttle = 1250;
-    yaw_enabled = false;
+    yaw_hold_override = false;
     angleZ = 42.0f;
     targetAngleZ = -7.0f;
 
@@ -650,7 +650,7 @@ int main() {
     CHECK_EQ(max_throttle, 1900);
 
     sendUdpCommandOnce("yaw 999999999999999999999999999999");
-    CHECK(!yaw_enabled);
+    CHECK(!yaw_hold_override);
     CHECK_NEAR(targetAngleZ, -7.0f, 1e-6f);
   });
 

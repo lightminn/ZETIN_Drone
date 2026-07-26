@@ -288,7 +288,7 @@ void resetFirmwareState(const PlantState &initial) {
   base_throttle = 1000;
   min_throttle = 1050;
   max_throttle = 1300;
-  yaw_enabled = false;
+  yaw_hold_override = false;
   safety_lock = true;
   calibration_ok = true;
 

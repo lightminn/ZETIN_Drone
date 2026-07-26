@@ -91,7 +91,7 @@ void resetCommonFirmwareState(float roll_deg, float pitch_deg, float yaw_deg) {
   base_throttle = 1150;
   min_throttle = 1050;
   max_throttle = 1300;
-  yaw_enabled = false;
+  yaw_hold_override = false;
   safety_lock = false;
   calibration_ok = true;
 
@@ -181,7 +181,7 @@ void injectImu(float roll_deg, float pitch_deg, float body_gz_dps,
 
 int runOffTrace() {
   resetCommonFirmwareState(0.0f, 0.0f, 10.0f);
-  yaw_enabled = true;
+  yaw_hold_override = true;
   targetAngleZ = -5.0f;
 
   constexpr uint32_t kTicks = 2000;
@@ -260,7 +260,7 @@ YawRun runYawFusion(float roll_deg, float pitch_deg,
   magSampleValid = false;
   magSampleMs = 0;
   mag_reference_pending = true;
-  yaw_enabled = enable_yaw_hold;
+  yaw_hold_override = enable_yaw_hold;
   targetAngleZ = estimate_start_deg;
 
   arduino_fake::pre_tick_hook =

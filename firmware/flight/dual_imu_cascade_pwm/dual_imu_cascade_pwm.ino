@@ -10,6 +10,7 @@
 #include <float.h>
 
 #include "mag_yaw_fusion.h"
+#include "yaw_command.h"
 
 #ifndef WIFI_LATENCY_DEBUG
 #define WIFI_LATENCY_DEBUG 0
@@ -77,7 +78,8 @@ volatile float Kp_Rate_Yaw   = 1.50f, Ki_Rate_Yaw   = 0.05f,  Kd_Rate_Yaw   = 0.
 volatile int  base_throttle = 1000;
 volatile int  min_throttle  = 1050;
 volatile int  max_throttle  = 1300;
-volatile bool yaw_enabled   = false;   // "yaw 1" 로 활성화
+volatile bool yaw_hold_override = false;   // "yaw 1": heading 고정 + 재슬레이빙 금지
+volatile bool yaw_hold_now = false;   // 텔레메트리용: 현재 heading 잠금 중인가
 
 const int MAG_THROTTLE_REF_US = 1000;   // 보정 기준(모터 off 근처)
 // 모터 전류 간섭 보정: body-frame ΔB(µT)는 base_throttle에 비례. raw mag에서 뺀다.
@@ -117,6 +119,9 @@ const float YAW_DEADZONE = 0.3f;
 const float MAX_TARGET_ANGLE_RP = 30.0f;     // UDP 오입력에 대한 자세 명령 제한
 const float MAX_TARGET_RATE_RP  = 300.0f;    // outer-loop 출력 제한 (deg/s)
 const float MAX_TARGET_RATE_YAW = 180.0f;
+// yaw 모드 판정 임계치. 벤치에서 조정한다(설계 문서 §1 참조).
+const float YAW_RATE_DEADZONE   = 3.0f;    // 명령 각속도 절댓값이 이하면 스틱 중립
+const float YAW_HOLD_SETTLE_DPS = 10.0f;   // bodyGz 절댓값이 이하면 정착
 // 250Hz outer loop에서 K=0.001 -> tau ≈ 0.004/K = 4s.
 const float K_MAG = 0.001f;
 const uint32_t MAG_SAMPLE_PERIOD_MS = 20;    // BMM350 read = 50Hz, core 0 only
@@ -801,6 +806,9 @@ void pid_task(void *pv) {
       mixer_scaled = false;
       iTermRoll = iTermPitch = iTermYaw = 0.0f;
       targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
+      targetYawRate = 0.0f;
+      targetAngleZ = angleZ;
+      yaw_hold_now = false;
       prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       outerCnt = 0;
@@ -821,20 +829,25 @@ void pid_task(void *pv) {
     }
 
     // ---------- Outer loop (250Hz): 각도 -> 목표 각속도 ----------
-    const bool yawOn = yaw_enabled;
+    // yaw는 각속도 명령 + 자동 heading 잠금. hold가 아닌 동안 setpoint를
+    // 매 tick 현재 heading으로 슬레이빙해 stale setpoint를 원천 차단한다.
+    const YawOuter yawOuter = updateYawOuter(
+        targetYawRate, bodyGz, angleZ, targetAngleZ,
+        yaw_hold_override, YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
+    targetAngleZ = yawOuter.target_angle_deg;
+    yaw_hold_now = yawOuter.hold;
+    const bool yawOn = yawOuter.hold;
+
     if (outerCnt == 0) {
       targetRateRoll = constrain((targetAngleX - angleX) * Kp_Angle_Roll,
                                  -MAX_TARGET_RATE_RP, MAX_TARGET_RATE_RP);
       targetRatePitch = constrain((targetAngleY - angleY) * Kp_Angle_Pitch,
                                   -MAX_TARGET_RATE_RP, MAX_TARGET_RATE_RP);
-      targetRateYaw = yawOn
-                    ? constrain(wrapDeg(targetAngleZ - angleZ) * Kp_Angle_Yaw,
-                                -MAX_TARGET_RATE_YAW, MAX_TARGET_RATE_YAW)
-                    : 0.0f;
+      targetRateYaw = yawTargetRateDps(yawOuter, targetYawRate, angleZ,
+                                       Kp_Angle_Yaw, MAX_TARGET_RATE_YAW);
     }
     outerCnt++;
     if (outerCnt >= OUTER_DIV) outerCnt = 0;
-    if (!yawOn) targetRateYaw = 0.0f;
 
     // ---------- Inner loop (1kHz): 각속도 PID ----------
     float eRoll  = targetRateRoll  - bodyGx;
@@ -1170,8 +1183,8 @@ void udp_task(void *pv) {
           long enabled;
           if (parseIntStrict(buf + 3, enabled) && (enabled == 0 || enabled == 1)) {
             targetAngleZ = angleZ; // 활성화 순간 setpoint jump 방지
-            yaw_enabled = (enabled == 1); // setpoint을 먼저 맞춘 뒤 활성화
-            Serial.printf(">>> Yaw %s\n", yaw_enabled ? "ON" : "OFF");
+            yaw_hold_override = (enabled == 1); // setpoint을 먼저 맞춘 뒤 활성화
+            Serial.printf(">>> Yaw %s\n", yaw_hold_override ? "ON" : "OFF");
           }
         }
         else if (strncmp(buf, "magcal", 6) == 0) {
