@@ -103,14 +103,15 @@ def sender():
     global _seq
     send("connect")
     time.sleep(0.2)
+    send("yaw 1")          # 시동 해제 상태에서만 수락된다 (start보다 먼저)
+    time.sleep(0.05)
     for _ in range(3):
         send("start")
         time.sleep(0.05)
     send(THROTTLE_CMD)
-    send("yaw 1")
     while _running:
         _seq += 1
-        send(f"rc {_seq} 0 0 0")   # roll/pitch/yaw target 0 + 워치독 급이
+        send(f"rc {_seq} 0 0 0")   # 오버라이드 중이므로 yaw 절대각 0 유지
         time.sleep(0.05)
 
 
@@ -237,11 +238,15 @@ def main():
     for ph in PHASES:
         log("\n" + "-" * 50)
         log(f"[동작] {ph['instr']}")
-        for _ in range(3):     # 수평 상태에서 재시동(혹시 disarm됐으면 복구) + yaw 재활성
+        # yaw 1은 시동 해제 상태에서만 수락되므로 start보다 먼저 보낸다.
+        # 이미 무장 중이면 거부되지만 그때는 오버라이드가 이미 켜져 있고,
+        # 중간에 disarm됐다면 이 순서라야 재무장 전에 다시 켤 수 있다.
+        send("yaw 1")
+        time.sleep(0.05)
+        for _ in range(3):     # 수평 상태에서 재시동(혹시 disarm됐으면 복구)
             send("start")
             time.sleep(0.05)
         send(THROTTLE_CMD)
-        send("yaw 1")
         time.sleep(ANNOUNCE)
         for c in range(COUNTDOWN, 0, -1):
             log(f"    측정까지 {c}...")

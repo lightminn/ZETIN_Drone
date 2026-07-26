@@ -1036,9 +1036,35 @@ YAW_RATE_MAX_DPS = 90.0     # 스틱 최대 편향 시 yaw 각속도 (dps). 조�
     print(f" [L-Stick]  Roll / Pitch (max ±{MAX_ANGLE}°),  [R-Stick↔] Yaw 각속도 (max ±{YAW_RATE_MAX_DPS:.0f}°/s)")
 ```
 
-- [ ] **Step 4: `bench_yaw_test.py` 순서 수정**
+- [ ] **Step 4: `bench_yaw_test.py` 순서 수정 (`yaw 1` 두 곳 전부)**
 
-`sender()`에서 `send("yaw 1")`을 `start` 전송 **앞으로** 옮긴다:
+이 파일에는 `yaw 1`이 **두 곳** 있다. 둘 다 `start` 앞으로 와야 한다.
+
+| 위치 | 역할 |
+|---|---|
+| `sender()` | 최초 시동 전 오버라이드 설정 |
+| 페이즈 루프 | 페이즈마다 재시동 + yaw 재활성 |
+
+페이즈 루프를 빠뜨리면, 측정 중 드론이 disarm됐다가 복구되는 경우 무장 해제
+엣지에서 오버라이드가 지워진 뒤 `start`로 재무장하고, 그 다음 `yaw 1`이 거부되어
+**남은 테스트 내내 오버라이드 없이 돈다.** 그러면 비틀림에 복원 토크가 안 나와
+yaw 부호 판정이 무의미해진다.
+
+페이즈 루프는 다음 순서로 바꾼다:
+
+```python
+        # yaw 1은 시동 해제 상태에서만 수락되므로 start보다 먼저 보낸다.
+        # 이미 무장 중이면 거부되지만 그때는 오버라이드가 이미 켜져 있고,
+        # 중간에 disarm됐다면 이 순서라야 재무장 전에 다시 켤 수 있다.
+        send("yaw 1")
+        time.sleep(0.05)
+        for _ in range(3):     # 수평 상태에서 재시동(혹시 disarm됐으면 복구)
+            send("start")
+            time.sleep(0.05)
+        send(THROTTLE_CMD)
+```
+
+`sender()`에서도 `send("yaw 1")`을 `start` 전송 **앞으로** 옮긴다:
 
 ```python
 def sender():

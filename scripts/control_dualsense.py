@@ -20,7 +20,7 @@ UDP_IP        = "192.168.4.1"
 UDP_PORT      = 4210
 CTRL_LOOP_HZ  = 20          # 제어 루프 주기 (50ms)
 MAX_ANGLE     = 15.0
-YAW_RATE      = 1.0
+YAW_RATE_MAX_DPS = 90.0     # 스틱 최대 편향 시 yaw 각속도 (dps). 조종감은 여기서 조정
 THROTTLE_RATE = 200.0        # 오른쪽 스틱 최대 편향 시 스로틀 변화율 (µs/s)
 TRIM_STEP     = 0.2
 STOP_RETRIES  = 5            # stop/start 재전송 횟수
@@ -49,7 +49,6 @@ print(f"[LOG] 비행 로그: {log_path}")
 # === 상태 변수 ===
 current_throttle = 1000
 throttle_f       = 1000.0   # 아날로그 스로틀 적분용 (µs, float)
-target_yaw       = 0.0
 trim_roll        = 0.0
 trim_pitch       = 0.0
 is_armed         = False
@@ -96,28 +95,25 @@ def reliable_send(cmd: str):
 
 
 def arm():
-    global is_armed, last_arm_time, current_throttle, throttle_f, target_yaw, rc_seq
+    global is_armed, last_arm_time, current_throttle, throttle_f, rc_seq
     is_armed         = True
     last_arm_time    = time.monotonic()
     current_throttle = 1100
     throttle_f       = 1100.0
-    target_yaw       = 0.0
     rc_seq           = 0   # 재시동 시 시퀀스 번호 리셋
     # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
     # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
     reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
     reliable_send("start")
-    reliable_send("yaw 0")   # [DIAG] heading-hold OFF — yaw 1은 보내지 않는다
-    print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON, yaw-hold OFF)")
+    print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON)")
 
 
 def disarm(reason: str = "수동"):
-    global is_armed, current_throttle, throttle_f, target_yaw
+    global is_armed, current_throttle, throttle_f
     reliable_send("stop")
     is_armed         = False
     current_throttle = 1000
     throttle_f       = 1000.0
-    target_yaw       = 0.0
     print(f"\n>>> [SYSTEM] DISARMED ({reason})")
 
 
@@ -242,7 +238,7 @@ def telemetry_thread():
 # 컨트롤러 처리 스레드
 # ==========================================================
 def controller_thread():
-    global current_throttle, throttle_f, target_yaw, trim_roll, trim_pitch, rc_seq
+    global current_throttle, throttle_f, trim_roll, trim_pitch, rc_seq
     global last_btn_start, last_btn_R1, last_btn_L1
     global last_trig_R2, last_trig_L2, last_hat_state
 
@@ -260,7 +256,7 @@ def controller_thread():
     print(f" [R2/L2]    Throttle ↑/↓ (누르는 동안 연속, {THROTTLE_RATE:.0f}µs/s)")
     print(f" [R1/L1]    Throttle +1 / -1 (정밀)")
     print(f" [DPAD]     Trim  |  [PS] Trim Reset")
-    print(f" [L-Stick]  Roll / Pitch,  [R-Stick↔] Yaw  (max ±{MAX_ANGLE}°)")
+    print(f" [L-Stick]  Roll / Pitch (max ±{MAX_ANGLE}°),  [R-Stick↔] Yaw 각속도 (max ±{YAW_RATE_MAX_DPS:.0f}°/s)")
     print("======================================")
 
     loop_dt = 1.0 / CTRL_LOOP_HZ
@@ -356,13 +352,13 @@ def controller_thread():
                 trim_roll = trim_pitch = 0.0
                 print(" [TRIM] RESET (0.0, 0.0)")
 
-            # --- RC 명령 전송 (시퀀스 번호 포함) ---
+            # --- RC 명령 전송 (yaw는 각속도 dps) ---
             rc_seq += 1
-            final_roll  = deadzone(joy.get_axis(0))  * MAX_ANGLE + trim_roll   # a0 = 왼쪽 스틱 ↔
-            final_pitch = deadzone(-joy.get_axis(1)) * MAX_ANGLE + trim_pitch  # a1 = 왼쪽 스틱 ↕
-            target_yaw += deadzone(joy.get_axis(3), 0.12) * YAW_RATE           # a3 = 오른쪽 스틱 ↔ (yaw)
+            final_roll  = deadzone(joy.get_axis(0))  * MAX_ANGLE + trim_roll
+            final_pitch = deadzone(-joy.get_axis(1)) * MAX_ANGLE + trim_pitch
+            yaw_rate    = deadzone(joy.get_axis(3), 0.12) * YAW_RATE_MAX_DPS
 
-            send_cmd(f"rc {rc_seq} {final_roll:.2f} {final_pitch:.2f} {target_yaw:.2f}")
+            send_cmd(f"rcr {rc_seq} {final_roll:.2f} {final_pitch:.2f} {yaw_rate:.1f}")
 
 
 # ==========================================================
