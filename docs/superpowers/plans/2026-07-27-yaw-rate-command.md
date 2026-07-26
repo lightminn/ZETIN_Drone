@@ -639,14 +639,19 @@ double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
 }
 ```
 
-`Sample`에 `double i_yaw_us = 0.0;`를, `RunResult`에 `double max_abs_i_yaw_us = 0.0;`를
-추가하고, 샘플 기록 지점(`sample.i_pitch_us = iTermPitch;` 옆)에
-`sample.i_yaw_us = iTermYaw;`와 최대값 갱신을 기존 roll/pitch와 같은 방식으로 넣는다.
+`Sample`에 `double i_yaw_us = 0.0;`와 `bool yaw_hold = false;`를, `RunResult`에
+`double max_abs_i_yaw_us = 0.0;`를 추가한다. 샘플 기록 지점
+(`sample.i_pitch_us = iTermPitch;` 옆)에 `sample.i_yaw_us = iTermYaw;`,
+`sample.yaw_hold = yaw_hold_now;`와 최대값 갱신을 기존 roll/pitch와 같은 방식으로 넣는다.
+
+> `yaw_hold`를 반드시 기록해야 한다. 실행 초반에는 기체가 정지 상태라 `hold`가
+> **true**이고 그때는 해금 전에도 적분기가 쌓인다. 따라서 전체 최대값만 보면
+> 해금 여부를 가릴 수 없다. **hold가 아닌 구간**으로 한정해야 red/green이 갈린다.
 
 `main()`에 두 케이스를 추가한다:
 
 ```cpp
-  runCase("S6 yaw 적분 해금: 잠금이 아닌 동안에도 적분기가 살아 있고 클램프된다", [] {
+  runCase("S6 yaw 적분 해금: hold가 아닌 구간에서도 적분기가 누적된다", [] {
     // SIL yaw 플랜트의 반작용 토크 부호는 미해결이다(S5 참조: runReport로만
     // 남기고 단언하지 않는다). 따라서 폐루프 정상상태 각속도로는 단언할 수
     // 없다. 이 케이스는 코드 변경 자체 — "hold가 아니어도 iTermYaw가
@@ -659,12 +664,25 @@ double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
     const RunResult result =
         runSil(constantYawDisturbance(0.05f, disturbance_nm, 3000));
 
-    // 해금 전에는 iTermYaw가 0에 묶여 있었으므로 이 단언이 red/green을 가른다.
-    CHECK_MSG(result.max_abs_i_yaw_us > 0.0,
-              "yaw 적분기가 전혀 누적되지 않았다 (해금 실패)");
+    std::size_t rate_mode_samples = 0;
+    double max_i_yaw_rate_mode = 0.0;
+    for (const Sample &sample : result.samples) {
+      if (sample.yaw_hold) continue;
+      rate_mode_samples++;
+      max_i_yaw_rate_mode =
+          std::max(max_i_yaw_rate_mode, std::fabs(sample.i_yaw_us));
+    }
+
+    // 판별력 확인: hold가 아닌 구간이 실제로 있어야 이 테스트가 의미를 갖는다.
+    CHECK_MSG(rate_mode_samples > 100,
+              "hold가 아닌 구간이 거의 없어 해금 여부를 가릴 수 없다");
+    // 해금 전에는 hold가 아니면 iTermYaw가 0으로 묶였다. 여기서 red/green이 갈린다.
+    CHECK_MSG(max_i_yaw_rate_mode > 0.0,
+              "rate 모드에서 yaw 적분기가 전혀 누적되지 않았다 (해금 실패)");
     CHECK_LE(result.max_abs_i_yaw_us, static_cast<double>(I_TERM_MAX_US));
-    std::cout << "[SIL] S6 max|iTermYaw|=" << result.max_abs_i_yaw_us
-              << "us of +/-" << I_TERM_MAX_US << "us\n";
+    std::cout << "[SIL] S6 rate-mode samples=" << rate_mode_samples
+              << " max|iTermYaw| in rate mode=" << max_i_yaw_rate_mode
+              << "us, overall max=" << result.max_abs_i_yaw_us << "us\n";
   });
 
   runReport("S6b yaw closed-loop rate (numbers only)", [] {
@@ -700,7 +718,20 @@ double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
 python -m unittest tools.test_sil_attitude -v 2>&1 | tail -20
 ```
 Expected: FAIL — 현재는 `yawOn`이 false면 `iTermYaw`가 0으로 묶이므로
-`CHECK_MSG(result.max_abs_i_yaw_us > 0.0, ...)`에서 실패
+`CHECK_MSG(max_i_yaw_rate_mode > 0.0, ...)`에서 실패
+
+**red 확인은 반드시 이 형태로 한다.** 적분 줄을 임시로 다음처럼 되돌려
+S6가 실제로 FAIL하는지 본 뒤 원복한다:
+
+```cpp
+      if (yawOuter.hold) iTermYaw = constrain(iTermYaw + Ki_Rate_Yaw * eYaw * realDt,
+                                              -I_TERM_MAX_US, I_TERM_MAX_US);
+      else iTermYaw = 0.0f;
+```
+
+이 red 확인을 건너뛰면 안 된다. 전체 최대값만 보는 초안은 이 되돌림에서도
+통과해버렸다 — 실행 초반 정지 구간에서 `hold`가 true라 그때 쌓인 값이 남기
+때문이다. `rate_mode_samples`로 한정해야 판별력이 생긴다.
 
 - [ ] **Step 3: 적분 블록 교체**
 
