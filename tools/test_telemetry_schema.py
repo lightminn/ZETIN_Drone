@@ -63,10 +63,13 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "TgtRate_Pitch",
             "TgtRate_Yaw",
             "MagHeading",
+            "Mag_X",
+            "Mag_Y",
+            "Mag_Z",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(31, len(TELEMETRY_FIELDS))
-        self.assertEqual(32, len(CSV_FIELDS))
+        self.assertEqual(34, len(TELEMETRY_FIELDS))
+        self.assertEqual(35, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -114,11 +117,52 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         ):
             self.assertEqual(expected, sample[name])
             self.assertIs(type(sample[name]), float)
+        for name in ("Mag_X", "Mag_Y", "Mag_Z"):
+            self.assertIsNone(sample[name])
+
+    def test_34_field_packet_appends_compensated_mag_xyz(self):
+        line = ",".join(
+            (
+                "1.25", "-2.50", "3.75",
+                "4.50", "-5.25", "6.00",
+                "0.100", "-0.200", "1.000",
+                "1100", "0", "1", "123", "4", "0", "1", "0", "1", "0", "0", "1",
+                "1",
+                "1101", "1102", "1103", "1104", "998",
+                "12.50", "-23.75", "0.00",
+                "87.25",
+                "21.50", "-7.25", "42.00",
+            )
+        )
+
+        sample = parse_telemetry_packet(line)
+
+        for name, expected in (
+            ("MagHeading", 87.25),
+            ("Mag_X", 21.5),
+            ("Mag_Y", -7.25),
+            ("Mag_Z", 42.0),
+        ):
+            self.assertEqual(expected, sample[name])
+            self.assertIs(type(sample[name]), float)
+        row = sample_to_csv_row("00:00:00.000", sample)
+        self.assertEqual(
+            ["87.25", "21.5", "-7.25", "42.0"],
+            [str(value) for value in row[-4:]],
+        )
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in ("Armed", "Motor_M1", "Motor_M2", "Motor_M3", "Motor_M4", "PID_Loop_Hz"):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], int)
-        for name in ("TgtRate_Roll", "TgtRate_Pitch", "TgtRate_Yaw", "MagHeading"):
+        for name in (
+            "TgtRate_Roll",
+            "TgtRate_Pitch",
+            "TgtRate_Yaw",
+            "MagHeading",
+            "Mag_X",
+            "Mag_Y",
+            "Mag_Z",
+        ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], float)
 
     def test_short_packet_is_rejected(self):

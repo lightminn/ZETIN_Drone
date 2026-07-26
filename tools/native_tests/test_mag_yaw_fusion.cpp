@@ -115,6 +115,12 @@ void resetCommonFirmwareState(float roll_deg, float pitch_deg, float yaw_deg) {
   tgtRate[1] = 0.0f;
   tgtRate[2] = 0.0f;
   pidLoopHz = 0;
+  mag_comp_x = 0.0f;
+  mag_comp_y = 0.0f;
+  mag_comp_z = 0.0f;
+  magTelemX = 0.0f;
+  magTelemY = 0.0f;
+  magTelemZ = 0.0f;
   iTermRoll = 0.0f;
   iTermPitch = 0.0f;
   iTermYaw = 0.0f;
@@ -385,6 +391,40 @@ int runFusionTests() {
               errorDetail("tilt-comp direct", heading_error));
     CHECK_MSG(fused_error < 1.0f,
               errorDetail("tilted convergence", fused_error));
+
+    resetCommonFirmwareState(kRoll, kPitch, kTrueHeading);
+    mag_enabled = true;
+    mag_ready = true;
+    magSampleValid = false;
+    mag_reference_pending = true;
+    mag_comp_x = 0.0020f;
+    mag_comp_y = -0.0010f;
+    mag_comp_z = 0.0015f;
+    const float throttle_delta =
+        static_cast<float>(base_throttle - MAG_THROTTLE_REF_US);
+    publishMagSample(
+        mag.x + mag_comp_x * throttle_delta,
+        mag.y + mag_comp_y * throttle_delta,
+        mag.z + mag_comp_z * throttle_delta,
+        millis());
+    injectImu(kRoll, kPitch, 0.0f, 0U);
+    arduino_fake::pre_tick_hook = [](uint32_t) {
+      arduino_fake::millis_value += 1U;
+      arduino_fake::micros_value += 1000U;
+      lastRcMs = millis();
+    };
+    arduino_fake::tick_limit = 1U;
+    try {
+      pid_task(nullptr);
+    } catch (const arduino_fake::TaskDelayExit &) {
+    }
+    arduino_fake::pre_tick_hook = nullptr;
+    arduino_fake::tick_limit = 0U;
+
+    CHECK_NEAR(magTelemX, mag.x, 1e-6f);
+    CHECK_NEAR(magTelemY, mag.y, 1e-6f);
+    CHECK_NEAR(magTelemZ, mag.z, 1e-6f);
+    CHECK_NEAR(magHeading, measured_heading, 0.05f);
   });
 
   runCase("+/-180 degree wrap uses the short positive correction", [] {

@@ -591,6 +591,7 @@ int main() {
   });
 
   runCase("mag command enables lazily and disables without changing yaw", [] {
+    safety_lock = true;  // 최초 lazy init(블로킹 I2C)은 disarmed에서만 허용된다.
     mag_enabled = false;
     mag_ready = false;
     angleZ = 42.0f;
@@ -604,6 +605,22 @@ int main() {
     sendUdpCommandOnce("mag 0");
     CHECK(!mag_enabled);
     CHECK_NEAR(angleZ, 42.0f, 1e-6f);
+  });
+
+  runCase("mag enable refused while armed before init", [] {
+    safety_lock = false;  // armed
+    mag_enabled = false;
+    mag_ready = false;
+    bmm.begin_result = 0;
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("mag 1");
+
+    CHECK(!mag_enabled);
+    CHECK(!mag_ready);  // 블로킹 init이 실행되지 않아야 한다.
+    CHECK(arduino_fake::serial_output.find(
+              "Mag refused (armed, not initialized)") != std::string::npos);
+    safety_lock = true;
   });
 
   runCase("mag command rejects values other than zero and one", [] {
