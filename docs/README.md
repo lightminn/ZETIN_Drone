@@ -6,6 +6,7 @@
 - [펌웨어 카탈로그](firmware_catalog.md)
 - [UDP 프로토콜](udp_protocol.md)
 - [전원 인가 벤치 절차 (첫 호버 전 안전 관문)](power_on_bench_procedure.md)
+- [지상국 링크 요구사항과 RC 타임아웃 진단](ground_station_link.md)
 - [저장소 마이그레이션 맵](migration_map.md)
 - [저장소 정리 설계](design/2026-07-13-repository-cleanup-design.md)
 - [저장소 정리 구현 계획](plans/2026-07-13-repository-cleanup.md)

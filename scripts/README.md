@@ -38,5 +38,10 @@ UDP 4210을 bind하므로 한 번에 하나만 실행한다. 펌웨어 프로토
 목적지가 하나뿐이라 동시 실행은 지원하지 않으며, DualSense 조종 중 로그는
 `control_dualsense.py`가 직접 `logs/`에 기록한다.
 
+⚠️ `control_dualsense.py`로 조종할 때 **게임패드는 USB로 연결한다.** 블루투스
+패드는 노트북 WiFi와 무선부를 공유해 드론으로 가는 업링크를 수백 ms씩 막고,
+비행 중 RC 타임아웃(모터 정지)을 유발한다. 근거와 진단법은
+[`docs/ground_station_link.md`](../docs/ground_station_link.md) 참조.
+
 오래된 GPS/TCP 실험 도구는 [`archive/README.md`](archive/README.md)에서만
 찾을 수 있으며 현행 지원 범위가 아니다.
