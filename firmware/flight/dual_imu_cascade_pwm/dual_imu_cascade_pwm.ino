@@ -305,6 +305,7 @@ DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 
 volatile bool  safety_lock  = true;
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
+volatile float targetYawRate = 0.0f;   // rcr이 준 yaw 각속도 명령 (dps)
 
 volatile float angleX = 0.0f, angleY = 0.0f, angleZ = 0.0f; // 추정 각도
 volatile float gyroX  = 0.0f, gyroY  = 0.0f, gyroZ  = 0.0f; // 융합 각속도 (body frame)
@@ -982,6 +983,45 @@ static void handleRcCommand(char *buf) {
   }
 }
 
+// rcr <seq> <roll> <pitch> <yaw_rate>
+// yaw는 각속도(dps) 명령이다. seq 처리와 워치독 급이는 rc와 상태를 공유한다.
+static void handleRcrCommand(char *buf) {
+  char *save = nullptr;
+  (void)strtok_r(buf, " \t", &save); // "rcr"
+  char *arg[4] = {nullptr, nullptr, nullptr, nullptr};
+  int count = 0;
+  while (count < 4 && (arg[count] = strtok_r(nullptr, " \t", &save)) != nullptr) count++;
+  if (count != 4) return;
+  if (strtok_r(nullptr, " \t", &save) != nullptr) return; // 여분 필드 거부
+
+  if (arg[0][0] == '-' || arg[0][0] == '+') return;
+  char *seqEnd;
+  errno = 0;
+  unsigned long seqLong = strtoul(arg[0], &seqEnd, 10);
+  if (seqEnd == arg[0] || *seqEnd != '\0' || errno == ERANGE ||
+      seqLong > 0xFFFFFFFFUL) return;
+
+  float x, y, rate;
+  if (!parseFloatStrict(arg[1], x) || !parseFloatStrict(arg[2], y) ||
+      !parseFloatStrict(arg[3], rate)) return;
+
+  uint32_t seq = (uint32_t)seqLong;
+  rcTotalPkts = rcTotalPkts + 1;
+  if (rcSeqValid) {
+    int32_t advance = (int32_t)(seq - lastRcSeq);
+    if (advance <= 0) {
+      rcDroppedPkts = rcDroppedPkts + 1;
+      return;
+    }
+    if (advance > 1) rcDroppedPkts += (uint32_t)(advance - 1);
+  }
+  lastRcSeq = seq;
+  rcSeqValid = true;
+
+  if (!setRcTargets(x, y, 0.0f, false)) return;   // roll/pitch만, yaw 각도는 건드리지 않는다
+  targetYawRate = constrain(rate, -MAX_TARGET_RATE_YAW, MAX_TARGET_RATE_YAW);
+}
+
 static void handleGainCommand(const char *buf) {
   if (strlen(buf) < 3) return;
   float value;
@@ -1070,7 +1110,10 @@ void udp_task(void *pv) {
         packetBuffer[len] = '\0';
         char *buf = trimCommand(packetBuffer);
 
-        if (strncmp(buf, "rc", 2) == 0 && (buf[2] == ' ' || buf[2] == '\t')) {
+        if (strncmp(buf, "rcr", 3) == 0 && (buf[3] == ' ' || buf[3] == '\t')) {
+          handleRcrCommand(buf);
+        }
+        else if (strncmp(buf, "rc", 2) == 0 && (buf[2] == ' ' || buf[2] == '\t')) {
           handleRcCommand(buf);
         }
         else if (strcmp(buf, "start") == 0) {

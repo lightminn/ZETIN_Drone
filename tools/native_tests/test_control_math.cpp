@@ -85,6 +85,12 @@ void sendRc(const std::string &command) {
   handleRcCommand(buffer.data());
 }
 
+void sendRcr(const std::string &command) {
+  std::vector<char> buffer(command.begin(), command.end());
+  buffer.push_back('\0');
+  handleRcrCommand(buffer.data());
+}
+
 void sendUdpCommandOnce(const std::string &command) {
   wifi_udp_fake::incoming_packet = command;
   arduino_fake::stop_on_task_delay = true;
@@ -109,6 +115,7 @@ void resetRcState() {
   targetAngleZ = 7.0f;
   lastRcMs = 6;
   arduino_fake::millis_value = 100;
+  targetYawRate = 0.0f;
 }
 
 struct GainSlot {
@@ -451,6 +458,63 @@ int main() {
     CHECK_EQ(rcDroppedPkts, 0U);
     CHECK_EQ(lastRcSeq, 100U);
     CHECK(rcSeqValid);
+  });
+
+  runCase("rcr: 정상 패킷이 yaw 각속도와 roll/pitch를 설정한다", [] {
+    resetRcState();
+    sendRcr("rcr 1 5.5 -6.5 45.0");
+    CHECK_NEAR(targetAngleX, 5.5f, 1e-4f);
+    CHECK_NEAR(targetAngleY, -6.5f, 1e-4f);
+    CHECK_NEAR(targetYawRate, 45.0f, 1e-4f);
+  });
+
+  runCase("rcr: roll/pitch는 +-30도로 클램프된다", [] {
+    resetRcState();
+    sendRcr("rcr 1 90 -90 0");
+    CHECK_NEAR(targetAngleX, 30.0f, 1e-4f);
+    CHECK_NEAR(targetAngleY, -30.0f, 1e-4f);
+  });
+
+  runCase("rcr: yaw 각속도는 +-180dps로 클램프된다", [] {
+    resetRcState();
+    sendRcr("rcr 1 0 0 500");
+    CHECK_NEAR(targetYawRate, 180.0f, 1e-4f);
+    sendRcr("rcr 2 0 0 -500");
+    CHECK_NEAR(targetYawRate, -180.0f, 1e-4f);
+  });
+
+  runCase("rcr: 역순/중복 seq는 폐기되고 드롭으로 계수된다", [] {
+    resetRcState();
+    sendRcr("rcr 10 0 0 20");
+    const uint32_t dropped_before = rcDroppedPkts;
+    sendRcr("rcr 9 0 0 99");
+    CHECK_NEAR(targetYawRate, 20.0f, 1e-4f);
+    CHECK_EQ(rcDroppedPkts, dropped_before + 1U);
+  });
+
+  runCase("rcr: seq 건너뜀이 드롭 수에 반영된다", [] {
+    resetRcState();
+    sendRcr("rcr 10 0 0 0");
+    sendRcr("rcr 14 0 0 0");
+    CHECK_EQ(rcDroppedPkts, 3U);
+  });
+
+  runCase("rcr: 인자 수 불일치와 비수치는 거부된다", [] {
+    resetRcState();
+    sendRcr("rcr 1 0 0 30");
+    CHECK_NEAR(targetYawRate, 30.0f, 1e-4f);
+    sendRcr("rcr 2 0 0");          // 인자 부족
+    CHECK_NEAR(targetYawRate, 30.0f, 1e-4f);
+    sendRcr("rcr 3 0 0 abc");      // 비수치
+    CHECK_NEAR(targetYawRate, 30.0f, 1e-4f);
+    sendRcr("rcr 4 0 0 10 99");    // 여분 필드
+    CHECK_NEAR(targetYawRate, 30.0f, 1e-4f);
+  });
+
+  runCase("rcr: udp_task 디스패치가 rc와 구분해서 처리한다", [] {
+    resetRcState();
+    sendUdpCommandOnce("rcr 1 0 0 60");
+    CHECK_NEAR(targetYawRate, 60.0f, 1e-4f);
   });
 
   struct GainCommandCase {
