@@ -845,28 +845,71 @@ Expected: FAIL — 현재는 무장 중 `yaw 1`이 수락되어 첫 `CHECK`에�
         }
 ```
 
-- [ ] **Step 4: 무장 해제 엣지에서 오버라이드 해제**
+- [ ] **Step 4: 무장 해제 엣지에서 오버라이드 해제 (잠금 경로 3곳 전부)**
 
-현행 799줄 `if (safety_lock) {` 블록의 **첫 줄**로 추가:
+`pid_task`는 `wasLocked = true;`를 **세 곳**에서 세운다:
+
+| 줄 | 경로 |
+|---|---|
+| 733 | IMU 전멸(둘 다 freeze 또는 중재 불가) |
+| 816 | 주 `if (safety_lock)` 블록 |
+| 901 | 믹서 뒤 late lock |
+
+세 곳 중 하나라도 빠지면 그 경로로 무장 해제됐을 때 오버라이드가 **다음 비행까지
+살아남는다.** 다음 tick에 주 블록이 `!wasLocked`를 보지만 이미 true라 엣지가
+발동하지 않기 때문이다. 이는 설계한 "비행 1회짜리 opt-in" 보장을 깬다.
+
+흩어 놓으면 누락이 반복되므로 헬퍼로 묶는다. `pid_task` 위쪽(파일 전역 함수 영역)에
+추가한다:
 
 ```cpp
-      if (!wasLocked) yaw_hold_override = false;   // 무장 해제 엣지에서만 1회
+// 잠금 진입 시 1회만 실행되는 정리. 세 잠금 경로가 모두 이 함수를 통해서만
+// wasLocked를 세운다. 매 tick 지우면 시동 해제 상태에서 `yaw 1`을 켤 수 없다.
+static inline void enterLockedState(bool &wasLocked) {
+  if (!wasLocked) yaw_hold_override = false;
+  wasLocked = true;
+}
 ```
 
-> 이 분기는 잠긴 동안 매 tick 실행된다. 조건 없이 지우면 시동 해제 상태에서
-> `yaw 1`을 켤 수 없게 되므로 반드시 `!wasLocked` 엣지로 한정한다.
-> `wasLocked`는 `true`로 초기화되어 부팅 직후에는 발동하지 않는다.
-
-- [ ] **Step 5: 통과 확인**
+그리고 733·816·901줄의 `wasLocked = true;`를 **모두** `enterLockedState(wasLocked);`로
+교체한다. 교체 후 확인:
 
 ```bash
+grep -n "wasLocked = true" firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino
+```
+Expected: 622줄의 초기화(`bool wasLocked = true;`) 한 건만 남는다
+
+- [ ] **Step 5: 헬퍼 단위 테스트 추가**
+
+`tools/native_tests/test_control_math.cpp`에 추가:
+
+```cpp
+  runCase("잠금 진입 헬퍼는 오버라이드를 엣지에서 1회만 해제한다", [] {
+    yaw_hold_override = true;
+    bool wasLocked = false;
+    enterLockedState(wasLocked);
+    CHECK(!yaw_hold_override);      // 무장 해제 엣지에서 해제
+    CHECK(wasLocked);
+
+    // 잠긴 상태가 유지되는 동안에는 다시 켤 수 있어야 한다
+    // (매 tick 지우면 시동 해제 상태에서 yaw 1을 켤 수 없다)
+    yaw_hold_override = true;
+    enterLockedState(wasLocked);
+    CHECK(yaw_hold_override);
+  });
+```
+
+- [ ] **Step 6: 통과 확인**
+
+```bash
+grep -n "wasLocked = true" firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino
 python -m unittest discover -s tools -p "test_*.py" 2>&1 | grep -E "^(Ran|OK|FAILED)"
 arduino-cli compile --warnings all --fqbn esp32:esp32:esp32s3 \
   --build-path /tmp/zetin-yaw firmware/flight/dual_imu_cascade_pwm
 ```
-Expected: `OK`, 빌드 성공
+Expected: `wasLocked = true` 는 622줄 초기화 한 건만, `OK`, 빌드 성공
 
-- [ ] **Step 6: 커밋**
+- [ ] **Step 7: 커밋**
 
 ```bash
 git add firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino \
