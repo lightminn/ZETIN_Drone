@@ -103,9 +103,12 @@ def arm():
     throttle_f       = 1100.0
     target_yaw       = 0.0
     rc_seq           = 0   # 재시동 시 시퀀스 번호 리셋
+    # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
+    # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
+    reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
     reliable_send("start")
-    reliable_send("yaw 0")   # [DIAG] heading-hold 확실히 OFF — roll/pitch 격리 테스트용
-    print("\n>>> [SYSTEM] ARMED (시동 ON, yaw-hold OFF)")
+    reliable_send("yaw 0")   # [DIAG] heading-hold OFF — yaw 1은 보내지 않는다
+    print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON, yaw-hold OFF)")
 
 
 def disarm(reason: str = "수동"):
