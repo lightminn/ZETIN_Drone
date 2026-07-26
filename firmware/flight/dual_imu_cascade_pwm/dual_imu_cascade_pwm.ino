@@ -836,7 +836,6 @@ void pid_task(void *pv) {
         yaw_hold_override, YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
     targetAngleZ = yawOuter.target_angle_deg;
     yaw_hold_now = yawOuter.hold;
-    const bool yawOn = yawOuter.hold;
 
     if (outerCnt == 0) {
       targetRateRoll = constrain((targetAngleX - angleX) * Kp_Angle_Roll,
@@ -882,13 +881,15 @@ void pid_task(void *pv) {
                              -I_TERM_MAX_US, I_TERM_MAX_US);
       iTermPitch = constrain(iTermPitch + Ki_Rate_Pitch * ePitch * realDt,
                              -I_TERM_MAX_US, I_TERM_MAX_US);
-      if (yawOn) iTermYaw = constrain(iTermYaw + Ki_Rate_Yaw * eYaw * realDt,
-                                      -I_TERM_MAX_US, I_TERM_MAX_US);
-      else iTermYaw = 0.0f;
+      // yaw 적분은 rate/hold 두 모드 모두에서 돈다. 안쪽 루프의 임무가
+      // "목표 각속도 추종"이고, P 단독으로는 모터 토크 불균형 같은 일정
+      // 외란에서 정상상태 각속도 오차가 남아 정착 임계치 아래로 내려가지
+      // 않는다(2026-07-27 실측 최대 +16.6dps). 그러면 자동 잠금이 영영
+      // 걸리지 않는다.
+      iTermYaw = constrain(iTermYaw + Ki_Rate_Yaw * eYaw * realDt,
+                           -I_TERM_MAX_US, I_TERM_MAX_US);
     } else if (throttle <= 1100) {
       iTermRoll = iTermPitch = iTermYaw = 0.0f;
-    } else if (!yawOn) {
-      iTermYaw = 0.0f;
     }
 
     // 모터 PWM의 단일 writer는 PID task로 유지한다.

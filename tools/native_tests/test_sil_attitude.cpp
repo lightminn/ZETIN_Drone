@@ -145,6 +145,7 @@ struct RunConfig {
   float target_yaw_deg = 0.0f;
   float ki_roll = 0.005f;
   float ki_pitch = 0.005f;
+  float ki_yaw = 0.05f;
   bool inject_roll_sign_fault = false;
   std::function<Disturbance(uint32_t)> disturbance_for_interval;
 };
@@ -158,6 +159,8 @@ struct Sample {
   std::array<int, 4> motors = {1000, 1000, 1000, 1000};
   double i_roll_us = 0.0;
   double i_pitch_us = 0.0;
+  double i_yaw_us = 0.0;
+  bool yaw_hold = false;
   bool mixer_scaled_now = false;
   bool safety_locked = false;
 };
@@ -180,6 +183,7 @@ struct RunResult {
   uint32_t max_abs_i_roll_tick = 0;
   double max_abs_i_pitch_us = 0.0;
   uint32_t max_abs_i_pitch_tick = 0;
+  double max_abs_i_yaw_us = 0.0;
 };
 
 void sendUdpCommandOnce(const std::string &command) {
@@ -401,6 +405,8 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state) {
   sample.estimated_pitch_deg = angleY;
   sample.i_roll_us = iTermRoll;
   sample.i_pitch_us = iTermPitch;
+  sample.i_yaw_us = iTermYaw;
+  sample.yaw_hold = yaw_hold_now;
   sample.mixer_scaled_now = mixer_scaled;
   sample.safety_locked = safety_lock;
   for (int index = 0; index < 4; index++) sample.motors[index] = motorOut[index];
@@ -444,6 +450,7 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state) {
   }
   const double abs_i_roll_us = std::fabs(sample.i_roll_us);
   const double abs_i_pitch_us = std::fabs(sample.i_pitch_us);
+  const double abs_i_yaw_us = std::fabs(sample.i_yaw_us);
   if (abs_i_roll_us > result.max_abs_i_roll_us) {
     result.max_abs_i_roll_us = abs_i_roll_us;
     result.max_abs_i_roll_tick = tick;
@@ -451,6 +458,9 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state) {
   if (abs_i_pitch_us > result.max_abs_i_pitch_us) {
     result.max_abs_i_pitch_us = abs_i_pitch_us;
     result.max_abs_i_pitch_tick = tick;
+  }
+  if (abs_i_yaw_us > result.max_abs_i_yaw_us) {
+    result.max_abs_i_yaw_us = abs_i_yaw_us;
   }
 }
 
@@ -474,6 +484,7 @@ RunResult runSil(const RunConfig &config) {
   angleZ = static_cast<float>(state.psi * kRadToDeg);
   Ki_Rate_Roll = config.ki_roll;
   Ki_Rate_Pitch = config.ki_pitch;
+  Ki_Rate_Yaw = config.ki_yaw;
 
   RunResult result;
   result.samples.reserve(static_cast<std::size_t>(config.ticks) + 1U);
@@ -656,6 +667,27 @@ RunConfig constantRollDisturbance(float ki_roll, double torque_nm,
     return Disturbance{torque_nm, 0.0, 0.0};
   };
   return config;
+}
+
+RunConfig constantYawDisturbance(float ki_yaw, double torque_nm,
+                                 uint32_t ticks) {
+  RunConfig config;
+  config.ticks = ticks;
+  config.ki_yaw = ki_yaw;
+  config.disturbance_for_interval = [torque_nm](uint32_t) {
+    return Disturbance{0.0, 0.0, torque_nm};
+  };
+  return config;
+}
+
+double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
+  const std::size_t n = result.samples.size();
+  const std::size_t start = n > tail ? n - tail : 0;
+  double sum = 0.0;
+  for (std::size_t index = start; index < n; index++) {
+    sum += std::fabs(result.samples[index].plant.r) * kRadToDeg;
+  }
+  return sum / static_cast<double>(n - start);
 }
 
 }  // namespace
@@ -1011,6 +1043,56 @@ int main() {
               << " raw_saturated=" << result.raw_saturated << '\n';
     std::cout << "[SIL] S5 note: yaw reaction-torque sign is convention-dependent; "
                  "confirm prop direction on a powered bench before asserting damping.\n";
+  });
+
+  runCase("S6 yaw 적분 해금: hold가 아닌 구간에서도 적분기가 누적된다", [] {
+    // SIL yaw 플랜트의 반작용 토크 부호는 미해결이다(S5 참조: runReport로만
+    // 남기고 단언하지 않는다). 따라서 폐루프 정상상태 각속도로는 단언할 수
+    // 없다. 이 케이스는 코드 변경 자체 — "hold가 아니어도 iTermYaw가
+    // 누적된다" — 만 검증하며 플랜트 부호와 무관하다.
+    const double yaw_torque_per_us =
+        4.0 * kPlantParameters.yaw_moment_arm_m() *
+        kPlantParameters.thrust_per_us_n;
+    const double disturbance_nm = yaw_torque_per_us * 1.50 * 20.0;
+
+    const RunResult result =
+        runSil(constantYawDisturbance(0.05f, disturbance_nm, 3000));
+
+    std::size_t rate_mode_samples = 0;
+    double max_i_yaw_rate_mode = 0.0;
+    for (const Sample &sample : result.samples) {
+      if (sample.yaw_hold) continue;
+      rate_mode_samples++;
+      max_i_yaw_rate_mode =
+          std::max(max_i_yaw_rate_mode, std::fabs(sample.i_yaw_us));
+    }
+
+    // 판별력 확인: hold가 아닌 구간이 실제로 있어야 이 테스트가 의미를 갖는다.
+    CHECK_MSG(rate_mode_samples > 100,
+              "hold가 아닌 구간이 거의 없어 해금 여부를 가릴 수 없다");
+    // 해금 전에는 hold가 아니면 iTermYaw가 0으로 묶였다. 여기서 red/green이 갈린다.
+    CHECK_MSG(max_i_yaw_rate_mode > 0.0,
+              "rate 모드에서 yaw 적분기가 전혀 누적되지 않았다 (해금 실패)");
+    CHECK_LE(result.max_abs_i_yaw_us, static_cast<double>(I_TERM_MAX_US));
+    std::cout << "[SIL] S6 rate-mode samples=" << rate_mode_samples
+              << " max|iTermYaw| in rate mode=" << max_i_yaw_rate_mode
+              << "us, overall max=" << result.max_abs_i_yaw_us << "us\n";
+  });
+
+  runReport("S6b yaw closed-loop rate (numbers only)", [] {
+    // 플랜트 yaw 부호가 확정되기 전까지 수치만 남긴다. S5와 같은 취급이다.
+    const double yaw_torque_per_us =
+        4.0 * kPlantParameters.yaw_moment_arm_m() *
+        kPlantParameters.thrust_per_us_n;
+    const double disturbance_nm = yaw_torque_per_us * 1.50 * 20.0;
+    const RunResult p_only =
+        runSil(constantYawDisturbance(0.0f, disturbance_nm, 3000));
+    const RunResult with_i =
+        runSil(constantYawDisturbance(0.05f, disturbance_nm, 3000));
+    std::cout << "[SIL] S6b tail |r| P-only="
+              << tailMeanAbsYawRateDps(p_only, 500) << "dps Ki=0.05="
+              << tailMeanAbsYawRateDps(with_i, 500)
+              << "dps -- 플랜트 yaw 부호 미해결, 벤치 Stage D에서 확정\n";
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count
