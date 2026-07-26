@@ -232,14 +232,35 @@ Expected: PASS, 마지막 줄 `8/8 yaw-command cases passed`
 
 - [ ] **Step 5: unittest 래퍼 작성**
 
-`tools/test_yaw_command.py`를 `tools/test_mag_yaw_fusion.py`를 그대로 본떠 만든다.
-동일한 g++ 존재 확인 / `-m32` multilib probe / `skipTest` 처리를 유지하고, 다음 세 값만 바꾼다:
+`tools/test_yaw_command.py`를 만든다. `tools/test_mag_yaw_fusion.py`의 **툴체인
+처리 부분만** 가져오고 뮤테이션 기계장치는 가져오지 않는다.
 
-- `NATIVE_TEST_DIR / "test_mag_yaw_fusion.cpp"` → `NATIVE_TEST_DIR / "test_yaw_command.cpp"`
-- `tmp_path / "test_mag_yaw_fusion"` → `tmp_path / "test_yaw_command"`
-- 클래스·메서드 이름 → `YawCommandTest.test_yaw_command`
+**반드시 유지할 것** (그대로 복사):
+- `g++` 존재 확인 → 없으면 `skipTest`
+- `-m32` multilib probe → 실패 시 `skipTest`, 타임아웃 시 `fail`
+- 컴파일 커맨드의 `-I` 2개: `NATIVE_TEST_DIR / "shims"`, `SKETCH_DIR`
+- 실행 후 `returncode == -signal.SIGSYS`이면 `qemu-i386-static`으로 재실행,
+  없으면 `skipTest`
+- 컴파일 60초 / 실행 20초 타임아웃, 실패 시 커맨드와 stdout·stderr를 메시지에 포함
 
-`-I` 경로 2개(`shims`, 스케치 디렉터리)는 그대로 둔다.
+**반드시 제거할 것** (이 테스트는 순수 헤더 단위 테스트라 해당 없음):
+- `SUPPORTED_MUTATIONS` 상수
+- `BMM350_SIL_MUTATION` 환경변수 읽기와 검증
+- `if mutation != "none":` 블록 전체 (`shutil.copytree` + 헤더 문자열 치환)
+- `sketch_dir` 지역변수 — `SKETCH_DIR`을 직접 `-I`에 쓴다
+- `print`의 `mutation=` 부분
+- 이제 쓰이지 않는 `import os`
+
+> 이 제거가 왜 중요한가: 뮤테이션 블록은 `mag_yaw_fusion.h`를 변조한다.
+> 그대로 두면 `BMM350_SIL_MUTATION=inverted`로 실행할 때 mag 헤더를 변조한 뒤
+> **mag과 무관한** yaw_command 테스트를 컴파일해 통과시킨다. 뮤테이션을 잡은
+> 것처럼 보이지만 실제로는 아무것도 검증하지 않아, mag 쪽 뮤테이션 검증의
+> 신뢰성을 망친다.
+
+**문구 교체**: 클래스 `YawCommandTest`, 메서드 `test_yaw_command`, 실행 파일
+`tmp_path / "test_yaw_command"`, 소스 `NATIVE_TEST_DIR / "test_yaw_command.cpp"`.
+docstring과 모든 실패 메시지의 `BMM350 yaw-fusion SIL` 표현을
+`yaw-command unit test`로 바꾸고, 진행 출력은 `[YAW-CMD] runner=...`로 한다.
 
 - [ ] **Step 6: 전체 스위트 확인**
 
