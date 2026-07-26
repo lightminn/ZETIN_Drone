@@ -639,46 +639,68 @@ double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
 }
 ```
 
-`main()`에 케이스를 추가한다:
+`Sample`에 `double i_yaw_us = 0.0;`를, `RunResult`에 `double max_abs_i_yaw_us = 0.0;`를
+추가하고, 샘플 기록 지점(`sample.i_pitch_us = iTermPitch;` 옆)에
+`sample.i_yaw_us = iTermYaw;`와 최대값 갱신을 기존 roll/pitch와 같은 방식으로 넣는다.
+
+`main()`에 두 케이스를 추가한다:
 
 ```cpp
-  runCase("S6 yaw 적분 해금: P 단독은 정착 임계치를 못 넘고 적분은 넘긴다", [] {
-    // yaw 권한은 roll의 6%다(yaw_moment_arm_m = 0.06 * arm_projection_m).
-    // P 단독 정상상태 각속도가 대략 20dps가 되도록 외란을 잡는다:
-    //   tau = yaw_torque_per_us * Kp_Rate_Yaw * r_ss
+  runCase("S6 yaw 적분 해금: 잠금이 아닌 동안에도 적분기가 살아 있고 클램프된다", [] {
+    // SIL yaw 플랜트의 반작용 토크 부호는 미해결이다(S5 참조: runReport로만
+    // 남기고 단언하지 않는다). 따라서 폐루프 정상상태 각속도로는 단언할 수
+    // 없다. 이 케이스는 코드 변경 자체 — "hold가 아니어도 iTermYaw가
+    // 누적된다" — 만 검증하며 플랜트 부호와 무관하다.
     const double yaw_torque_per_us =
         4.0 * kPlantParameters.yaw_moment_arm_m() *
         kPlantParameters.thrust_per_us_n;
     const double disturbance_nm = yaw_torque_per_us * 1.50 * 20.0;
 
+    const RunResult result =
+        runSil(constantYawDisturbance(0.05f, disturbance_nm, 3000));
+
+    // 해금 전에는 iTermYaw가 0에 묶여 있었으므로 이 단언이 red/green을 가른다.
+    CHECK_MSG(result.max_abs_i_yaw_us > 0.0,
+              "yaw 적분기가 전혀 누적되지 않았다 (해금 실패)");
+    CHECK_LE(result.max_abs_i_yaw_us, static_cast<double>(I_TERM_MAX_US));
+    std::cout << "[SIL] S6 max|iTermYaw|=" << result.max_abs_i_yaw_us
+              << "us of +/-" << I_TERM_MAX_US << "us\n";
+  });
+
+  runReport("S6b yaw closed-loop rate (numbers only)", [] {
+    // 플랜트 yaw 부호가 확정되기 전까지 수치만 남긴다. S5와 같은 취급이다.
+    const double yaw_torque_per_us =
+        4.0 * kPlantParameters.yaw_moment_arm_m() *
+        kPlantParameters.thrust_per_us_n;
+    const double disturbance_nm = yaw_torque_per_us * 1.50 * 20.0;
     const RunResult p_only =
-        runSil(constantYawDisturbance(0.0f, disturbance_nm, 10000));
-    const double p_only_dps = tailMeanAbsYawRateDps(p_only, 500);
-    std::cout << "[SIL] S6 P-only tail |r|=" << p_only_dps << "dps\n";
-
-    // 판별력 확인: 외란이 너무 작으면 이 테스트는 아무것도 증명하지 못한다.
-    CHECK_GE(p_only_dps, static_cast<double>(YAW_HOLD_SETTLE_DPS));
-
+        runSil(constantYawDisturbance(0.0f, disturbance_nm, 3000));
     const RunResult with_i =
-        runSil(constantYawDisturbance(0.05f, disturbance_nm, 10000));
-    const double with_i_dps = tailMeanAbsYawRateDps(with_i, 500);
-    std::cout << "[SIL] S6 Ki=0.05 tail |r|=" << with_i_dps << "dps\n";
-
-    // 적분이 살아야 정착 임계치 아래로 내려가 자동 잠금이 걸린다.
-    CHECK_LE(with_i_dps, static_cast<double>(YAW_HOLD_SETTLE_DPS));
-    CHECK(with_i.all_finite);
+        runSil(constantYawDisturbance(0.05f, disturbance_nm, 3000));
+    std::cout << "[SIL] S6b tail |r| P-only="
+              << tailMeanAbsYawRateDps(p_only, 500) << "dps Ki=0.05="
+              << tailMeanAbsYawRateDps(with_i, 500)
+              << "dps -- 플랜트 yaw 부호 미해결, 벤치 Stage D에서 확정\n";
   });
 ```
 
-`CHECK_GE`/`CHECK_LE`는 파일 상단(66·78줄)에 이미 있는 헬퍼를 쓴다.
+`CHECK_LE`/`CHECK_MSG`는 파일 상단(48·66줄)에 이미 있는 헬퍼를 쓴다.
+
+> **왜 폐루프로 단언하지 않는가.** `test_sil_attitude.cpp:1035`가 명시하듯 SIL의
+> yaw 반작용 토크 부호는 관례 의존이고, 기존 S5도 그래서 `runReport`다.
+> `power_on_bench_procedure.md:175`에도 "SIL S5는 CW=+ 관례에서 yaw가
+> 발산했다(리포트만)"로 기록돼 있다. 이 위에 폐루프 단언을 얹으면 통과할 수
+> 없고, 통과시키려 플랜트 부호를 고치면 벤치로 미뤄둔 모델링 가정을 코드가
+> 임의로 확정해버린다. **문제 2(정상상태 회전 제거)의 실증은 벤치 Stage D로
+> 넘어간다.**
 
 - [ ] **Step 2: 실패 확인**
 
 ```bash
 python -m unittest tools.test_sil_attitude -v 2>&1 | tail -20
 ```
-Expected: FAIL — 현재는 `yawOn`이 false면 `iTermYaw`가 0으로 묶여 `Ki=0.05` 실행도
-P 단독과 같아지므로 마지막 `CHECK_LE`에서 실패
+Expected: FAIL — 현재는 `yawOn`이 false면 `iTermYaw`가 0으로 묶이므로
+`CHECK_MSG(result.max_abs_i_yaw_us > 0.0, ...)`에서 실패
 
 - [ ] **Step 3: 적분 블록 교체**
 
@@ -713,10 +735,12 @@ arduino-cli compile --warnings all --fqbn esp32:esp32:esp32s3 \
   --build-path /tmp/zetin-yaw firmware/flight/dual_imu_cascade_pwm
 python -m unittest discover -s tools -p "test_*.py" 2>&1 | grep -E "^(Ran|OK|FAILED)"
 ```
-Expected: `[PASS] S6 ...`, 빌드 성공(`yawOn` 미사용 경고 없음), `OK`
+Expected: `[PASS] S6 ...`와 `[SIL] S6b tail |r| ...` 출력, 빌드 성공
+(`yawOn` 미사용 경고 없음), `OK`
 
-> S6의 P-only 값이 `YAW_HOLD_SETTLE_DPS` 미만이라 첫 `CHECK_GE`에서 실패하면
-> 외란이 너무 작은 것이다. `disturbance_nm`의 `20.0`을 키워 판별력을 회복시킨다.
+> S6b가 출력하는 폐루프 수치는 **단언 대상이 아니다.** 현재 SIL yaw 플랜트에서는
+> 발산해 큰 값이 나오는 것이 정상이며, 그 자체가 플랜트 yaw 부호가 미해결이라는
+> 기존 기록(S5)과 일치한다. 이 수치의 해석은 벤치에서 프롭 방향과 함께 확정한다.
 
 - [ ] **Step 5: 커밋**
 
