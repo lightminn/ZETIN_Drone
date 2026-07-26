@@ -654,6 +654,35 @@ int main() {
     CHECK_NEAR(targetAngleZ, -7.0f, 1e-6f);
   });
 
+  runCase("yaw 1은 무장 중 거부되고 yaw 0은 언제나 수락된다", [] {
+    yaw_hold_override = false;
+    safety_lock = false;                       // 무장 상태
+    sendUdpCommandOnce("yaw 1");
+    CHECK(!yaw_hold_override);                 // 거부
+
+    safety_lock = true;                        // 시동 해제 상태
+    sendUdpCommandOnce("yaw 1");
+    CHECK(yaw_hold_override);                  // 수락
+
+    safety_lock = false;
+    sendUdpCommandOnce("yaw 0");
+    CHECK(!yaw_hold_override);                 // 끄기는 무장 중에도 허용
+  });
+
+  runCase("잠금 진입 헬퍼는 오버라이드를 엣지에서 1회만 해제한다", [] {
+    yaw_hold_override = true;
+    bool wasLocked = false;
+    enterLockedState(wasLocked);
+    CHECK(!yaw_hold_override);      // 무장 해제 엣지에서 해제
+    CHECK(wasLocked);
+
+    // 잠긴 상태가 유지되는 동안에는 다시 켤 수 있어야 한다
+    // (매 tick 지우면 시동 해제 상태에서 yaw 1을 켤 수 없다)
+    yaw_hold_override = true;
+    enterLockedState(wasLocked);
+    CHECK(yaw_hold_override);
+  });
+
   runCase("mag command enables lazily and disables without changing yaw", [] {
     safety_lock = true;  // 최초 lazy init(블로킹 I2C)은 disarmed에서만 허용된다.
     mag_enabled = false;

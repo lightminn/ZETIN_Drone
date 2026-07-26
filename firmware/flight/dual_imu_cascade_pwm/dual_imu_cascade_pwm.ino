@@ -591,6 +591,13 @@ static inline float compute_alpha(float ax, float ay, float az) {
   return ALPHA_DYN;
 }
 
+// 잠금 진입 시 1회만 실행되는 정리. 세 잠금 경로가 모두 이 함수를 통해서만
+// wasLocked를 세운다. 매 tick 지우면 시동 해제 상태에서 `yaw 1`을 켤 수 없다.
+static inline void enterLockedState(bool &wasLocked) {
+  if (!wasLocked) yaw_hold_override = false;
+  wasLocked = true;
+}
+
 // ==========================================================
 // 8. PID 태스크 (Core 1, 1kHz)
 // ==========================================================
@@ -730,7 +737,7 @@ void pid_task(void *pv) {
       iTermRoll = iTermPitch = iTermYaw = 0.0f;
       targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
-      wasLocked = true;
+      enterLockedState(wasLocked);
       motorOut[0] = 1000; motorOut[1] = 1000; motorOut[2] = 1000; motorOut[3] = 1000;
       tgtRate[0] = 0.0f; tgtRate[1] = 0.0f; tgtRate[2] = 0.0f;
       stopMotors();
@@ -812,7 +819,7 @@ void pid_task(void *pv) {
       prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       outerCnt = 0;
-      wasLocked = true;
+      enterLockedState(wasLocked);
       motorOut[0] = 1000; motorOut[1] = 1000; motorOut[2] = 1000; motorOut[3] = 1000;
       tgtRate[0] = 0.0f; tgtRate[1] = 0.0f; tgtRate[2] = 0.0f;
       stopMotors();
@@ -897,7 +904,7 @@ void pid_task(void *pv) {
       motorOut[0] = 1000; motorOut[1] = 1000; motorOut[2] = 1000; motorOut[3] = 1000;
       tgtRate[0] = 0.0f; tgtRate[1] = 0.0f; tgtRate[2] = 0.0f;
       stopMotors();
-      wasLocked = true;
+      enterLockedState(wasLocked);
       continue;
     }
     writeMotor(pinM1, mix.motor[0]);
@@ -1183,9 +1190,18 @@ void udp_task(void *pv) {
         else if (strncmp(buf, "yaw", 3) == 0) {
           long enabled;
           if (parseIntStrict(buf + 3, enabled) && (enabled == 0 || enabled == 1)) {
-            targetAngleZ = angleZ; // 활성화 순간 setpoint jump 방지
-            yaw_hold_override = (enabled == 1); // setpoint을 먼저 맞춘 뒤 활성화
-            Serial.printf(">>> Yaw %s\n", yaw_hold_override ? "ON" : "OFF");
+            if (enabled == 0) {
+              yaw_hold_override = false;
+              Serial.println(">>> Yaw hold OFF (auto)");
+            } else if (!safety_lock) {
+              // 비행 중 임의로 켜면 지상국 setpoint와 어긋난 채 최대 권한
+              // 슬램이 날 수 있다. 시동 해제 상태에서만 켤 수 있게 한다.
+              Serial.println(">>> Yaw hold refused (armed)");
+            } else {
+              targetAngleZ = angleZ;
+              yaw_hold_override = true;
+              Serial.println(">>> Yaw hold ON (override)");
+            }
           }
         }
         else if (strncmp(buf, "magcal", 6) == 0) {
