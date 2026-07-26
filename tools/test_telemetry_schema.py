@@ -68,8 +68,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Mag_Z",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(34, len(TELEMETRY_FIELDS))
-        self.assertEqual(35, len(CSV_FIELDS))
+        self.assertEqual(35, len(TELEMETRY_FIELDS))
+        self.assertEqual(36, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -147,9 +147,22 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             self.assertIs(type(sample[name]), float)
         row = sample_to_csv_row("00:00:00.000", sample)
         self.assertEqual(
-            ["87.25", "21.5", "-7.25", "42.0"],
-            [str(value) for value in row[-4:]],
+            ["87.25", "21.5", "-7.25", "42.0", ""],
+            [str(value) for value in row[-5:]],
         )
+
+    def test_35_field_packet_parses_yaw_hold(self):
+        packet = ",".join(["1"] * 34 + ["1"])
+        sample = telemetry_schema.parse_telemetry_packet(packet)
+        self.assertEqual(sample["Yaw_Hold"], 1)
+
+    def test_34_field_packet_leaves_yaw_hold_none(self):
+        packet = ",".join(["1"] * 34)
+        sample = telemetry_schema.parse_telemetry_packet(packet)
+        self.assertIsNone(sample["Yaw_Hold"])
+
+    def test_csv_has_36_columns(self):
+        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 36)
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in ("Armed", "Motor_M1", "Motor_M2", "Motor_M3", "Motor_M4", "PID_Loop_Hz"):

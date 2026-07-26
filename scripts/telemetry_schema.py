@@ -7,7 +7,8 @@ the format used by firmware/archive/legacy_flight/dual_imu_pid_pwm, fields
 refused/ignored start, and fields 23-30 are Tier 1 observability (motor
 outputs, measured loop rate, and outer-loop target rates). Field 31 appends the
 tilt-compensated BMM350 magnetic heading, and fields 32-34 append the
-compensated body-frame magnetic XYZ components used to calculate it.
+compensated body-frame magnetic XYZ components used to calculate it. Field 35
+reports whether yaw heading hold is active.
 """
 
 import math
@@ -48,6 +49,7 @@ TELEMETRY_FIELDS = (
     "Mag_X",
     "Mag_Y",
     "Mag_Z",
+    "Yaw_Hold",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -85,6 +87,7 @@ TELEMETRY_FIELD_TYPES = {
     "Mag_X": float,
     "Mag_Y": float,
     "Mag_Z": float,
+    "Yaw_Hold": int,
 }
 
 GAIN_FIELDS = (
@@ -121,11 +124,11 @@ def _parse_integer(raw, name):
 
 
 def parse_telemetry_packet(line):
-    """Parse a 10-, 14-, 21-, 22-, 30-, 31-, or 34-field packet into a fixed-schema dict.
+    """Parse a 10-, 14-, 21-, 22-, 30-, 31-, 34-, or 35-field packet into a fixed-schema dict.
 
     Fields unavailable in legacy packets are returned as ``None`` so CSV
     files retain the full header without inventing healthy/fault values.
-    Extra future fields are ignored after the known 34 fields. The first
+    Extra future fields are ignored after the known 35 fields. The first
     ``REQUIRED_FIELD_COUNT`` fields must be non-empty: consumers format and
     do arithmetic on them, so a blank there is a malformed packet, not a
     legacy one.

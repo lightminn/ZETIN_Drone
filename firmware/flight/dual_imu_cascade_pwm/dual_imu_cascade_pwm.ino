@@ -1077,12 +1077,12 @@ static void handleGainCommand(const char *buf) {
 
 // 첫 14개 필드는 기존 PC 스크립트와 호환된다. 뒤 필드는 cascade 진단 확장:
 // fault_imu1,fault_imu2,fault_disagree,active_imus,scaled,fault_attitude,
-// calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z를 append-only로 보낸다.
+// calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z, Yaw_Hold를 append-only로 보낸다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1094,7 +1094,7 @@ static void sendTelemetry() {
              (int)calibration_ok, (int)!safety_lock,
              motorOut[0], motorOut[1], motorOut[2], motorOut[3], pidLoopHz,
              tgtRate[0], tgtRate[1], tgtRate[2], magHeading,
-             magTelemX, magTelemY, magTelemZ);
+             magTelemX, magTelemY, magTelemZ, (int)yaw_hold_now);
   udp.endPacket();
 }
 
