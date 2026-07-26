@@ -46,12 +46,16 @@ ESP32-S3의 FreeRTOS 태스크에서 듀얼 IMU를 읽고, 자세 바깥 루프�
 4210을 쓴다. 자세한 문자열 명령과 필드 순서는
 [`udp_protocol.md`](udp_protocol.md)를 따른다.
 
-알려진 한계: yaw 각도는 기본적으로 자이로 적분만으로 추정하므로 시간이
-지나며 드리프트한다. yaw 제어를 켜는 순간 현재 각도로 setpoint를
-동기화하는 이유다. 옵션으로 BMM350 자기계 기반 yaw 드리프트 보정(`mag 1`,
-기본 OFF)이 있으며, 모터 전류 간섭은 raw XYZ 도메인 throttle 보정으로
-상쇄한다(`docs/bmm350_yaw_bench_test.md`, branch `feat/bmm350-yaw-fusion`). PID 태스크가 SPI 행업 등으로 정지하면 태스크 워치독
-(500ms)이 재부팅을 강제해 마지막 PWM으로 모터가 고정되는 것을 막는다.
+yaw 스틱은 절대 각도가 아니라 `rcr` 각속도 명령이다. 스틱이 중립이고 실제
+yaw 각속도까지 정착하면 회전이 멈춘 heading을 자동으로 잠그며, 정착하지
+않으면 강제 잠금 없이 rate 모드에 남는다. 옵션인 BMM350 자기계 융합(`mag 1`,
+기본 OFF)을 켜면 그 잠금을 자이로 적분 드리프트 없이 유지한다. 모터 전류
+간섭은 raw XYZ 도메인 throttle 보정으로 상쇄한다
+(`docs/bmm350_yaw_bench_test.md`, branch `feat/bmm350-yaw-fusion`). SIL S5/S6b는
+플랜트 yaw 토크 부호가 미해결이므로 폐루프 yaw를 검증하지 못하며, 자동 잠금과
+스틱 해제 후 지속 회전 제거는 전원 인가 벤치에서 확인해야 한다. PID 태스크가
+SPI 행업 등으로 정지하면 태스크 워치독(500ms)이 재부팅을 강제해 마지막
+PWM으로 모터가 고정되는 것을 막는다.
 
 ### 핀 배치
 
@@ -104,9 +108,10 @@ M4 = T + P + R + Y
 | [`analyze_flight_log.py`](../scripts/analyze_flight_log.py) | Offline CSV analysis |
 | [`receive_dual_imu_debug.py`](../scripts/receive_dual_imu_debug.py) | Paired loop diagnostic receiver |
 
-현행 펌웨어는 UDP 패킷마다 22개 텔레메트리 필드를 보낸다. PC 수신기는
-맨 앞에 수신 `Timestamp`를 추가하므로 CSV는 23개 열이다. 공유 파서는
-오래된 10·14·21필드 패킷도 받아들이며, 없는 값은 빈 CSV 셀로 남긴다.
+현행 펌웨어는 UDP 패킷마다 35개 텔레메트리 필드를 보낸다. 마지막 35번
+`Yaw_Hold`는 0=각속도 모드, 1=heading 잠금이다. PC 수신기는 맨 앞에 수신
+`Timestamp`를 추가하므로 CSV는 36개 열이다. 공유 파서는 오래된
+10·14·21·22·30·31·34필드 패킷도 받아들이며, 없는 값은 빈 CSV 셀로 남긴다.
 
 ## 빌드와 실행
 
