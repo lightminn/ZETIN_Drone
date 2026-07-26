@@ -64,6 +64,12 @@ heading 캡처도 펌웨어에서 한다 — 지상국이 하면 지금 문제�
 
 기존 `MAX_TARGET_RATE_YAW = 180.0`은 두 모드 공통 하드 실링으로 유지한다.
 
+**두 임계치는 벤치에서 조정한다.** 초기값은 실측 근거로 잡았다 — 2026-07-27
+정상 구간의 `Gyro_Z` 평균 절댓값이 0.5 dps라 10 dps는 여유가 크다. 다만 이
+측정은 프로펠러 진동이 섞이기 전 값이므로, 프롭 ON에서 순간값이 튀어 잠금이
+안 걸리면 `YAW_HOLD_SETTLE_DPS`를 올린다. 반대로 아직 도는 중에 잠기면 낮춘다.
+Stage D 관찰 항목이며, 런타임 변경 명령은 만들지 않는다(비목표 참조).
+
 ### 새 상태
 
 - `volatile float targetYawRate` — `rcr`이 준 각속도 명령(dps)
@@ -109,10 +115,30 @@ targetAngleZ  = angleZ;
 하므로 현재 코드에서도 일관되지만, stale setpoint 버그 클래스를 구조적으로
 막기 위해 명시한다.
 
-### `start` 처리 추가
+### 오버라이드 수명 — 무장 해제 엣지에서 해제
 
-`yaw_hold_override = false`로 리셋한다. 남아 있던 `yaw 1`이 다음 비행까지
-따라오면 안 된다.
+`yaw_hold_override`는 **무장 해제되는 순간 1회** false로 되돌린다. `start`에서
+리셋하지 않는다(그러면 시동 해제 상태에서만 켤 수 있는 오버라이드를 켤 방법이
+사라진다).
+
+`pid_task`의 `safety_lock` 분기는 잠긴 동안 매 tick 실행되므로 그 안에서 계속
+지우면 시동 해제 상태에서 `yaw 1`을 켤 수 없다. 기존 `wasLocked` 변수로 엣지를
+잡는다:
+
+```c
+if (safety_lock) {
+  if (!wasLocked) yaw_hold_override = false;   // 무장 해제 엣지에서만 1회
+  ...
+  wasLocked = true;
+  ...
+}
+```
+
+`wasLocked`는 `true`로 초기화되므로 부팅 직후에는 발동하지 않는다.
+
+결과 의미론: **오버라이드는 비행 1회짜리 opt-in이다.** 매 비행 전에 시동 해제
+상태에서 의도적으로 켜야 하고, 그 비행이 끝나면 반드시 풀린다. 이전 세션에
+켜둔 것이 다음 비행으로 따라올 수 없다.
 
 ## 2. yaw 적분항 해금 (필수)
 
@@ -155,14 +181,22 @@ rcr <seq> <roll> <pitch> <yaw_rate>
 
 ### `yaw <0|1>` 의미 변경
 
-| 값 | 의미 |
-|---|---|
-| `yaw 0` (기본) | 자동 모드 — 스틱 중립 + 정착 시 잠금 |
-| `yaw 1` | heading 고정 + **재슬레이빙 금지** (오버라이드) |
+| 값 | 의미 | 수락 조건 |
+|---|---|---|
+| `yaw 0` (기본) | 자동 모드 — 스틱 중립 + 정착 시 잠금 | 항상 |
+| `yaw 1` | heading 고정 + **재슬레이빙 금지** (오버라이드) | **시동 해제 상태에서만** |
+
+`yaw 1`은 무장 중에 거부한다(`magcal 1`과 동일한 게이트). 시리얼에
+`>>> Yaw hold refused (armed)`를 출력한다. 비행 중 임의로 켜면 문제 3의 슬램
+조건이 되살아나기 때문이다. `yaw 0`은 언제나 수락한다 — 안전한 방향으로
+빠져나가는 길은 항상 열어 둔다.
 
 `bench_yaw_test.py`가 이 오버라이드에 의존한다. 자동 모드에서는 손으로 비틀어
 유지해도 컨트롤러가 그 새 heading을 채택해버려 복원 토크가 나오지 않으므로,
 yaw 부호 판정에는 고정 setpoint가 필요하다.
+
+**`bench_yaw_test.py` 수정 필요**: 현재 `start` 뒤에 `yaw 1`을 보내므로 그대로
+두면 거부된다. `yaw 1`을 `start` **앞으로** 옮긴다. 그 외 로직은 변경 없다.
 
 ### 최대 회전 속도는 지상국 상수
 
@@ -206,6 +240,9 @@ yaw 부호 판정에는 고정 setpoint가 필요하다.
 6. rate 명령이 ±`MAX_TARGET_RATE_YAW`로 클램프됨
 7. 적분 해금 확인: 일정한 yaw 외란 토크 하에서 정상상태 회전율이 0으로 수렴하고
    정착 임계치 아래로 내려가 잠금이 걸림 (문제 2의 회귀 테스트)
+8. `yaw 1`이 무장 중에는 거부되고 시동 해제 상태에서는 수락됨
+9. 무장 해제 엣지에서 오버라이드가 1회 해제되고, 잠긴 상태가 지속되는 동안에는
+   다시 켤 수 있음 (매 tick 지우지 않는다는 것의 회귀 테스트)
 
 ### 제어수학 (`tools/native_tests/test_control_math.cpp`)
 
@@ -233,7 +270,10 @@ yaw 부호 판정에는 고정 setpoint가 필요하다.
 - 펌웨어/지상국 버전 불일치 → 구펌웨어가 `rcr`을 무시 → RC 워치독 500ms 발동 →
   안전한 시동 거부. **설계된 실패 모드**이며 조용한 오해석보다 낫다
 - `yaw 1` 오버라이드를 켠 채 비행하면 문제 3의 슬램 조건이 그대로 남는다.
-  오버라이드는 벤치 전용으로 문서화하고 `start`에서 리셋한다
+  무장 중 `yaw 1` 거부 + 무장 해제 엣지에서 자동 해제로 노출을 "의도적으로
+  켠 그 비행 1회"로 한정한다. 오버라이드가 켜진 채로도 슬램이 나려면 `rc`로
+  현재 heading과 크게 다른 절대 각도를 보내야 하는데, 이는 벤치 도구만 하는
+  일이고 그 도구는 항상 0을 보낸다
 
 ## 8. 문서 갱신 대상
 
@@ -242,6 +282,18 @@ yaw 부호 판정에는 고정 setpoint가 필요하다.
 - `scripts/README.md` — 필드 수
 - `docs/power_on_bench_procedure.md` — Stage C-3, 신규 yaw 확인 항목
 - `docs/project_overview.md` — yaw 드리프트 한계 서술 갱신
+
+## 9. 변경 대상 코드
+
+| 파일 | 변경 |
+|---|---|
+| `firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino` | yaw 상태기계, 적분 해금, `rcr` 파서, `yaw 1` 무장 게이트, 오버라이드 수명, `Yaw_Hold` 텔레메트리 |
+| `scripts/telemetry_schema.py` | `Yaw_Hold` 필드·타입 추가 |
+| `scripts/control_dualsense.py` | `target_yaw` 삭제, `rcr` 전송, `YAW_RATE_MAX_DPS` |
+| `scripts/bench_yaw_test.py` | `yaw 1`을 `start` 앞으로 이동 |
+| `tools/native_tests/test_sil_attitude.cpp` | SIL 9종 |
+| `tools/native_tests/test_control_math.cpp` | `rcr` 파서 테스트 |
+| `tools/test_telemetry_schema.py` | 35필드 + 하위호환 |
 
 ## 비목표 (YAGNI)
 
