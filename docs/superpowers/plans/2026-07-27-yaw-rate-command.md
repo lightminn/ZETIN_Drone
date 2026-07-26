@@ -504,8 +504,27 @@ volatile bool yaw_hold_now = false;   // 텔레메트리용: 현재 heading 잠�
 volatile bool yaw_hold_override = false;   // "yaw 1": heading 고정 + 재슬레이빙 금지
 ```
 
-`yaw_enabled`를 참조하는 모든 지점을 `yaw_hold_override`로 바꾼다
-(`grep -n yaw_enabled` 로 전수 확인).
+`yaw_enabled`를 `yaw_hold_override`로 바꾼다. **범위는 캐스케이드 스케치와 그것을
+`#include` 하는 네이티브 테스트뿐이다 — 정확히 4개 파일 10곳:**
+
+| 파일 | 건수 |
+|---|---|
+| `firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino` | 4 |
+| `tools/native_tests/test_mag_yaw_fusion.cpp` | 3 |
+| `tools/native_tests/test_control_math.cpp` | 2 |
+| `tools/native_tests/test_sil_attitude.cpp` | 1 |
+
+> **절대 바꾸지 말 것**: `firmware/archive/**`(3개 스케치)와
+> `firmware/flight/dual_imu_flix_quat_pwm/`(7곳)에도 `yaw_enabled`가 있지만
+> **각자의 독립 변수**다. 보관 코드는 원형 보존이 원칙이고, flix는 별도 트랙이다.
+> `firmware/examples/.codex/claude-history/`와 `docs/history/`의 이력 문서도 그대로 둔다.
+
+확인 명령은 전역 grep이 아니라 범위 한정 grep을 쓴다:
+
+```bash
+grep -rn "yaw_enabled" firmware/flight/dual_imu_cascade_pwm tools/native_tests
+```
+Expected: 출력 없음
 
 - [ ] **Step 2: 바깥 루프 교체**
 
