@@ -46,9 +46,11 @@ ESP32-S3의 FreeRTOS 태스크에서 듀얼 IMU를 읽고, 자세 바깥 루프�
 4210을 쓴다. 자세한 문자열 명령과 필드 순서는
 [`udp_protocol.md`](udp_protocol.md)를 따른다.
 
-알려진 한계: yaw 각도는 자기계 없이 자이로 적분만으로 추정하므로 시간이
+알려진 한계: yaw 각도는 기본적으로 자이로 적분만으로 추정하므로 시간이
 지나며 드리프트한다. yaw 제어를 켜는 순간 현재 각도로 setpoint를
-동기화하는 이유다. PID 태스크가 SPI 행업 등으로 정지하면 태스크 워치독
+동기화하는 이유다. 옵션으로 BMM350 자기계 기반 yaw 드리프트 보정(`mag 1`,
+기본 OFF)이 있으며, 모터 전류 간섭은 raw XYZ 도메인 throttle 보정으로
+상쇄한다(`docs/bmm350_yaw_bench_test.md`, branch `feat/bmm350-yaw-fusion`). PID 태스크가 SPI 행업 등으로 정지하면 태스크 워치독
 (500ms)이 재부팅을 강제해 마지막 PWM으로 모터가 고정되는 것을 막는다.
 
 ### 핀 배치
