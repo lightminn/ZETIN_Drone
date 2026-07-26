@@ -104,7 +104,8 @@ def arm():
     target_yaw       = 0.0
     rc_seq           = 0   # 재시동 시 시퀀스 번호 리셋
     reliable_send("start")
-    print("\n>>> [SYSTEM] ARMED (시동 ON)")
+    reliable_send("yaw 0")   # [DIAG] heading-hold 확실히 OFF — roll/pitch 격리 테스트용
+    print("\n>>> [SYSTEM] ARMED (시동 ON, yaw-hold OFF)")
 
 
 def disarm(reason: str = "수동"):
@@ -181,6 +182,23 @@ def telemetry_thread():
         if packet_count % 20 == 0:
             csv_file.flush()
 
+        # [DIAG C-2] 틸트 복원 진단: 무장 중 모터µs/자세/목표레이트 라이브 출력(~5Hz).
+        # 누른 쪽 모터 µs가 오르고 aX/aY(추정 자세)가 틸트를 따라가는지 확인용.
+        if is_armed and packet_count % 4 == 0:
+            m = [sample[k] for k in ("Motor_M1", "Motor_M2", "Motor_M3", "Motor_M4")]
+            if all(v is not None for v in m):
+                tr = sample["TgtRate_Roll"] or 0.0
+                tp = sample["TgtRate_Pitch"] or 0.0
+                ty = sample["TgtRate_Yaw"] or 0.0
+                gz = sample["Gyro_Z"] or 0.0
+                az = sample["Yaw"] or 0.0
+                cw = m[0] + m[1]   # M1(FL)+M2(RR) = CW 대각쌍
+                ccw = m[2] + m[3]  # M3(FR)+M4(RL) = CCW 대각쌍 (차이 = yaw축)
+                print(f" [DIAG] M1(FL)={m[0]} M2(RR)={m[1]} M3(FR)={m[2]} M4(RL)={m[3]} "
+                      f"[yaw축 CW-CCW={cw - ccw:+d}] | "
+                      f"aX={sample['Roll']:+5.1f} aY={sample['Pitch']:+5.1f} aZ={az:+6.1f} | "
+                      f"gZ={gz:+6.1f} tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} th={sample['Throttle']}")
+
         # 드론 Armed 필드와 대조: 시동 명령이 거부됐거나(START REFUSED는
         # 시리얼에만 출력됨) 드론이 스스로 disarm한 것을 감지한다.
         # start 재전송+텔레메트리 주기를 고려해 1.5초 grace를 둔다.
@@ -236,9 +254,8 @@ def controller_thread():
 
     print("========== DRONE CONTROLLER ==========")
     print(f" [X]        Arm / Disarm")
-    print(f" [R-Stick↕] Throttle (연속, 최대 {THROTTLE_RATE:.0f}µs/s)")
-    print(f" [R2/L2]    Throttle +10 / -10 (스텝)")
-    print(f" [R1/L1]    Throttle  +1 /  -1")
+    print(f" [R2/L2]    Throttle ↑/↓ (누르는 동안 연속, {THROTTLE_RATE:.0f}µs/s)")
+    print(f" [R1/L1]    Throttle +1 / -1 (정밀)")
     print(f" [DPAD]     Trim  |  [PS] Trim Reset")
     print(f" [L-Stick]  Roll / Pitch,  [R-Stick↔] Yaw  (max ±{MAX_ANGLE}°)")
     print("======================================")
@@ -246,6 +263,7 @@ def controller_thread():
     loop_dt = 1.0 / CTRL_LOOP_HZ
     next_loop = time.monotonic()
     last_th_print = 0.0
+    last_axis_print = 0.0
 
     while True:
         # [FIX] sleep 누적 오차 제거: monotonic 기반 정밀 타이밍
@@ -280,23 +298,31 @@ def controller_thread():
         last_btn_start = btn_start
 
         if is_armed:
-            # --- 스로틀 제어 (아날로그: 오른쪽 스틱 상하 = rate control) ---
-            # 버튼 스텝만으로는 이륙 스로틀까지 수십 번 연타가 필요해
-            # 부드러운 이륙이 불가능하다. 스틱은 µs/s 비율로 연속 적분한다.
-            thr_stick = -deadzone(joy.get_axis(3))
-            if thr_stick != 0.0:
-                throttle_f += thr_stick * THROTTLE_RATE * loop_dt
+            # 실측 매핑(gamepad_probe): R1=b5, L1=b4, R2=a5, L2=a2 (트리거 휴지 -1.0)
+            curr_R1 = joy.get_button(5)
+            curr_L1 = joy.get_button(4)
+            curr_R2 = joy.get_axis(5) > 0.0   # a5 = R2 (휴지 -1.0 → 누르면 +1.0)
+            curr_L2 = joy.get_axis(2) > 0.0   # a2 = L2 (휴지 -1.0 → 누르면 +1.0)
 
-            curr_R1 = joy.get_button(10)
-            curr_L1 = joy.get_button(9)
-            curr_R2 = joy.get_axis(5) > 0.0
-            curr_L2 = joy.get_axis(4) > 0.0
+            # [DEBUG] 트리거 원시 축값 — L2/R2 동작·휴지값 확인용(벤치).
+            # 휴지 상태에서 a2·a5 모두 ≈ -1.00 이어야 정상.
+            now_dbg = time.monotonic()
+            if now_dbg - last_axis_print >= 0.5:
+                print(f" [AXIS] a2(L2)={joy.get_axis(2):+.2f} a5(R2)={joy.get_axis(5):+.2f} "
+                      f"th={current_throttle}")
+                last_axis_print = now_dbg
+
+            # --- 스로틀: 트리거 전용 (오른쪽 스틱 매핑 제거 → 스틱 드리프트 자기감소 없음) ---
+            # R2/L2 누르고 있는 동안 연속 램프(±THROTTLE_RATE µs/s), 짧게 누르면 미세.
+            # R1/L1 = ±1 정밀. 트리거는 해제 시 확실히 안 눌린 상태라 스틱과 달리 드리프트가 없다.
+            if curr_R2:
+                throttle_f += THROTTLE_RATE * loop_dt
+            if curr_L2:
+                throttle_f -= THROTTLE_RATE * loop_dt
 
             delta = 0
-            if   curr_R2 and not last_trig_R2: delta = +10
-            elif curr_L2 and not last_trig_L2: delta = -10
-            elif curr_R1 and not last_btn_R1:  delta = +1
-            elif curr_L1 and not last_btn_L1:  delta = -1
+            if   curr_R1 and not last_btn_R1: delta = +1
+            elif curr_L1 and not last_btn_L1: delta = -1
             if delta:
                 throttle_f += delta
 
@@ -310,7 +336,6 @@ def controller_thread():
                     print(f" [TH] -> {current_throttle}")
                     last_th_print = now_mono
 
-            last_trig_R2 = curr_R2; last_trig_L2 = curr_L2
             last_btn_R1  = curr_R1; last_btn_L1  = curr_L1
 
             # --- DPAD 트림 ---
@@ -330,9 +355,9 @@ def controller_thread():
 
             # --- RC 명령 전송 (시퀀스 번호 포함) ---
             rc_seq += 1
-            final_roll  = deadzone(joy.get_axis(0))  * MAX_ANGLE + trim_roll
-            final_pitch = deadzone(-joy.get_axis(1)) * MAX_ANGLE + trim_pitch
-            target_yaw += deadzone(joy.get_axis(2))  * YAW_RATE
+            final_roll  = deadzone(joy.get_axis(0))  * MAX_ANGLE + trim_roll   # a0 = 왼쪽 스틱 ↔
+            final_pitch = deadzone(-joy.get_axis(1)) * MAX_ANGLE + trim_pitch  # a1 = 왼쪽 스틱 ↕
+            target_yaw += deadzone(joy.get_axis(3), 0.12) * YAW_RATE           # a3 = 오른쪽 스틱 ↔ (yaw)
 
             send_cmd(f"rc {rc_seq} {final_roll:.2f} {final_pitch:.2f} {target_yaw:.2f}")
 
