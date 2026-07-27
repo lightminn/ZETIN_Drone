@@ -45,6 +45,7 @@ namespace arduino_fake {
 inline std::string serial_output;
 inline uint32_t millis_value = 0;
 inline uint32_t micros_value = 0;
+inline uint32_t us_per_tick = 0;
 inline TickType_t tick_count = 0;
 inline std::unordered_map<int, uint32_t> ledc_duty_by_pin;
 inline std::unordered_map<int, bool> ledc_attached_by_pin;
@@ -61,6 +62,7 @@ inline void reset() {
   serial_output.clear();
   millis_value = 0;
   micros_value = 0;
+  us_per_tick = 0;
   tick_count = 0;
   ledc_duty_by_pin.clear();
   ledc_attached_by_pin.clear();
@@ -152,6 +154,10 @@ inline TickType_t xTaskGetTickCount() {
 inline void vTaskDelayUntil(TickType_t *, TickType_t) {
   using namespace arduino_fake;
   if (pre_tick_hook) pre_tick_hook(tick_index);
+  const uint64_t elapsed_us =
+      static_cast<uint64_t>(micros_value % 1000U) + us_per_tick;
+  micros_value += us_per_tick;
+  millis_value += static_cast<uint32_t>(elapsed_us / 1000U);
   tick_index++;
   if (tick_limit && tick_index > tick_limit) throw TaskDelayExit{};
 }

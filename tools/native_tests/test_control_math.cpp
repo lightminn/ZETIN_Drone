@@ -105,13 +105,19 @@ void sendUdpCommandOnce(const std::string &command) {
   }
 }
 
-void runPidTicks(uint32_t ticks) {
+void runPidTicks(uint32_t ticks, uint32_t us_per_tick = 1000) {
   arduino_fake::tick_index = 0;
   arduino_fake::tick_limit = ticks;
+  arduino_fake::us_per_tick = us_per_tick;
   try {
     pid_task(nullptr);
   } catch (const arduino_fake::TaskDelayExit &) {
+  } catch (...) {
+    arduino_fake::us_per_tick = 0;
+    arduino_fake::tick_limit = 0;
+    throw;
   }
+  arduino_fake::us_per_tick = 0;
   arduino_fake::tick_limit = 0;
 }
 
@@ -191,6 +197,18 @@ inv_imu_sensor_event_t eventWith(
 }  // namespace
 
 int main() {
+  runCase("pid_task 1000 tick은 millis를 약 1000ms 전진시킨다", [] {
+    arduino_fake::reset();
+    safety_lock = true;
+    const uint32_t start_ms = millis();
+
+    runPidTicks(1000);
+
+    const uint32_t elapsed_ms = millis() - start_ms;
+    CHECK(elapsed_ms >= 1000U);
+    CHECK(elapsed_ms <= 1001U);
+  });
+
   runCase("mix: zero command keeps all motors equal", [] {
     MotorMix mix = mixAndDesaturate(0, 0, 0, 1175, 1050, 1300);
     checkMotors(mix, 1175, 1175, 1175, 1175);
@@ -592,20 +610,29 @@ int main() {
     calibration_ok = true;
     safety_lock = true;
     sendUdpCommandOnce("start");
-    fs_phase = FS_DESCENDING;
+    fs_phase = FS_NONE;
     base_throttle = 1360;
     lastRcMs = 0;
     arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
-    runPidTicks(1);
+    lastRcSeq = 0;
+    rcSeqValid = false;
+    rcTotalPkts = 0;
+    rcDroppedPkts = 0;
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      if (tick == 1U) {
+        sendRcr("rcr 1 25 -25 80");     // 링크 복귀: 큰 조종 입력
+      }
+    };
+    runPidTicks(2);
+    arduino_fake::pre_tick_hook = nullptr;
 
-    resetRcState();
-    sendRcr("rcr 1 25 -25 80");        // 링크 복귀: 큰 조종 입력
-    runPidTicks(1);
-
+    CHECK_EQ(lastRcSeq, 1U);                  // 패킷은 실제로 수락됐다
+    CHECK_EQ(rcDroppedPkts, 0U);
     CHECK_NEAR(targetAngleX, 0.0f, 1e-4f);   // 스틱 입력이 무시된다
     CHECK_NEAR(targetAngleY, 0.0f, 1e-4f);
     CHECK_NEAR(targetYawRate, 0.0f, 1e-4f);
     CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);   // 상태도 그대로
+    CHECK_EQ(base_throttle, 1360 - FS_DESCENT_DELTA_US);
   });
 
   runCase("회귀: 진입 로그는 하강 내내 딱 한 번만 나간다", [] {
@@ -625,9 +652,9 @@ int main() {
 
     const std::string &log = arduino_fake::serial_output;
     std::size_t hits = 0;
-    for (std::size_t at = log.find("AUTO-LAND");
+    for (std::size_t at = log.find("[FAULT] RC TIMEOUT -> AUTO-LAND");
          at != std::string::npos;
-         at = log.find("AUTO-LAND", at + 1)) {
+         at = log.find("[FAULT] RC TIMEOUT -> AUTO-LAND", at + 1)) {
       hits++;
     }
     CHECK_EQ(hits, static_cast<std::size_t>(1));
