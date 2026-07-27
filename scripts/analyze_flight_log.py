@@ -11,9 +11,14 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_DIR = SCRIPT_DIR.parent / "logs"
 
 
+_ARGS = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+# 벤치에서 로그만 빠르게 훑을 때 창이 뜨면 터미널이 블로킹된다.
+NO_PLOT = "--no-plot" in sys.argv[1:]
+
+
 def select_log_file():
-    if len(sys.argv) >= 2:
-        selected = Path(sys.argv[1]).expanduser().resolve()
+    if _ARGS:
+        selected = Path(_ARGS[0]).expanduser().resolve()
         if not selected.is_file():
             raise FileNotFoundError(f"지정한 CSV 파일이 없습니다: {selected}")
         return selected
@@ -386,4 +391,5 @@ if "Failsafe_Phase" in df.columns and df["Failsafe_Phase"].notna().any():
             axis.axvspan(start - 0.5, len(df) - 0.5, color="gold", alpha=0.16)
 
 fig.tight_layout(rect=(0, 0, 1, 0.97))
-plt.show()
+if not NO_PLOT:
+    plt.show()
