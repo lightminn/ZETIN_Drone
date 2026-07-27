@@ -105,6 +105,16 @@ void sendUdpCommandOnce(const std::string &command) {
   }
 }
 
+void runPidTicks(uint32_t ticks) {
+  arduino_fake::tick_index = 0;
+  arduino_fake::tick_limit = ticks;
+  try {
+    pid_task(nullptr);
+  } catch (const arduino_fake::TaskDelayExit &) {
+  }
+  arduino_fake::tick_limit = 0;
+}
+
 void resetRcState() {
   lastRcSeq = 0;
   rcSeqValid = false;
@@ -520,6 +530,118 @@ int main() {
     CHECK_NEAR(trim_roll, 4.0f, 1e-4f);
     CHECK_NEAR(trim_pitch, -3.0f, 1e-4f);
     trim_roll = 0.0f; trim_pitch = 0.0f;
+  });
+
+  runCase("RC 타임아웃이 즉시 컷이 아니라 자동착륙으로 간다", [] {
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    CHECK(!safety_lock);
+    fs_phase = FS_NONE;
+    base_throttle = 1360;
+
+    // rc가 끊긴 지 오래된 상태를 만든다
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+    runPidTicks(1);
+
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK(!safety_lock);                       // 아직 컷이 아니다
+    CHECK_EQ(base_throttle, 1360 - FS_DESCENT_DELTA_US);
+  });
+
+  runCase("stop은 자동착륙 중에도 즉시 컷이다", [] {
+    fs_phase = FS_DESCENDING;
+    safety_lock = false;
+    sendUdpCommandOnce("stop");
+    CHECK(safety_lock);
+    CHECK_EQ(base_throttle, 1000);
+  });
+
+  runCase("start가 fs_phase를 FS_NONE으로 되돌린다", [] {
+    fs_phase = FS_CUT_TIMEOUT;
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    CHECK_EQ((int)fs_phase, (int)FS_NONE);
+  });
+
+  runCase("회귀: 하강 목표는 0이 아니라 트림값이다", [] {
+    // 사용자가 잡은 결함. 0을 명령하면 트림이 보정하던 흐름이 그대로 재현돼
+    // 5초에 수 미터를 흘러간다(설계 문서 §3).
+    trim_roll = 2.0f; trim_pitch = -1.5f;
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    fs_phase = FS_NONE;
+    base_throttle = 1360;
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+    runPidTicks(1);
+
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK_NEAR(targetAngleX, 2.0f, 1e-4f);
+    CHECK_NEAR(targetAngleY, -1.5f, 1e-4f);
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+  });
+
+  runCase("회귀: 하강 중 rc가 돌아와도 제어권이 복귀하지 않는다", [] {
+    // 매 tick 덮어쓰기가 없으면 rc 파서가 targetAngle을 다시 써서
+    // '자동 복귀 없음' 결정과 어긋난다(설계 문서 §1).
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    fs_phase = FS_DESCENDING;
+    base_throttle = 1360;
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+    runPidTicks(1);
+
+    resetRcState();
+    sendRcr("rcr 1 25 -25 80");        // 링크 복귀: 큰 조종 입력
+    runPidTicks(1);
+
+    CHECK_NEAR(targetAngleX, 0.0f, 1e-4f);   // 스틱 입력이 무시된다
+    CHECK_NEAR(targetAngleY, 0.0f, 1e-4f);
+    CHECK_NEAR(targetYawRate, 0.0f, 1e-4f);
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);   // 상태도 그대로
+  });
+
+  runCase("회귀: 진입 로그는 하강 내내 딱 한 번만 나간다", [] {
+    // 가드가 없으면 rcTimedOut이 참인 동안 1kHz로 재실행돼 Serial.println이
+    // 115200 baud TX 버퍼를 포화시키고, pid_task가 블로킹되면 500ms 태스크
+    // 워치독이 비행 중 재부팅을 일으킨다. 이 태스크에서 가장 위험한 실패 모드다.
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    fs_phase = FS_NONE;
+    base_throttle = 1360;
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+
+    arduino_fake::serial_output.clear();
+    runPidTicks(50);
+
+    const std::string &log = arduino_fake::serial_output;
+    std::size_t hits = 0;
+    for (std::size_t at = log.find("AUTO-LAND");
+         at != std::string::npos;
+         at = log.find("AUTO-LAND", at + 1)) {
+      hits++;
+    }
+    CHECK_EQ(hits, static_cast<std::size_t>(1));
+  });
+
+  runCase("자동착륙 종료 후에는 재시동 없이 날 수 없다", [] {
+    fs_phase = FS_DESCENDING;
+    safety_lock = false;
+    base_throttle = 1360;
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100 + FS_MAX_MS;
+    runPidTicks(2);
+    CHECK(safety_lock);                        // 백스톱으로 잠겼다
+    CHECK_EQ(motorOut[0], 1000);
   });
 
   runCase("rcr: 정상 패킷이 yaw 각속도와 roll/pitch를 설정한다", [] {

@@ -11,6 +11,7 @@
 
 #include "mag_yaw_fusion.h"
 #include "yaw_command.h"
+#include "failsafe_land.h"
 
 #ifndef WIFI_LATENCY_DEBUG
 #define WIFI_LATENCY_DEBUG 0
@@ -148,6 +149,15 @@ static const float IMU2_SIGN[3] = { IMU2_SIGN_X, IMU2_SIGN_Y, IMU2_SIGN_Z };
 
 // --- 안전/redundancy 임계값 (하드웨어 맞춰 튜닝 필요) ---
 const uint32_t RC_TIMEOUT_MS      = 500;
+// 자동착륙. 전부 벤치 조정 대상(설계 문서 §4).
+// FS_DESCENT_DELTA_US는 반드시 CTRL_MARGIN(150) 미만이어야 한다 — 넘으면
+// 하강 스로틀이 min_throttle 아래로 가서 믹서 collective 하한에 걸려
+// 실제 하강이 일어나지 않는다.
+const int      FS_DESCENT_DELTA_US = 60;
+const uint32_t FS_MIN_DESCEND_MS   = 1000;
+const float    FS_LAND_ACCEL_TOL_G = 0.05f;
+const uint32_t FS_LAND_CONFIRM_MS  = 400;
+const uint32_t FS_MAX_MS           = 5000;
 const uint32_t PID_WDT_TIMEOUT_MS = 500;     // pid_task 정지 시 강제 재부팅 (1kHz 루프 대비 큰 여유)
 const int32_t  FROZEN_DELTA_RAW   = 1;       // 6축 raw 변화량 합이 이 이하면 정지 의심 (LSB)
 const uint32_t IMU_FROZEN_MS      = 300;     // 그 상태가 이만큼 지속되면 freeze 확정
@@ -310,6 +320,7 @@ ICM42670WithLPF IMU2(SPI, SPI_CS2);
 DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 
 volatile bool  safety_lock  = true;
+volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
 // 기체 트림(도). 추정기 0°와 진짜 수평의 차이를 보정한다. 비행별 상태가 아니라
 // 기체 속성이므로 start/stop이 지우지 않는다.
@@ -632,6 +643,9 @@ void pid_task(void *pv) {
   uint32_t loopCount = 0;
   uint32_t loopMarkerMs = millis();
   bool wasLocked = true;
+  LandDetector landDet = {};
+  uint32_t fs_enter_ms = 0;
+  int fs_entry_throttle = 1000;
 
   inv_imu_sensor_event_t e1 = {}, e2 = {};
 
@@ -810,9 +824,41 @@ void pid_task(void *pv) {
       fault_attitude = true;
       safety_lock = true;
     }
-    if (!safety_lock && rcTimedOut(nowMs, lastRcMs)) {
-      fault_rc = true; safety_lock = true;
-      Serial.println("[FAULT] RC TIMEOUT");
+    // RC 타임아웃은 즉시 컷이 아니라 자동착륙으로 간다. 진입 블록 전체를
+    // fs_phase 가드 안에 둔다 — 가드가 없으면 하강 내내 rcTimedOut이 참이라
+    // 이 블록이 1kHz로 재실행되고, Serial.println이 TX 버퍼를 포화시켜
+    // pid_task를 블로킹하면 500ms 태스크 워치독이 비행 중 재부팅을 일으킨다.
+    if (fs_phase == FS_NONE && !safety_lock && rcTimedOut(nowMs, lastRcMs)) {
+      fault_rc = true;
+      fs_phase = FS_DESCENDING;
+      fs_entry_throttle = base_throttle;
+      fs_enter_ms = nowMs;
+      landDet = {};
+      base_throttle = failsafeDescentThrottle(fs_entry_throttle,
+                                              FS_DESCENT_DELTA_US);
+      Serial.println("[FAULT] RC TIMEOUT -> AUTO-LAND");   // 한 번만
+    }
+
+    // 하강 중에는 목표를 매 tick 덮어쓴다. 링크가 돌아와도 rc/rcr 파서가 쓴
+    // 값이 무해해지므로 파서 쪽에 failsafe 분기를 넣을 필요가 없다.
+    if (fs_phase == FS_DESCENDING) {
+      targetAngleX = trim_roll;
+      targetAngleY = trim_pitch;
+      targetYawRate = 0.0f;
+      base_throttle = failsafeDescentThrottle(fs_entry_throttle,
+                                              FS_DESCENT_DELTA_US);
+
+      const float accelMag = sqrtf(accX*accX + accY*accY + accZ*accZ);
+      const uint32_t elapsed = nowMs - fs_enter_ms;
+      const bool landed = updateLandDetector(
+          landDet, accelMag, elapsed, FS_LAND_ACCEL_TOL_G,
+          FS_MIN_DESCEND_MS, FS_LAND_CONFIRM_MS);
+      const FailsafePhase next = failsafeStep(landed, elapsed, FS_MAX_MS);
+      if (next != FS_DESCENDING) {
+        fs_phase = next;
+        safety_lock = true;      // 아래 safety_lock 블록이 이번 tick에 정리한다
+        Serial.printf(">>> AUTO-LAND END phase=%d\n", (int)next);
+      }
     }
     if (safety_lock) {
       mixer_scaled = false;
@@ -1175,6 +1221,7 @@ void udp_task(void *pv) {
             targetAngleZ = 0.0f;
             angleZ = 0.0f;
             mag_reference_pending = true;
+            fs_phase = FS_NONE;
             safety_lock = false;
             Serial.println(">>> START");
           }
