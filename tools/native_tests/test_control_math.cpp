@@ -644,6 +644,43 @@ int main() {
     CHECK_EQ(motorOut[0], 1000);
   });
 
+  runCase("자동착륙 중 IMU가 전멸하면 FS_CUT_ABORT로 끝난다", [] {
+    fs_phase = FS_DESCENDING;
+    safety_lock = false;
+    fault_imu1 = true;
+    fault_imu2 = true;
+    fault_disagree = false;
+    arduino_fake::millis_value = 100;
+    runPidTicks(1);
+
+    const uint8_t phase_after_imu_loss = fs_phase;
+    fault_imu1 = false;
+    fault_imu2 = false;
+    CHECK_EQ((int)phase_after_imu_loss, (int)FS_CUT_ABORT);
+  });
+
+  runCase("자동착륙 중 safety_lock이 서면 FS_CUT_ABORT로 끝난다", [] {
+    fs_phase = FS_DESCENDING;
+    safety_lock = true;
+    fault_imu1 = false;
+    fault_imu2 = false;
+    fault_disagree = false;
+    arduino_fake::millis_value = 100;
+    runPidTicks(1);
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_ABORT);
+  });
+
+  runCase("이미 끝난 상태는 ABORT로 덮어쓰지 않는다", [] {
+    fs_phase = FS_CUT_LANDED;
+    safety_lock = true;
+    fault_imu1 = false;
+    fault_imu2 = false;
+    fault_disagree = false;
+    arduino_fake::millis_value = 100;
+    runPidTicks(1);
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_LANDED);
+  });
+
   runCase("rcr: 정상 패킷이 yaw 각속도와 roll/pitch를 설정한다", [] {
     resetRcState();
     sendRcr("rcr 1 5.5 -6.5 45.0");

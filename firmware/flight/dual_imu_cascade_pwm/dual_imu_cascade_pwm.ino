@@ -751,6 +751,7 @@ void pid_task(void *pv) {
     } else {
       // 둘 다 freeze 또는 서로 안 맞음 -> 신뢰 불가
       active_imus = 0;
+      if (fs_phase == FS_DESCENDING) fs_phase = FS_CUT_ABORT;
       safety_lock = true;
       mixer_scaled = false;
       iTermRoll = iTermPitch = iTermYaw = 0.0f;
@@ -861,6 +862,7 @@ void pid_task(void *pv) {
       }
     }
     if (safety_lock) {
+      if (fs_phase == FS_DESCENDING) fs_phase = FS_CUT_ABORT;
       mixer_scaled = false;
       iTermRoll = iTermPitch = iTermYaw = 0.0f;
       targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
