@@ -57,14 +57,51 @@ latch되고 RC 타임아웃 검사도 매 tick 참이 되므로, 재진입을 �
 - `fs_enter_ms = millis()`
 - **`safety_lock`은 세우지 않는다.** 이것이 현행 동작과의 핵심 차이다
 
-현행 코드의 RC 타임아웃 처리는 다음과 같다:
+현행 코드(808~811줄)는 다음과 같다:
 
 ```c
 if (!safety_lock && rcTimedOut(nowMs, lastRcMs)) {
-  fault_rc = true; safety_lock = true;      // ← safety_lock 세우기를 제거
+  fault_rc = true; safety_lock = true;
   Serial.println("[FAULT] RC TIMEOUT");
 }
 ```
+
+### ⚠️ `safety_lock`이 재진입 방지 역할까지 하고 있다
+
+지금은 `safety_lock = true`가 되면서 `!safety_lock` 가드 때문에 이 블록이 **한 번만**
+실행된다. `safety_lock` 설정을 제거하면 하강 내내 `rcTimedOut()`이 참이므로 이 블록이
+**1kHz로 재실행된다.** 그러면 `Serial.println`이 초당 1000번 나간다.
+
+115200 baud는 약 11.5KB/s인데 20바이트 × 1000 = 20KB/s다. **TX 버퍼가 포화되면
+`Serial.println`이 블로킹되고, `pid_task`가 멈추면 500ms `esp_task_wdt`가
+비행 중 panic 재부팅을 일으킨다.**
+
+따라서 진입 블록 전체(로그 포함)를 `fs_phase == FS_NONE` 안에 넣어야 한다:
+
+```c
+if (fs_phase == FS_NONE && !safety_lock && rcTimedOut(nowMs, lastRcMs)) {
+  fault_rc = true;
+  fs_phase = FS_DESCENDING;
+  fs_entry_throttle = base_throttle;
+  fs_enter_ms = nowMs;
+  Serial.println("[FAULT] RC TIMEOUT -> AUTO-LAND");   // 한 번만
+}
+```
+
+**하강 중에는 어떤 주기적 Serial 출력도 넣지 않는다.** 상태 관측은 텔레메트리
+`Failsafe_Phase`로 한다.
+
+### `start`는 하강 중 무시된다
+
+`start` 핸들러는 `if (!safety_lock)`이면 "START ignored (already armed)"로 빠진다.
+하강 중에는 `safety_lock`이 false이므로 **조종자가 착륙을 중단하고 제어를 되찾을 수
+없다.** "재시동 요구" 결정과 일치하지만, 나쁜 지점으로 내려가는 것을 보면서도 개입할
+수 없다는 뜻이므로 절차 문서에 명시한다. 개입 수단은 `stop`(즉시 컷)뿐이다.
+
+### `fs_phase` 리셋
+
+`start` 성공 시 `fs_phase = FS_NONE`으로 되돌린다. 리셋하지 않으면 이전 비행의
+`FS_CUT_*`가 남아 텔레메트리가 잘못된 상태를 계속 보고한다.
 
 ### 하강 중 (`FS_DESCENDING`)
 
@@ -203,6 +240,15 @@ targetAngleY = constrain(y + trim_pitch, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_
 | `FS_LAND_CONFIRM_MS` | 400 | 짧으면 오탐, 길면 착지 후 모터가 오래 돈다 |
 | `FS_MAX_MS` | **5000** | **백스톱이지 정상 종료 수단이 아니다.** 감지기가 벤치에서 검증되기 전까지 노출을 짧게 유지한다. 검증 후 3m 고도를 커버하는 10000으로 올린다 |
 
+### 하강 스로틀이 1100 이하면 적분기가 리셋된다
+
+898줄에 `else if (throttle <= 1100) { iTermRoll = iTermPitch = iTermYaw = 0.0f; }`가
+있다. 조종자가 낮은 스로틀(예: 1150)에서 링크를 잃으면 하강 스로틀이 1090이 되어
+**적분기 세 개가 모두 0으로 리셋되고 자세 트랜지언트가 생긴다.**
+
+다만 그 스로틀이면 이미 추력이 거의 없어 사실상 낙하 중이고 지면에 가깝다고
+봐야 한다. 별도 처리를 넣지 않되 벤치에서 이 조건을 재현해 관찰한다.
+
 ### `FS_DESCENT_DELTA_US`는 `CTRL_MARGIN`(150)보다 작아야 한다
 
 `th` 명령은 `min_throttle = max(1050, nb - 150)`으로 스로틀 창을 잡는다.
@@ -217,6 +263,16 @@ targetAngleY = constrain(y + trim_pitch, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_
 `FS_DESCENDING` 상태에서 IMU 전멸이나 과도 기울기가 발생하면 즉시
 `FS_CUT_ABORT`로 끝낸다. 자세 추정이 죽은 채 모터를 돌리는 것은 fly-away
 그 자체다. `stop` 명령도 언제나 즉시 컷이다.
+
+### 중단 처리를 두 곳에 넣어야 한다
+
+IMU 전멸 경로(732~745줄)는 **RC 타임아웃 검사(808줄)에 도달하기 전에
+`continue`한다.** 따라서 그 분기 안에서 직접 `fs_phase`를 `FS_CUT_ABORT`로
+세워야 한다. 과도 기울기는 `safety_lock`을 세우고 812줄 블록으로 흘러가므로
+그 블록에서 `fs_phase == FS_DESCENDING`이면 `FS_CUT_ABORT`로 바꾼다.
+
+한 곳만 처리하면 IMU 전멸로 모터는 꺼지지만 `Failsafe_Phase`가 1(하강 중)로
+남아 로그가 거짓말을 한다.
 
 즉 자동착륙은 **기존 안전장치를 대체하지 않고 RC 타임아웃 한 갈래만 바꾼다.**
 
@@ -263,6 +319,41 @@ append한다. CSV는 39열.
 이 구분이 실제로 중요한 이유: 2026-07-27 블루투스 사례에서 확인했듯 **업링크만
 죽고 다운링크는 살아 있는 비대칭 고장이 실재한다.** 반대 경우(다운링크만 죽음)도
 가능하며, 그때 PC가 보내는 `stop`은 멀쩡히 도착해 자동착륙을 무력화한다.
+
+### ⚠️ `Fault_RC` 핸들러도 `stop`을 보낸다 — 이쪽이 더 위험하다
+
+205~213줄에 별도 경로가 있다:
+
+```python
+if fault_rc_drone and not prev_fault_rc:
+    print("\\n[FAULT] 드론: RC 타임아웃 감지됨")
+    if is_armed:
+        disarm("드론 RC 타임아웃")     # ← stop 전송
+```
+
+**우리가 실제로 겪은 비대칭 고장에서 정확히 이것이 터진다.** 업링크만 죽으면
+드론이 자동착륙에 들어가고 텔레메트리로 `Fault_RC=1`을 내보낸다. 다운링크는
+살아 있으므로 PC가 그것을 보고 `stop`을 쏜다. 업링크가 간헐적으로 열리는
+상황(블루투스 사례에서 관측된 250~450ms 버스트)이라면 **그 `stop`이 도착해
+공중에서 모터가 꺼진다.**
+
+즉 자동착륙을 가장 필요로 하는 고장 모드에서 지상국이 자동착륙을 죽인다.
+
+이 경로에서도 `stop` 전송을 제거한다. 로컬 상태만 `is_armed = False`로 내리고
+rc 스트리밍을 멈춘다. 조종자에게는 자동착륙이 진행 중임을 알린다.
+
+`fault_critical_drone` 경로(216~222줄)는 그대로 둔다. `Fault_Critical`은
+`active_imus == 0 || fault_attitude || !calibration_ok`이고 이 셋은 모두
+자동착륙 대상이 아니라 즉시 컷 대상이므로, `stop`을 보내는 것이 맞다.
+
+### 정리 — `stop`을 보내면 안 되는 두 경로
+
+| 경로 | 현재 | 변경 후 |
+|---|---|---|
+| 텔레메트리 타임아웃 | `disarm()` → `stop` | rc 스트리밍만 중단 |
+| `Fault_RC` 상승 엣지 | `disarm()` → `stop` | 로컬 상태만 내림 |
+| `Fault_Critical` 상승 엣지 | `disarm()` → `stop` | **그대로 유지** |
+| 조종자 수동 disarm | `disarm()` → `stop` | **그대로 유지** |
 
 ## 8. 테스트
 
