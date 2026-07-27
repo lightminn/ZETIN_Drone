@@ -68,8 +68,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Mag_Z",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(35, len(TELEMETRY_FIELDS))
-        self.assertEqual(36, len(CSV_FIELDS))
+        self.assertEqual(38, len(TELEMETRY_FIELDS))
+        self.assertEqual(39, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -148,7 +148,10 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         row = sample_to_csv_row("00:00:00.000", sample)
         self.assertEqual(
             ["87.25", "21.5", "-7.25", "42.0", ""],
-            [str(value) for value in row[-5:]],
+            [
+                str(row[CSV_FIELDS.index(name)])
+                for name in ("MagHeading", "Mag_X", "Mag_Y", "Mag_Z", "Yaw_Hold")
+            ],
         )
 
     def test_35_field_packet_parses_yaw_hold(self):
@@ -161,11 +164,33 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         sample = telemetry_schema.parse_telemetry_packet(packet)
         self.assertIsNone(sample["Yaw_Hold"])
 
-    def test_csv_has_36_columns(self):
-        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 36)
+    def test_38_field_packet_parses_new_fields(self):
+        packet = ",".join(["1"] * 35 + ["2", "1.5", "-2.5"])
+        sample = telemetry_schema.parse_telemetry_packet(packet)
+        self.assertEqual(sample["Failsafe_Phase"], 2)
+        self.assertAlmostEqual(sample["Trim_Roll"], 1.5)
+        self.assertAlmostEqual(sample["Trim_Pitch"], -2.5)
+
+    def test_35_field_packet_leaves_new_fields_none(self):
+        packet = ",".join(["1"] * 35)
+        sample = telemetry_schema.parse_telemetry_packet(packet)
+        self.assertIsNone(sample["Failsafe_Phase"])
+        self.assertIsNone(sample["Trim_Roll"])
+        self.assertIsNone(sample["Trim_Pitch"])
+
+    def test_csv_has_39_columns(self):
+        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 39)
 
     def test_explicit_type_map_covers_new_field_types(self):
-        for name in ("Armed", "Motor_M1", "Motor_M2", "Motor_M3", "Motor_M4", "PID_Loop_Hz"):
+        for name in (
+            "Armed",
+            "Motor_M1",
+            "Motor_M2",
+            "Motor_M3",
+            "Motor_M4",
+            "PID_Loop_Hz",
+            "Failsafe_Phase",
+        ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], int)
         for name in (
             "TgtRate_Roll",
@@ -175,6 +200,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Mag_X",
             "Mag_Y",
             "Mag_Z",
+            "Trim_Roll",
+            "Trim_Pitch",
         ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], float)
 
