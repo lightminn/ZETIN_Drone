@@ -835,6 +835,22 @@ int main() {
     CHECK(countLogOccurrences(">>> RESUME") == 1U);
   });
 
+  runCase("pending resume 뒤 stop은 resume을 취소하고 ABORT로 끝난다", [] {
+    prepareResumeCommandState();
+
+    sendUdpCommandOnce("resume");
+    CHECK(failsafe_resume_requested);
+    sendUdpCommandOnce("stop");
+
+    CHECK(!failsafe_resume_requested);
+    CHECK(safety_disarm_requested);
+    CHECK_EQ(base_throttle, 1000);
+    runPidTicks(1);
+    CHECK(safety_lock);
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_ABORT);
+    for (int motor : motorOut) CHECK_EQ(motor, 1000);
+  });
+
   runCase("회귀: stale failsafe phase로 무장돼도 첫 tick 뒤 RC 감시가 복구된다", [] {
     arduino_fake::reset();
     fault_rc = false;

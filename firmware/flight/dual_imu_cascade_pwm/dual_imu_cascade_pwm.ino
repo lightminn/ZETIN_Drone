@@ -377,7 +377,7 @@ volatile float fs_probe_response_g = 0.0f;
 volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
 volatile bool hover_valid = false;
 // 비행 중에는 pid_task만 쓰고, start는 safety_lock=true인 동안 초기화한 뒤
-// 마지막에 무장을 푼다.
+// 마지막에 Core 1에 arm 전이를 요청한다.
 HoverThrottleEstimator hoverTracker = {};
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
 // 기체 트림(도). 추정기 0°와 진짜 수평의 차이를 보정한다. 비행별 상태가 아니라
@@ -445,6 +445,7 @@ static inline void requestSafetyDisarm() {
   portENTER_CRITICAL(&safetyRequestMux);
   safety_disarm_requested = true;
   safety_arm_requested = false;
+  failsafe_resume_requested = false;
   portEXIT_CRITICAL(&safetyRequestMux);
 }
 
