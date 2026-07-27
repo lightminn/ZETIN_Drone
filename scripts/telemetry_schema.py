@@ -9,7 +9,8 @@ outputs, measured loop rate, and outer-loop target rates). Field 31 appends the
 tilt-compensated BMM350 magnetic heading, and fields 32-34 append the
 compensated body-frame magnetic XYZ components used to calculate it. Field 35
 reports whether yaw heading hold is active. Fields 36-38 append the failsafe
-phase and the roll/pitch trim applied by the firmware.
+phase and the roll/pitch trim applied by the firmware. Fields 39-40 append the
+estimated hover throttle and its validity flag.
 """
 
 import math
@@ -54,6 +55,8 @@ TELEMETRY_FIELDS = (
     "Failsafe_Phase",
     "Trim_Roll",
     "Trim_Pitch",
+    "Hover_Est",
+    "Hover_Valid",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -95,6 +98,8 @@ TELEMETRY_FIELD_TYPES = {
     "Failsafe_Phase": int,
     "Trim_Roll": float,
     "Trim_Pitch": float,
+    "Hover_Est": float,
+    "Hover_Valid": int,
 }
 
 GAIN_FIELDS = (
@@ -131,11 +136,11 @@ def _parse_integer(raw, name):
 
 
 def parse_telemetry_packet(line):
-    """Parse a 10-, 14-, 21-, 22-, 30-, 31-, 34-, 35-, or 38-field packet into a fixed-schema dict.
+    """Parse a legacy or current (40-field) packet into a fixed-schema dict.
 
     Fields unavailable in legacy packets are returned as ``None`` so CSV
     files retain the full header without inventing healthy/fault values. Extra
-    future fields are ignored after the known 38 fields. The first
+    future fields are ignored after the known 40 fields. The first
     ``REQUIRED_FIELD_COUNT`` fields must be non-empty: consumers format and
     do arithmetic on them, so a blank there is a malformed packet, not a
     legacy one.

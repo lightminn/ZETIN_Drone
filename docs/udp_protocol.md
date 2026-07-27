@@ -58,19 +58,22 @@ ar|at|ay <value>      # roll / pitch / yaw
   이미 시동된 상태에서 도착한 중복 `start`는 무시되므로, 지연 도착한 재전송이
   비행 중 fault latch나 스로틀 창을 되돌리지 않는다. `stop`은 즉시 시동을
   해제한다.
-- RC 스트림이 `RC_TIMEOUT_MS`(500ms) 동안 끊기면 `Fault_RC`를 세운다. 이후
-  동작은 **진입 시점 스로틀로 갈린다.**
-  - `base_throttle < FS_GROUND_THROTTLE_US`(1200µs): 호버에 못 미치므로 공중에
-    있을 수 없다고 보고 **예전처럼 즉시 컷**한다. `Failsafe_Phase`는 0에
-    머문다. 벤치에서 프롭을 돌리는 중 링크가 끊겼을 때 5초간 프롭이 도는
-    것을 막기 위한 경로다.
-  - 그 이상: **자동착륙**에 진입한다(`Failsafe_Phase=1`). 자세 목표는 적용
+- RC 스트림이 `RC_TIMEOUT_MS`(500ms) 동안 끊기면 `Fault_RC`를 세운다.
+  - 아직 `Hover_Valid=0`이면 호버한 적이 없어 공중에 있을 수 없다고 보고
+    **즉시 컷**한다. `Failsafe_Phase`는 0에 머문다.
+  - `Hover_Valid=1`이어도
+    `base_throttle < Hover_Est - FS_GROUND_MARGIN_US`(초기 120µs)이면
+    지상 스로틀로 보고 즉시 컷한다.
+  - 그 외에는 **자동착륙**에 진입한다(`Failsafe_Phase=1`). 자세 목표는 적용
     중인 트림, yaw 각도는 진입 시점 heading 스냅샷, yaw 각속도 목표는 0이며,
-    진입 스로틀에서 `FS_DESCENT_DELTA_US = 60`을 낮춰 하강한다. 이 값은 믹서의
-    `CTRL_MARGIN = 150`보다 작아야 하며 `static_assert`로 강제된다(실제 하한은
-    런타임 값 `entry - 1050`도 포함하므로 낮은 호버 스로틀에서 더 빡빡하다).
-    하강 중에는 스로틀 창(`min_throttle`/`max_throttle`)도 매 tick 고정되므로
-    뒤늦게 도착한 `th`가 하강을 뒤집지 못한다.
+    `Hover_Est - FS_DESCENT_DELTA_US`(초기 60µs)를 하강 스로틀로 쓴다.
+    조종자가 상승 중이었어도 진입 스로틀을 기준으로 삼지 않는다. 하강 중에는
+    스로틀 창(`min_throttle`/`max_throttle`)도 매 tick 고정되므로 뒤늦게
+    도착한 `th`가 하강을 뒤집지 못한다.
+- 호버 추정기는 무장·`FS_NONE` 상태에서 roll/pitch가 각각 ±10° 안이고,
+  `|accel|`이 1g±0.05g이며, 스로틀이 1150µs를 넘는 샘플만 3초 시정수 LPF로
+  추적한다. 해당 샘플 시간이 누적 1.5초가 되면 `Hover_Valid=1`이다. 이
+  임계·시간·margin 값은 모두 Stage E-0 벤치 조정 대상이다.
 - 착지 감지는 **지면 반력 스파이크**로 한다. 하강 과도의 sub-1g와 접지
   순간의 1g 초과 스파이크를 모두 본 뒤, 5Hz LPF된 |accel|이 1g±0.10g에서
   `FS_LAND_CONFIRM_MS`(400ms) 유지되면 `Phase=2`로 컷한다. 등속 하강 중인
@@ -131,7 +134,7 @@ ar|at|ay <value>      # roll / pitch / yaw
 
 ## 드론 → 지상국
 
-텔레메트리는 다음 38개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
+텔레메트리는 다음 40개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
 
 ```text
 Roll, Pitch, Yaw,
@@ -147,12 +150,14 @@ Motor_M1, Motor_M2, Motor_M3, Motor_M4, PID_Loop_Hz,
 TgtRate_Roll, TgtRate_Pitch, TgtRate_Yaw,
 MagHeading, Mag_X, Mag_Y, Mag_Z,
 Yaw_Hold,
-Failsafe_Phase, Trim_Roll, Trim_Pitch
+Failsafe_Phase, Trim_Roll, Trim_Pitch,
+Hover_Est, Hover_Valid
 ```
 
 기존 21개 필드 뒤에 `Armed`(22), Tier 1 관측 필드(23~30), `MagHeading`(31),
 `Mag_X`/`Mag_Y`/`Mag_Z`(32~34), `Yaw_Hold`(35), `Failsafe_Phase`(36),
-`Trim_Roll`/`Trim_Pitch`(37~38)를 차례로 append한다.
+`Trim_Roll`/`Trim_Pitch`(37~38), `Hover_Est`(39), `Hover_Valid`(40)를
+차례로 append한다.
 
 - `Armed`는 펌웨어 safety lock의 반전값이다. `start`가 거부되거나
   펌웨어가 스스로 시동을 해제한 것을 지상국이 이 필드로 감지한다.
@@ -167,6 +172,8 @@ Failsafe_Phase, Trim_Roll, Trim_Pitch
 | 35 | `Yaw_Hold` | int | 0=각속도 모드, 1=heading 잠금 |
 | 36 | `Failsafe_Phase` | int | 0=정상, 1=하강 중, 2=착지컷, 3=백스톱컷, 4=중단컷 |
 | 37~38 | `Trim_Roll`, `Trim_Pitch` | float | 드론이 적용 중인 roll·pitch 트림(도) |
+| 39 | `Hover_Est` | float | 유효한 호버 후보에서 LPF로 추정한 collective 스로틀(µs) |
+| 40 | `Hover_Valid` | int | 0=미확정, 1=호버 후보 시간이 유효 기준을 충족 |
 
 `Yaw`(3번, 융합 결과)와 `MagHeading`(31번, mag heading)의 차이를 보면
 융합이 실제로 동작하는지 확인할 수 있다. `Mag_X`~`Mag_Z`는 모터 전류 간섭
@@ -197,9 +204,10 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 - 31필드 패킷은 `MagHeading`에서 끝난다 (Mag XYZ 텔레메트리 도입 이전 펌웨어).
 - 34필드 패킷은 `Mag_Z`에서 끝난다 (`Yaw_Hold` 도입 이전 펌웨어).
 - 35필드 패킷은 `Yaw_Hold`에서 끝난다 (자동착륙·기체 트림 도입 이전 펌웨어).
+- 38필드 패킷은 `Trim_Pitch`에서 끝난다 (호버 추정 텔레메트리 도입 이전 펌웨어).
 - 과거 패킷에 없는 값은 정규화된 CSV에서 빈 셀이 된다.
 - `Timestamp`는 드론이 보내지 않는다. 지상 도구가 CSV의 첫 열로 추가하므로
-  현행 CSV는 39개 열이 된다.
+  현행 CSV는 41개 열이 된다.
 
 공유 구현은
 [`telemetry_schema.py`](../scripts/telemetry_schema.py)에 있다.

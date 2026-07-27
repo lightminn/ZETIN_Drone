@@ -202,6 +202,17 @@ void setFakeAccelMagnitude(float accel_g, uint32_t tick) {
   IMU2.next_event = eventWith(0, 0, 0, 0, 0, -raw);
 }
 
+void primeHoverEstimate(float hover_us) {
+  hoverTracker = {};
+  hoverTracker.estimate_us = hover_us;
+  hoverTracker.initialized = true;
+  hoverTracker.timing_initialized = true;
+  hoverTracker.valid = true;
+  hoverTracker.eligible_ms = HOVER_VALID_MS;
+  hover_est = hover_us;
+  hover_valid = true;
+}
+
 void prepareFailsafeFlight(int throttle_us) {
   arduino_fake::reset();
   fault_rc = false;
@@ -223,6 +234,7 @@ void prepareFailsafeFlight(int throttle_us) {
   sendUdpCommandOnce("start");
   CHECK(!safety_lock);
   base_throttle = throttle_us;
+  primeHoverEstimate((float)throttle_us);
   lastRcMs = 0;
   arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
   arduino_fake::micros_value = arduino_fake::millis_value * 1000U;
@@ -602,6 +614,7 @@ int main() {
     CHECK(!safety_lock);
     fs_phase = FS_NONE;
     base_throttle = 1360;
+    primeHoverEstimate(1360.0f);
 
     // rc가 끊긴 지 오래된 상태를 만든다
     lastRcMs = 0;
@@ -613,8 +626,31 @@ int main() {
     CHECK_EQ(base_throttle, 1360 - FS_DESCENT_DELTA_US);
   });
 
-  runCase("지상 무장 중 RC 타임아웃은 즉시 한 번만 컷한다", [] {
-    prepareFailsafeFlight(FS_GROUND_THROTTLE_US - 1);
+  runCase("호버 이력 없는 RC 타임아웃은 즉시 한 번만 컷한다", [] {
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    CHECK(!safety_lock);
+    base_throttle = 1199;
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+    arduino_fake::serial_output.clear();
+
+    runPidTicks(50);
+
+    CHECK(fault_rc);
+    CHECK(safety_lock);
+    CHECK_EQ((int)fs_phase, (int)FS_NONE);
+    CHECK_EQ(motorOut[0], 1000);
+    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> CUT (NO HOVER EST)"),
+             static_cast<std::size_t>(1));
+    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> AUTO-LAND"),
+             static_cast<std::size_t>(0));
+  });
+
+  runCase("호버 대비 ground margin 아래 RC 타임아웃은 즉시 컷한다", [] {
+    prepareFailsafeFlight(1360);
+    base_throttle = 1360 - FS_GROUND_MARGIN_US - 1;
     arduino_fake::serial_output.clear();
 
     runPidTicks(50);
@@ -625,8 +661,6 @@ int main() {
     CHECK_EQ(motorOut[0], 1000);
     CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> GROUND CUT"),
              static_cast<std::size_t>(1));
-    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> AUTO-LAND"),
-             static_cast<std::size_t>(0));
   });
 
   runCase("stop은 자동착륙 중에도 즉시 컷이다", [] {
@@ -661,6 +695,7 @@ int main() {
     CHECK_EQ((int)fs_phase, (int)FS_CUT_ABORT);
 
     base_throttle = 1360;
+    primeHoverEstimate(1360.0f);
     bool phase_cleared_after_first_tick = false;
     arduino_fake::pre_tick_hook = [&](uint32_t tick) {
       if (tick == 1U) {
@@ -686,6 +721,7 @@ int main() {
     sendUdpCommandOnce("start");
     fs_phase = FS_NONE;
     base_throttle = 1360;
+    primeHoverEstimate(1360.0f);
     lastRcMs = 0;
     arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
     runPidTicks(1);
@@ -705,6 +741,7 @@ int main() {
     sendUdpCommandOnce("start");
     fs_phase = FS_NONE;
     base_throttle = 1360;
+    primeHoverEstimate(1360.0f);
     lastRcMs = 0;
     arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
     lastRcSeq = 0;
@@ -780,6 +817,7 @@ int main() {
     sendUdpCommandOnce("start");
     fs_phase = FS_NONE;
     base_throttle = 1360;
+    primeHoverEstimate(1360.0f);
     lastRcMs = 0;
     arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
 

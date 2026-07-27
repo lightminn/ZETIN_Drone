@@ -169,6 +169,8 @@ struct RunConfig {
   uint32_t rc_disconnect_tick = std::numeric_limits<uint32_t>::max();
   PlantParameters plant_parameters = kPlantParameters;
   std::function<Disturbance(uint32_t)> disturbance_for_interval;
+  std::function<int(uint32_t)> throttle_for_tick;
+  std::function<void(uint32_t, PlantState &)> state_for_tick;
 };
 
 struct PlantStep {
@@ -347,6 +349,8 @@ void resetFirmwareState(const PlantState &initial) {
   yaw_hold_override = false;
   safety_lock = true;
   fs_phase = FS_NONE;
+  hover_est = 0.0f;
+  hover_valid = false;
   calibration_ok = true;
 
   targetAngleX = 0.0f;
@@ -368,6 +372,8 @@ void resetFirmwareState(const PlantState &initial) {
     gyro_bias1[axis] = 0.0f;
     gyro_bias2[axis] = 0.0f;
   }
+  accel_scale1 = 1.0f;
+  accel_scale2 = 1.0f;
   lastRcMs = 0;
   fault_rc = false;
   fault_imu1 = false;
@@ -615,6 +621,13 @@ RunResult runSil(const RunConfig &config) {
           state, disturbanceAt(config, tick - 1U),
           config.inject_roll_sign_fault, config.vertical_enabled,
           config.plant_parameters);
+    }
+    if (config.state_for_tick) config.state_for_tick(tick, state);
+    if (config.throttle_for_tick) {
+      const int scheduled_throttle = config.throttle_for_tick(tick);
+      base_throttle = scheduled_throttle;
+      min_throttle = std::max(1050, scheduled_throttle - CTRL_MARGIN);
+      max_throttle = std::min(1900, scheduled_throttle + CTRL_MARGIN);
     }
     arduino_fake::millis_value += 1U;
     arduino_fake::micros_value += 1000U;
@@ -962,13 +975,19 @@ void printFailsafeTrace(const char *label, const RunResult &result) {
             << '\n';
 }
 
+constexpr uint32_t kHoverWarmupTicks = 3000;
+constexpr uint32_t kV2ClimbTicks = 200;
+constexpr uint32_t kV2DisconnectTick =
+    kHoverWarmupTicks + kV2ClimbTicks;
+
 RunConfig makeV3Config(double k_ge) {
   RunConfig config;
   config.initial.z_m = 0.5;
-  config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.ticks =
+      kHoverWarmupTicks + RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
   config.base_throttle_us = 1340;
   config.vertical_enabled = true;
-  config.rc_disconnect_tick = 0;
+  config.rc_disconnect_tick = kHoverWarmupTicks;
   config.plant_parameters.k_ge = k_ge;
   return config;
 }
@@ -977,12 +996,39 @@ RunConfig makeV1Config(bool noise_enabled = false,
                        double noise_sd_g = 0.04) {
   RunConfig config;
   config.initial.z_m = 1.0;
-  config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.ticks =
+      kHoverWarmupTicks + RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
   config.base_throttle_us = 1340;
   config.vertical_enabled = true;
-  config.rc_disconnect_tick = 0;
+  config.rc_disconnect_tick = kHoverWarmupTicks;
   config.accel_noise_enabled = noise_enabled;
   config.accel_noise_sd_g = noise_sd_g;
+  return config;
+}
+
+RunConfig makeV2Config() {
+  RunConfig config;
+  config.initial.z_m = 1.0;
+  config.ticks =
+      kV2DisconnectTick + RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.base_throttle_us = 1340;
+  config.vertical_enabled = true;
+  config.rc_disconnect_tick = kV2DisconnectTick;
+  config.plant_parameters.k_ge = 0.0;
+  config.throttle_for_tick = [](uint32_t tick) {
+    return tick < kHoverWarmupTicks ? 1340 : 1450;
+  };
+  return config;
+}
+
+RunConfig makeV2bConfig() {
+  RunConfig config;
+  config.initial.z_m = 0.0;
+  config.ticks = RC_TIMEOUT_MS + 1000U;
+  config.base_throttle_us = 1450;
+  config.vertical_enabled = true;
+  config.rc_disconnect_tick = 0;
+  config.plant_parameters.k_ge = 0.0;
   return config;
 }
 
@@ -990,23 +1036,42 @@ RunConfig makeV4Config(bool noise_enabled = false,
                        double noise_sd_g = 0.04) {
   RunConfig config;
   config.initial.z_m = 2.0;
-  config.initial.vz_ms = -1.2;
-  config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
-  config.base_throttle_us = 1400;
+  config.ticks =
+      kHoverWarmupTicks + RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.base_throttle_us = 1340;
   config.vertical_enabled = true;
-  config.rc_disconnect_tick = 0;
+  config.rc_disconnect_tick = kHoverWarmupTicks;
   config.plant_parameters.k_ge = 0.0;
   config.accel_noise_enabled = noise_enabled;
   config.accel_noise_sd_g = noise_sd_g;
+  config.throttle_for_tick = [](uint32_t tick) {
+    return tick < kHoverWarmupTicks ? 1340 : 1400;
+  };
+  config.state_for_tick = [](uint32_t tick, PlantState &state) {
+    if (tick == kHoverWarmupTicks) state.vz_ms = -1.2;
+  };
   const double weight_n =
       config.plant_parameters.mass_kg * kGravityMs2;
-  config.disturbance_for_interval = [weight_n](uint32_t tick) {
-    if (tick >= RC_TIMEOUT_MS && tick < RC_TIMEOUT_MS + 150U) {
-      return Disturbance{0.0, 0.0, 0.0, -0.20 * weight_n};
+  const double descent_balance_n =
+      weight_n * FS_DESCENT_DELTA_US / (1340.0 - 1000.0);
+  config.disturbance_for_interval =
+      [weight_n, descent_balance_n](uint32_t tick) {
+    const uint32_t failsafe_entry_tick =
+        kHoverWarmupTicks + RC_TIMEOUT_MS;
+    if (tick >= failsafe_entry_tick &&
+        tick < failsafe_entry_tick + 150U) {
+      return Disturbance{
+          0.0, 0.0, 0.0, descent_balance_n - 0.20 * weight_n};
     }
-    if (tick >= RC_TIMEOUT_MS + 150U &&
-        tick < RC_TIMEOUT_MS + 200U) {
-      return Disturbance{0.0, 0.0, 0.0, 0.40 * weight_n};
+    if (tick >= failsafe_entry_tick + 150U &&
+        tick < failsafe_entry_tick + 200U) {
+      return Disturbance{
+          0.0, 0.0, 0.0, descent_balance_n + 0.40 * weight_n};
+    }
+    if (tick >= failsafe_entry_tick) {
+      // 단순 수직 플랜트에는 항력이 없다. hover-60us에서도 등속 하강하는
+      // V4 조건을 만들기 위해 추력 부족분과 같은 위쪽 항력을 명시한다.
+      return Disturbance{0.0, 0.0, 0.0, descent_balance_n};
     }
     return Disturbance{};
   };
@@ -1061,6 +1126,99 @@ int main() {
     invalid.plant.phi = std::numeric_limits<double>::quiet_NaN();
     result.samples.push_back(invalid);
     CHECK(!std::isfinite(settlingTime90(result, true, 8.0)));
+  });
+
+  runCase("calibration: per-IMU scale corrects an injected 1.007g", [] {
+    PlantState state;
+    resetFirmwareState(state);
+
+    constexpr double kInjectedAccelG = 1.007;
+    bool saturated = false;
+    inv_imu_sensor_event_t imu1 = {};
+    imu1.accel[2] =
+        roundedRaw(kInjectedAccelG / ACCEL_SCALE, saturated);
+    inv_imu_sensor_event_t imu2 = {};
+    imu2.accel[2] = static_cast<int16_t>(-imu1.accel[2]);
+    IMU1.next_event = imu1;
+    IMU2.next_event = imu2;
+
+    CHECK(!saturated);
+    CHECK(calibrate_bias());
+    CHECK_LE(std::fabs(accel_scale1 - 1.0 / kInjectedAccelG), 0.001);
+    CHECK_LE(std::fabs(accel_scale2 - 1.0 / kInjectedAccelG), 0.001);
+
+    arduino_fake::tick_limit = 1;
+    bool stopped = false;
+    try {
+      pid_task(nullptr);
+    } catch (const arduino_fake::TaskDelayExit &) {
+      stopped = true;
+    }
+    arduino_fake::tick_limit = 0;
+    CHECK_MSG(stopped, "pid_task did not stop after calibrated accel sample");
+
+    const double corrected_accel_g =
+        std::sqrt(static_cast<double>(accX) * accX +
+                  static_cast<double>(accY) * accY +
+                  static_cast<double>(accZ) * accZ);
+    std::ostringstream detail;
+    detail << "actual=" << corrected_accel_g
+           << "g, expected=1.0000+/-0.0020g";
+    CHECK_MSG(std::fabs(corrected_accel_g - 1.0) <= 0.002,
+              detail.str());
+    std::cout << "[SIL] accel calibration injected=" << kInjectedAccelG
+              << "g scale1=" << accel_scale1
+              << " scale2=" << accel_scale2
+              << " corrected=" << corrected_accel_g << "g\n";
+  });
+
+  runCase("calibration: implausible accel magnitude keeps unity scale", [] {
+    PlantState state;
+    resetFirmwareState(state);
+
+    bool saturated = false;
+    inv_imu_sensor_event_t imu1 = {};
+    imu1.accel[2] = roundedRaw(1.30 / ACCEL_SCALE, saturated);
+    inv_imu_sensor_event_t imu2 = {};
+    imu2.accel[2] = static_cast<int16_t>(-imu1.accel[2]);
+    IMU1.next_event = imu1;
+    IMU2.next_event = imu2;
+
+    CHECK(!saturated);
+    CHECK(calibrate_bias());
+    CHECK_LE(std::fabs(accel_scale1 - 1.0f), 1e-6);
+    CHECK_LE(std::fabs(accel_scale2 - 1.0f), 1e-6);
+    CHECK_MSG(
+        arduino_fake::serial_output.find("outside [0.8,1.2], scale=1.0") !=
+            std::string::npos,
+        "implausible accel calibration did not emit the safety warning");
+  });
+
+  runCase("telemetry: hover estimate and validity are appended", [] {
+    PlantState state;
+    resetFirmwareState(state);
+    connectionEstablished = true;
+    hover_est = 1337.5f;
+    hover_valid = true;
+
+    sendTelemetry();
+
+    const std::string &packet = wifi_udp_fake::telemetry_output;
+    const std::size_t field_count =
+        packet.empty()
+            ? 0U
+            : 1U + static_cast<std::size_t>(
+                       std::count(packet.begin(), packet.end(), ','));
+    std::ostringstream detail;
+    detail << "actual field_count=" << field_count
+           << ", packet_suffix="
+           << packet.substr(packet.size() > 24U ? packet.size() - 24U : 0U)
+           << "; expected field_count=40 and suffix ,1337.50,1";
+    CHECK_MSG(field_count == 40U, detail.str());
+    CHECK_MSG(
+        packet.size() >= 10U &&
+            packet.compare(packet.size() - 10U, 10U, ",1337.50,1") == 0,
+        detail.str());
   });
 
   runCase("vertical: 1g specific force preserves legacy IMU raw bytes", [] {
@@ -1134,12 +1292,8 @@ int main() {
   });
 
   runCase("vertical: RC disconnect enters the real firmware failsafe", [] {
-    RunConfig config;
-    config.initial.z_m = 1.0;
-    config.ticks = RC_TIMEOUT_MS + 100U;
-    config.base_throttle_us = 1340;
-    config.vertical_enabled = true;
-    config.rc_disconnect_tick = 0;
+    RunConfig config = makeV1Config();
+    config.ticks = kHoverWarmupTicks + RC_TIMEOUT_MS + 100U;
     const RunResult result = runSil(config);
 
     CHECK_EQ(result.samples.back().failsafe_phase,
@@ -1644,14 +1798,46 @@ int main() {
               << '\n';
   });
 
-  runReport("V2 link loss while climbing (current firmware)", [] {
-    RunConfig config;
-    config.initial.z_m = 1.0;
-    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
-    config.base_throttle_us = 1450;
-    config.vertical_enabled = true;
-    config.rc_disconnect_tick = 0;
-    printFailsafeTrace("V2", runSil(config));
+  runCase("V2: hover estimate makes climbing link loss descend", [] {
+    const RunResult result = runSil(makeV2Config());
+    printFailsafeTrace("V2", result);
+    const FailsafeTrace trace = analyzeFailsafeTrace(result);
+    CHECK_MSG(std::isfinite(trace.entry_z_m), "V2 did not enter failsafe");
+    CHECK_MSG(std::isfinite(trace.terminal_z_m), "V2 did not terminate");
+    const double delta_z_m = trace.terminal_z_m - trace.entry_z_m;
+    std::ostringstream detail;
+    detail << "actual delta_z=" << delta_z_m << "m, expected delta_z<0";
+    CHECK_MSG(delta_z_m < 0.0, detail.str());
+  });
+
+  runCase("V2b: link loss without prior hover cuts immediately", [] {
+    const RunResult result = runSil(makeV2bConfig());
+    printFailsafeTrace("V2b", result);
+
+    uint32_t first_locked_tick = std::numeric_limits<uint32_t>::max();
+    bool entered_descending = false;
+    for (const Sample &sample : result.samples) {
+      if (first_locked_tick == std::numeric_limits<uint32_t>::max() &&
+          sample.safety_locked) {
+        first_locked_tick = sample.tick;
+      }
+      entered_descending =
+          entered_descending || sample.failsafe_phase == FS_DESCENDING;
+    }
+    std::ostringstream detail;
+    detail << "actual first_locked_tick="
+           << (first_locked_tick == std::numeric_limits<uint32_t>::max()
+                   ? "none"
+                   : std::to_string(first_locked_tick))
+           << ", entered_descending=" << entered_descending
+           << "; expected first_locked_tick<="
+           << RC_TIMEOUT_MS + 2U << " and entered_descending=0";
+    CHECK_MSG(first_locked_tick <= RC_TIMEOUT_MS + 2U &&
+                  !entered_descending,
+              detail.str());
+    std::cout << "[SIL] V2b first_locked="
+              << tickSeconds(first_locked_tick)
+              << " entered_descending=" << entered_descending << '\n';
   });
 
   runReport("V3 ground-effect k_ge boundary (current firmware)", [&] {
@@ -1695,15 +1881,19 @@ int main() {
   runReport("V4 noise OFF/ON upward gust then steady descent", [] {
     std::cout << "[SIL] V4 noise comparison OFF(label=V4) then "
                  "ON(sd=0.04g)\n";
-    std::cout << "[SIL] V4 setup z0=2.0000m vz0=-1.2000m/s "
-                 "down=-0.20g/150ms up=+0.40g/50ms then zero force\n";
+    std::cout << "[SIL] V4 setup hover=3.000s then vz=-1.2000m/s "
+                 "down=-0.20g/150ms up=+0.40g/50ms then "
+                 "drag-balance=+0.1765g\n";
     const RunResult result = runSil(makeV4Config());
     printFailsafeTrace("V4", result);
-    const Sample &quiet_start = sampleAtTick(result, 702U);
-    const Sample &quiet_400ms = sampleAtTick(result, 1102U);
+    const uint32_t quiet_start_tick =
+        kHoverWarmupTicks + RC_TIMEOUT_MS + 202U;
+    const uint32_t quiet_end_tick = quiet_start_tick + 400U;
+    const Sample &quiet_start = sampleAtTick(result, quiet_start_tick);
+    const Sample &quiet_400ms = sampleAtTick(result, quiet_end_tick);
     double quiet_min_accel_g = std::numeric_limits<double>::infinity();
     double quiet_max_accel_g = -std::numeric_limits<double>::infinity();
-    for (uint32_t tick = 702U; tick <= 1102U; tick++) {
+    for (uint32_t tick = quiet_start_tick; tick <= quiet_end_tick; tick++) {
       const Sample &sample = sampleAtTick(result, tick);
       quiet_min_accel_g =
           std::min(quiet_min_accel_g, sample.accel_magnitude_g);

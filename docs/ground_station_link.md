@@ -8,11 +8,13 @@
 ## 1. RC 타임아웃은 고장이 아니라 안전장치다
 
 `dual_imu_cascade_pwm`는 `rc` 패킷이 `RC_TIMEOUT_MS`(500ms) 넘게 끊기면
-`fault_rc`를 세운다. 진입 스로틀이 `FS_GROUND_THROTTLE_US`(1200µs) 미만이면
-공중에 있을 수 없으므로 **즉시 컷**하고(`Phase`는 0 유지), 그 이상이면
-`Failsafe_Phase=1` 자동착륙에 진입한다. 자동착륙은 적용 중인 roll·pitch
-트림과 진입 시점 heading을 유지하고 진입 스로틀보다 60µs 낮춰 하강하며,
-접지 스파이크로 착지를 감지하면 `Phase=2`로 컷한다. 초기 백스톱
+`fault_rc`를 세운다. `Hover_Valid=0`이거나 진입 스로틀이
+`Hover_Est - FS_GROUND_MARGIN_US`보다 낮으면 공중에 있을 수 없다고 보고
+**즉시 컷**한다(`Phase`는 0 유지). 그 외에는 `Failsafe_Phase=1`
+자동착륙에 진입한다. 자동착륙은 적용 중인 roll·pitch 트림과 진입 시점
+heading을 유지하고 `Hover_Est - 60µs`로 하강한다. 따라서 링크가 상승 중
+끊겨도 높은 진입 스로틀을 하강 기준으로 재사용하지 않는다. 접지 스파이크로
+착지를 감지하면 `Phase=2`로 컷한다. 초기 백스톱
 `FS_MAX_MS=5000` 안에 감지하지 못하면 `Phase=3`으로 컷한다. 이 값은 착지
 감지기를 벤치 검증한 뒤에만 10000으로 올린다. 명시적 `stop`, IMU 전멸,
 과도 기울기는 계속 즉시 컷이다(하강 중이면 `Phase=4`).

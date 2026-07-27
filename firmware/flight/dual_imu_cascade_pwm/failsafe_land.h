@@ -11,6 +11,48 @@ enum FailsafePhase : uint8_t {
   FS_CUT_ABORT   = 4,
 };
 
+// 호버 후보인 시간만 누적한다. 부적합 구간은 누적과 LPF를 멈추지만 이미
+// 모은 시간/추정치는 보존한다. 일단 유효해진 추정치도 비행 중 후보 조건이
+// 잠시 깨져도 보존하고, 유효한 샘플에서만 느린 LPF로 갱신한다.
+struct HoverThrottleEstimator {
+  float estimate_us = 0.0f;
+  bool initialized = false;
+  bool timing_initialized = false;
+  bool valid = false;
+  uint32_t last_update_ms = 0;
+  uint32_t eligible_ms = 0;
+};
+
+static inline void updateHoverThrottleEstimator(
+    HoverThrottleEstimator &estimator, bool sample_eligible,
+    int throttle_us, uint32_t now_ms, float dt_s, float tau_s,
+    uint32_t valid_ms) {
+  uint32_t elapsed_ms = 0;
+  if (estimator.timing_initialized) {
+    elapsed_ms = now_ms - estimator.last_update_ms;
+  } else {
+    estimator.timing_initialized = true;
+  }
+  estimator.last_update_ms = now_ms;
+
+  if (!sample_eligible) return;
+
+  if (!estimator.initialized) {
+    estimator.estimate_us = (float)throttle_us;
+    estimator.initialized = true;
+  } else {
+    const float alpha = dt_s / (tau_s + dt_s);
+    estimator.estimate_us +=
+        alpha * ((float)throttle_us - estimator.estimate_us);
+  }
+
+  const uint32_t room = UINT32_MAX - estimator.eligible_ms;
+  estimator.eligible_ms += elapsed_ms < room ? elapsed_ms : room;
+  if (estimator.eligible_ms >= valid_ms) {
+    estimator.valid = true;
+  }
+}
+
 // 착지 감지기의 누적 상태. pid_task가 소유하고 진입 시 {}로 초기화한다.
 struct LandDetector {
   bool     filt_init = false;

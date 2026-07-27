@@ -17,10 +17,10 @@ python scripts/test_dualsense_input.py
 수신 내용을 `logs/`에 기록한다. 두 도구는
 [`telemetry_schema.py`](telemetry_schema.py)의 동일한 필드 정의와 파서를
 공유하므로 10개, 14개, 21개, 22개, 30개, 31개 필드 레거시 텔레메트리와 현재
-38개 필드 패킷을 같은 방식으로 해석한다. 현행 패킷의 마지막 세 필드는
-`Failsafe_Phase`, `Trim_Roll`, `Trim_Pitch`이며, `Mag_Z`에서 끝나는 34필드와
-`Yaw_Hold`에서 끝나는 35필드 패킷도 레거시로 받아들인다. CSV에는 PC 수신
-시각까지 포함해 39개 열을 쓴다.
+40개 필드 패킷을 같은 방식으로 해석한다. 현행 패킷의 마지막 두 필드는
+`Hover_Est`, `Hover_Valid`이며, `Mag_Z`에서 끝나는 34필드,
+`Yaw_Hold`에서 끝나는 35필드, `Trim_Pitch`에서 끝나는 38필드 패킷도
+레거시로 받아들인다. CSV에는 PC 수신 시각까지 포함해 41개 열을 쓴다.
 
 `control_dualsense.py`는 yaw 스틱을 상태 없는 `rcr` 각속도 명령으로 보내며,
 `YAW_RATE_MAX_DPS = 90.0`에 따라 최대 편향을 ±90dps로 제한한다. 펌웨어의

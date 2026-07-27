@@ -31,6 +31,57 @@ static const uint32_t kMinDescend = 1000;
 static const uint32_t kConfirm = 400;
 
 int main() {
+  runCase("호버 후보 시간이 2초 누적된 뒤에만 유효해진다", [] {
+    HoverThrottleEstimator estimator = {};
+    for (uint32_t t = 0; t < 2000; t++) {
+      updateHoverThrottleEstimator(
+          estimator, true, 1340, t, 0.001f, 3.0f, 2000);
+      CHECK(!estimator.valid);
+    }
+    updateHoverThrottleEstimator(
+        estimator, true, 1340, 2000, 0.001f, 3.0f, 2000);
+    CHECK(estimator.valid);
+    CHECK(std::fabs(estimator.estimate_us - 1340.0f) < 1e-3f);
+  });
+
+  runCase("호버 유효시간은 부적합 구간을 제외하고 누적한다", [] {
+    HoverThrottleEstimator estimator = {};
+    for (uint32_t t = 0; t <= 1000; t++) {
+      updateHoverThrottleEstimator(
+          estimator, true, 1300, t, 0.001f, 3.0f, 2000);
+    }
+    for (uint32_t t = 1001; t <= 1500; t++) {
+      updateHoverThrottleEstimator(
+          estimator, false, 1700, t, 0.001f, 3.0f, 2000);
+      CHECK(!estimator.valid);
+    }
+    for (uint32_t t = 1501; t < 2500; t++) {
+      updateHoverThrottleEstimator(
+          estimator, true, 1340, t, 0.001f, 3.0f, 2000);
+      CHECK(!estimator.valid);
+    }
+    updateHoverThrottleEstimator(
+        estimator, true, 1340, 2500, 0.001f, 3.0f, 2000);
+    CHECK(estimator.valid);
+    CHECK(estimator.estimate_us > 1310.0f);
+    CHECK(estimator.estimate_us < 1340.0f);
+  });
+
+  runCase("유효 호버 추정치는 3초 시정수 LPF로 천천히 추적한다", [] {
+    HoverThrottleEstimator estimator = {};
+    for (uint32_t t = 0; t <= 2000; t++) {
+      updateHoverThrottleEstimator(
+          estimator, true, 1340, t, 0.001f, 3.0f, 2000);
+    }
+    CHECK(estimator.valid);
+    for (uint32_t t = 2001; t <= 3000; t++) {
+      updateHoverThrottleEstimator(
+          estimator, true, 1400, t, 0.001f, 3.0f, 2000);
+    }
+    CHECK(estimator.estimate_us > 1356.0f);
+    CHECK(estimator.estimate_us < 1358.0f);
+  });
+
   runCase("하강 스로틀은 진입값에서 delta를 뺀 값이다", [] {
     CHECK(failsafeDescentThrottle(1360, 60) == 1300);
   });

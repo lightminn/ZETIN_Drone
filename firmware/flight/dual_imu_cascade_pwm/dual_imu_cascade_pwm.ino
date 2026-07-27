@@ -165,7 +165,18 @@ const float    FS_LAND_SETTLE_TOL_G = 0.10f;  // ACC_DEV_SOFT와 동일
 const float    FS_LAND_IMPACT_G    = 0.25f;   // 1g 초과 스파이크 임계
 const uint32_t FS_LAND_CONFIRM_MS  = 400;
 const uint32_t FS_MAX_MS           = 5000;
-const int      FS_GROUND_THROTTLE_US = 1200;
+// 아래 호버 추정 상수는 모두 Stage E-0 벤치 조정 대상이다. 10°/±0.05g는
+// 자세·수직 정상상태만 받는 보수적 시작값이고, 3초 LPF는 요구 범위(2~5초)의
+// 중앙값이다. 1.5초 누적은 짧은 스로틀 통과를 호버로 확정하지 않으면서
+// 실측 상한 모델인 0.06g 저주파 진동에서도 3초 안에 유효해지는 시작값이다.
+const float    HOVER_LEVEL_MAX_DEG    = 10.0f;
+const float    HOVER_ACCEL_TOL_G      = 0.05f;
+const int      HOVER_MIN_THROTTLE_US  = 1150;
+const float    HOVER_LPF_TAU_S        = 3.0f;
+const uint32_t HOVER_VALID_MS         = 1500;
+// 기존 1200us 컷은 가정 호버 1340us에서 margin 140us였다. 두 번의 60us
+// 하강 delta에 해당하는 120us로 보수적으로 시작하고 실측 hover_est로 조정한다.
+const int      FS_GROUND_MARGIN_US    = 120;
 const uint32_t PID_WDT_TIMEOUT_MS = 500;     // pid_task 정지 시 강제 재부팅 (1kHz 루프 대비 큰 여유)
 const int32_t  FROZEN_DELTA_RAW   = 1;       // 6축 raw 변화량 합이 이 이하면 정지 의심 (LSB)
 const uint32_t IMU_FROZEN_MS      = 300;     // 그 상태가 이만큼 지속되면 freeze 확정
@@ -175,6 +186,8 @@ const uint32_t IMU_DISAGREE_MS    = 150;     // 불일치 지속 시간
 const int   BIAS_CALIB_SAMPLES   = 2000;
 const float BIAS_MOVEMENT_THRESH = 1.0f;     // 축별 stddev 상한 (deg/s)
 const int   BIAS_CALIB_RETRIES   = 3;
+const float ACCEL_CAL_MIN_G      = 0.8f;     // 이 범위 밖은 센서 이상: 보정 금지
+const float ACCEL_CAL_MAX_G      = 1.2f;
 
 const int OUTER_DIV = 4;                      // outer loop = 1kHz / 4 = 250Hz
 
@@ -330,6 +343,11 @@ DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 volatile bool  safety_lock  = true;
 // 런타임 쓰기는 pid_task만 담당한다. Core 0은 텔레메트리/명령 처리에서 읽기만 한다.
 volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
+volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
+volatile bool hover_valid = false;
+// 비행 중에는 pid_task만 쓰고, start는 safety_lock=true인 동안 초기화한 뒤
+// 마지막에 무장을 푼다.
+HoverThrottleEstimator hoverTracker = {};
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
 // 기체 트림(도). 추정기 0°와 진짜 수평의 차이를 보정한다. 비행별 상태가 아니라
 // 기체 속성이므로 start/stop이 지우지 않는다.
@@ -367,6 +385,9 @@ float iTermRoll = 0.0f, iTermPitch = 0.0f, iTermYaw = 0.0f;  // 적분 기여 (�
 
 float gyro_bias1[3] = {0,0,0};
 float gyro_bias2[3] = {0,0,0};
+// 두 센서의 gain 오차는 독립이고 단일-IMU 폴백도 있으므로 각각 보정한다.
+float accel_scale1 = 1.0f;
+float accel_scale2 = 1.0f;
 
 volatile uint32_t lastRcMs        = 0;
 volatile bool     fault_rc        = false;
@@ -547,8 +568,10 @@ static MotorMix mixAndDesaturate(float roll, float pitch, float yaw,
 // ==========================================================
 // sign[]은 각 IMU를 drone(IMU1) frame으로 맞추는 부호.
 static bool measure_imu_bias(ICM42670 &imu, const float sign[3],
-                             float bias_out[3], float sd_out[3]) {
+                             float bias_out[3], float sd_out[3],
+                             float &accel_mean_out) {
   double sum[3] = {0,0,0}, sum_sq[3] = {0,0,0};
+  double accel_mag_sum = 0.0;
   inv_imu_sensor_event_t e = {};
   int samples = 0;
   int attempts = 0;
@@ -565,10 +588,15 @@ static bool measure_imu_bias(ICM42670 &imu, const float sign[3],
       sign[2] * e.gyro[2] * GYRO_SCALE
     };
     for (int k = 0; k < 3; k++) { sum[k] += g[k]; sum_sq[k] += (double)g[k]*g[k]; }
+    const double ax = (double)e.accel[0] * ACCEL_SCALE;
+    const double ay = (double)e.accel[1] * ACCEL_SCALE;
+    const double az = (double)e.accel[2] * ACCEL_SCALE;
+    accel_mag_sum += sqrt(ax*ax + ay*ay + az*az);
     samples++;
     delayMicroseconds(1000);
   }
   if (samples != BIAS_CALIB_SAMPLES) return false;
+  accel_mean_out = (float)(accel_mag_sum / samples);
   for (int k = 0; k < 3; k++) {
     double mean = sum[k] / samples;
     double var  = sum_sq[k] / samples - mean*mean;
@@ -579,12 +607,27 @@ static bool measure_imu_bias(ICM42670 &imu, const float sign[3],
   return true;
 }
 
+static float guarded_accel_scale(float accel_mean_g, const char *imu_name) {
+  if (accel_mean_g < ACCEL_CAL_MIN_G || accel_mean_g > ACCEL_CAL_MAX_G) {
+    Serial.printf(
+        "[CALIB] WARN %s accel |a| %.4fg outside [0.8,1.2], scale=1.0\n",
+        imu_name, accel_mean_g);
+    return 1.0f;
+  }
+  return 1.0f / accel_mean_g;
+}
+
 static bool calibrate_bias() {
   float sd1[3], sd2[3];
+  accel_scale1 = 1.0f;
+  accel_scale2 = 1.0f;
   for (int a = 1; a <= BIAS_CALIB_RETRIES; a++) {
     Serial.printf("[CALIB] attempt %d/%d (hold still)...\n", a, BIAS_CALIB_RETRIES);
-    bool read1 = measure_imu_bias(IMU1, IMU1_SIGN, gyro_bias1, sd1);
-    bool read2 = measure_imu_bias(IMU2, IMU2_SIGN, gyro_bias2, sd2);
+    float accel_mean1 = 0.0f, accel_mean2 = 0.0f;
+    bool read1 = measure_imu_bias(
+        IMU1, IMU1_SIGN, gyro_bias1, sd1, accel_mean1);
+    bool read2 = measure_imu_bias(
+        IMU2, IMU2_SIGN, gyro_bias2, sd2, accel_mean2);
     if (!read1 || !read2) {
       Serial.printf("[CALIB] sensor read failed (imu1=%d imu2=%d)\n", (int)read1, (int)read2);
       continue;
@@ -594,7 +637,16 @@ static bool calibrate_bias() {
     Serial.printf("[CALIB] IMU1 %.3f %.3f %.3f | IMU2 %.3f %.3f %.3f (maxSD %.3f)\n",
                   gyro_bias1[0],gyro_bias1[1],gyro_bias1[2],
                   gyro_bias2[0],gyro_bias2[1],gyro_bias2[2], max_sd);
-    if (max_sd <= BIAS_MOVEMENT_THRESH) { Serial.println("[CALIB] OK"); return true; }
+    if (max_sd <= BIAS_MOVEMENT_THRESH) {
+      accel_scale1 = guarded_accel_scale(accel_mean1, "IMU1");
+      accel_scale2 = guarded_accel_scale(accel_mean2, "IMU2");
+      Serial.printf(
+          "[CALIB] accel mean IMU1 %.4fg scale %.6f | "
+          "IMU2 %.4fg scale %.6f\n",
+          accel_mean1, accel_scale1, accel_mean2, accel_scale2);
+      Serial.println("[CALIB] OK");
+      return true;
+    }
     Serial.println("[CALIB] movement detected, retry");
   }
   Serial.println("[CALIB] FAIL: reboot and calibrate on a stationary surface");
@@ -654,7 +706,6 @@ void pid_task(void *pv) {
   bool wasLocked = true;
   LandDetector landDet = {};
   uint32_t fs_enter_ms = 0;
-  int fs_entry_throttle = 1000;
   float fs_hold_yaw = 0.0f;
 
   inv_imu_sensor_event_t e1 = {}, e2 = {};
@@ -717,8 +768,14 @@ void pid_task(void *pv) {
       g1[k] = lpfG1[k].update(g1[k]);
       g2[k] = lpfG2[k].update(g2[k]);
     }
-    float a1[3] = { (float)e1.accel[0], (float)e1.accel[1], (float)e1.accel[2] };
-    float a2[3] = { IMU2_SIGN_X*e2.accel[0], IMU2_SIGN_Y*e2.accel[1], IMU2_SIGN_Z*e2.accel[2] };
+    float a1[3] = {
+      (float)e1.accel[0] * accel_scale1,
+      (float)e1.accel[1] * accel_scale1,
+      (float)e1.accel[2] * accel_scale1 };
+    float a2[3] = {
+      IMU2_SIGN_X*e2.accel[0] * accel_scale2,
+      IMU2_SIGN_Y*e2.accel[1] * accel_scale2,
+      IMU2_SIGN_Z*e2.accel[2] * accel_scale2 };
 
     // 현재 샘플 불일치는 재시동 거부 판단에도 사용한다.
     bool disagreeSample = false;
@@ -848,24 +905,43 @@ void pid_task(void *pv) {
       outerCnt = 0;
       wasLocked = false;
     }
-    // RC 타임아웃은 지상 스로틀이면 즉시 컷, 그 이상이면 자동착륙으로 간다.
+
+    const float accelMag =
+        sqrtf(accX*accX + accY*accY + accZ*accZ);
+    const bool hoverSampleEligible =
+        !safety_lock && fs_phase == FS_NONE &&
+        fabsf(angleX) < HOVER_LEVEL_MAX_DEG &&
+        fabsf(angleY) < HOVER_LEVEL_MAX_DEG &&
+        fabsf(accelMag - 1.0f) <= HOVER_ACCEL_TOL_G &&
+        base_throttle > HOVER_MIN_THROTTLE_US;
+    updateHoverThrottleEstimator(
+        hoverTracker, hoverSampleEligible, base_throttle, nowMs, realDt,
+        HOVER_LPF_TAU_S, HOVER_VALID_MS);
+    hover_est = hoverTracker.estimate_us;
+    hover_valid = hoverTracker.valid;
+
+    // RC 타임아웃은 유효 호버 추정치가 없거나 호버 대비 지상 스로틀이면
+    // 즉시 컷하고, 그 외에는 추정 호버를 기준으로 자동착륙한다.
     // 진입 블록 전체를 fs_phase 가드 안에 둔다 — 가드가 없으면 하강 내내
     // rcTimedOut이 참이라 이 블록이 1kHz로 재실행되고, Serial.println이 TX
     // 버퍼를 포화시켜 pid_task를 블로킹하면 500ms 태스크 워치독이 비행 중
     // 재부팅을 일으킨다.
     if (fs_phase == FS_NONE && !safety_lock && rcTimedOut(nowMs, lastRcMs)) {
       fault_rc = true;
-      if (base_throttle < FS_GROUND_THROTTLE_US) {
+      if (!hover_valid) {
+        safety_lock = true;
+        Serial.println("[FAULT] RC TIMEOUT -> CUT (NO HOVER EST)");  // 한 번만
+      } else if ((float)base_throttle <
+                 hover_est - (float)FS_GROUND_MARGIN_US) {
         safety_lock = true;
         Serial.println("[FAULT] RC TIMEOUT -> GROUND CUT");  // 한 번만
       } else {
         fs_phase = FS_DESCENDING;
-        fs_entry_throttle = base_throttle;
         fs_hold_yaw = angleZ;
         fs_enter_ms = nowMs;
         landDet = {};
-        base_throttle = failsafeDescentThrottle(fs_entry_throttle,
-                                                FS_DESCENT_DELTA_US);
+        base_throttle = failsafeDescentThrottle(
+            (int)lroundf(hover_est), FS_DESCENT_DELTA_US);
         Serial.println("[FAULT] RC TIMEOUT -> AUTO-LAND");   // 한 번만
       }
     }
@@ -877,12 +953,11 @@ void pid_task(void *pv) {
       targetAngleY = trim_pitch;
       targetAngleZ = fs_hold_yaw;
       targetYawRate = 0.0f;
-      base_throttle = failsafeDescentThrottle(fs_entry_throttle,
-                                              FS_DESCENT_DELTA_US);
+      base_throttle = failsafeDescentThrottle(
+          (int)lroundf(hover_est), FS_DESCENT_DELTA_US);
       min_throttle = max(1050, base_throttle - CTRL_MARGIN);
       max_throttle = min(1900, base_throttle + CTRL_MARGIN);
 
-      const float accelMag = sqrtf(accX*accX + accY*accY + accZ*accZ);
       const uint32_t elapsed = nowMs - fs_enter_ms;
       const bool landed = updateLandDetector(
           landDet, accelMag, elapsed, FS_LAND_LPF_ALPHA,
@@ -1157,12 +1232,14 @@ static void handleGainCommand(const char *buf) {
 // 첫 14개 필드는 기존 PC 스크립트와 호환된다. 뒤 필드는 cascade 진단 확장:
 // fault_imu1,fault_imu2,fault_disagree,active_imus,scaled,fault_attitude,
 // calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z, Yaw_Hold,
-// Failsafe_Phase, Trim_Roll/Pitch를 append-only로 보낸다.
+// Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid를 append-only로 보낸다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
+  const float hoverEstSnapshot = hover_est;
+  const bool hoverValidSnapshot = hover_valid;
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1175,7 +1252,8 @@ static void sendTelemetry() {
              motorOut[0], motorOut[1], motorOut[2], motorOut[3], pidLoopHz,
              tgtRate[0], tgtRate[1], tgtRate[2], magHeading,
              magTelemX, magTelemY, magTelemZ, (int)yaw_hold_now,
-             (int)fs_phase, trim_roll, trim_pitch);
+             (int)fs_phase, trim_roll, trim_pitch,
+             hoverEstSnapshot, (int)hoverValidSnapshot);
   udp.endPacket();
 }
 
@@ -1249,6 +1327,9 @@ void udp_task(void *pv) {
             targetAngleZ = 0.0f;
             angleZ = 0.0f;
             mag_reference_pending = true;
+            hoverTracker = {};
+            hover_est = 0.0f;
+            hover_valid = false;
             safety_lock = false;
             Serial.println(">>> START");
           }

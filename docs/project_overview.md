@@ -114,11 +114,11 @@ M4 = T + P + R + Y
 | [`analyze_flight_log.py`](../scripts/analyze_flight_log.py) | Offline CSV analysis |
 | [`receive_dual_imu_debug.py`](../scripts/receive_dual_imu_debug.py) | Paired loop diagnostic receiver |
 
-현행 펌웨어는 UDP 패킷마다 38개 텔레메트리 필드를 보낸다. 마지막 세 필드는
-`Failsafe_Phase`(36), `Trim_Roll`(37), `Trim_Pitch`(38)이며, PC 수신기는 맨
-앞에 수신 `Timestamp`를 추가하므로 CSV는 39개 열이다. 공유 파서는 오래된
-10·14·21·22·30·31·34·35필드 패킷도 받아들이며, 없는 값은 빈 CSV 셀로
-남긴다.
+현행 펌웨어는 UDP 패킷마다 40개 텔레메트리 필드를 보낸다. 마지막 두 필드는
+`Hover_Est`(39), `Hover_Valid`(40)이며, PC 수신기는 맨 앞에 수신
+`Timestamp`를 추가하므로 CSV는 41개 열이다. 공유 파서는 오래된
+10·14·21·22·30·31·34·35·38필드 패킷도 받아들이며, 없는 값은 빈 CSV
+셀로 남긴다.
 
 ## 빌드와 실행
 
