@@ -28,6 +28,7 @@
 ```text
 start
 stop
+resume
 rc <seq> <roll> <pitch> <yaw>
 rcr <seq> <roll> <pitch> <yaw_rate>  # yaw_rate는 dps
 th <microseconds>
@@ -58,6 +59,18 @@ ar|at|ay <value>      # roll / pitch / yaw
   이미 시동된 상태에서 도착한 중복 `start`는 무시되므로, 지연 도착한 재전송이
   비행 중 fault latch나 스로틀 창을 되돌리지 않는다. `stop`은 즉시 시동을
   해제한다.
+- `resume`은 자동착륙 하강 중(`Failsafe_Phase=1`)에만 조종권 복귀를
+  요청한다. RC 패킷이 최근 500ms 안에 수신됐고, 과도 기울기가 아니고, 사용
+  가능한 IMU가 하나 이상이며, `Hover_Valid=1`일 때만 수락한다. 수락하면
+  `Failsafe_Phase=0`, `Fault_RC=0`, `base_throttle=round(Hover_Est)`로
+  복원하고 스로틀 창도 ±150µs로 다시 잡는다. 조건이 하나라도 맞지 않으면
+  시리얼에 `RESUME REFUSED <phase|rc|tilt|imu|hover>`를 남기고 하강을
+  계속한다. 링크가 돌아온 것만으로 자동 복귀하지 않으며 명시적 `resume`이
+  반드시 필요하다.
+- **`resume`은 고도를 되찾지 못한다.** `Hover_Est` 복원은 추가 하강 가속도를
+  0 근처로 줄일 뿐, 이미 쌓인 하강속도는 없애지 않는다. 링크가 돌아오면 즉시
+  `resume`하고, 곧바로 스로틀을 올려 고도를 회복해야 한다. 늦게 보낼수록
+  잔류 하강속도와 이후 고도 손실이 커진다.
 - RC 스트림이 `RC_TIMEOUT_MS`(500ms) 동안 끊기면 `Fault_RC`를 세운다.
   - 아직 `Hover_Valid=0`이면 호버한 적이 없어 공중에 있을 수 없다고 보고
     **즉시 컷**한다. `Failsafe_Phase`는 0에 머문다.

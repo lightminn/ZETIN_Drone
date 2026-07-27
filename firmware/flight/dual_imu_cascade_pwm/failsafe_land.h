@@ -73,6 +73,30 @@ struct LandProbeConfig {
   int dip_us;
 };
 
+// resume 거부 사유. .ino 안에 두면 arduino-cli가 자동 생성한 함수
+// 프로토타입이 enum 선언보다 앞에 삽입돼 컴파일이 깨진다(헤더는 그 전처리
+// 대상이 아니다). 네이티브 테스트는 .ino를 g++로 직접 컴파일해 이 단계가
+// 없으므로 이 결함을 잡지 못한다 — 아두이노 컴파일이 유일한 관문이다.
+enum ResumeRefusalReason : uint8_t {
+  RESUME_ALLOWED = 0,
+  RESUME_REFUSED_PHASE,
+  RESUME_REFUSED_RC,
+  RESUME_REFUSED_TILT,
+  RESUME_REFUSED_IMU,
+  RESUME_REFUSED_HOVER,
+};
+
+static inline const char *resumeRefusalName(ResumeRefusalReason reason) {
+  switch (reason) {
+    case RESUME_REFUSED_PHASE: return "phase";
+    case RESUME_REFUSED_RC: return "rc";
+    case RESUME_REFUSED_TILT: return "tilt";
+    case RESUME_REFUSED_IMU: return "imu";
+    case RESUME_REFUSED_HOVER: return "hover";
+    default: return "unknown";
+  }
+}
+
 // 착지 감지기의 누적 상태. pid_task가 소유하고 진입 시 {}로 초기화한다.
 struct LandDetector {
   bool     filt_init = false;

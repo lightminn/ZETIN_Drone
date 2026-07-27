@@ -232,12 +232,47 @@ void prepareFailsafeFlight(int throttle_us) {
   gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
   setFakeAccelMagnitude(1.0f, 0);
   sendUdpCommandOnce("start");
+  CHECK(safety_lock);
+  CHECK(safety_arm_requested);
+  runPidTicks(1);
   CHECK(!safety_lock);
   base_throttle = throttle_us;
   primeHoverEstimate((float)throttle_us);
   lastRcMs = 0;
   arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
   arduino_fake::micros_value = arduino_fake::millis_value * 1000U;
+}
+
+void prepareResumeCommandState() {
+  arduino_fake::reset();
+  safety_lock = false;
+  safety_disarm_requested = false;
+  safety_arm_requested = false;
+  failsafe_resume_requested = false;
+  fs_phase = FS_DESCENDING;
+  fault_rc = true;
+  fault_imu1 = false;
+  fault_imu2 = false;
+  fault_disagree = false;
+  fault_attitude = false;
+  imu1_frozen_now = false;
+  imu2_frozen_now = false;
+  imu_disagree_now = false;
+  active_imus = 2;
+  calibration_ok = true;
+  mag_calibrating = false;
+  angleX = angleY = angleZ = 0.0f;
+  gyro_bias1[0] = gyro_bias1[1] = gyro_bias1[2] = 0.0f;
+  gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
+  setFakeAccelMagnitude(1.0f, 0);
+  primeHoverEstimate(1360.0f);
+  base_throttle = 1360 - FS_DESCENT_DELTA_US;
+  min_throttle = max(1050, base_throttle - CTRL_MARGIN);
+  max_throttle = min(1900, base_throttle + CTRL_MARGIN);
+  arduino_fake::millis_value = 1000;
+  arduino_fake::micros_value = 1000000;
+  lastRcMs = arduino_fake::millis_value;
+  arduino_fake::serial_output.clear();
 }
 
 std::size_t countLogOccurrences(const std::string &needle) {
@@ -602,6 +637,7 @@ int main() {
     sendUdpCommandOnce("start");
     CHECK_NEAR(trim_roll, 4.0f, 1e-4f);
     sendUdpCommandOnce("stop");
+    runPidTicks(1);
     CHECK_NEAR(trim_roll, 4.0f, 1e-4f);
     CHECK_NEAR(trim_pitch, -3.0f, 1e-4f);
     trim_roll = 0.0f; trim_pitch = 0.0f;
@@ -611,6 +647,7 @@ int main() {
     calibration_ok = true;
     safety_lock = true;
     sendUdpCommandOnce("start");
+    runPidTicks(1);
     CHECK(!safety_lock);
     fs_phase = FS_NONE;
     base_throttle = 1360;
@@ -630,6 +667,7 @@ int main() {
     calibration_ok = true;
     safety_lock = true;
     sendUdpCommandOnce("start");
+    runPidTicks(1);
     CHECK(!safety_lock);
     base_throttle = 1199;
     lastRcMs = 0;
@@ -667,8 +705,134 @@ int main() {
     fs_phase = FS_DESCENDING;
     safety_lock = false;
     sendUdpCommandOnce("stop");
-    CHECK(safety_lock);
+    CHECK(!safety_lock);
+    CHECK(safety_disarm_requested);
     CHECK_EQ(base_throttle, 1000);
+    runPidTicks(1);
+    CHECK(safety_lock);
+    CHECK(!safety_disarm_requested);
+  });
+
+  runCase("동시에 대기한 safety 요청은 disarm이 arm보다 우선한다", [] {
+    arduino_fake::reset();
+    safety_lock = true;
+    safety_arm_requested = true;
+    safety_disarm_requested = true;
+    setFakeAccelMagnitude(1.0f, 0);
+
+    runPidTicks(1);
+
+    CHECK(safety_lock);
+    CHECK(!safety_arm_requested);
+    CHECK(!safety_disarm_requested);
+  });
+
+  runCase("start 거부 경로는 arm 요청을 세우지 않는다", [] {
+    arduino_fake::reset();
+    safety_lock = true;
+    safety_arm_requested = false;
+    safety_disarm_requested = false;
+    calibration_ok = false;
+    mag_calibrating = false;
+    angleX = angleY = 0.0f;
+    imu1_frozen_now = imu2_frozen_now = false;
+    imu_disagree_now = false;
+
+    sendUdpCommandOnce("start");
+
+    CHECK(safety_lock);
+    CHECK(!safety_arm_requested);
+    CHECK(!safety_disarm_requested);
+  });
+
+  runCase("pid_task 고장 감지는 요청 없이 safety_lock을 직접 세운다", [] {
+    arduino_fake::reset();
+    safety_lock = false;
+    safety_arm_requested = false;
+    safety_disarm_requested = false;
+    fault_imu1 = true;
+    fault_imu2 = true;
+    fault_disagree = false;
+    setFakeAccelMagnitude(1.0f, 0);
+
+    runPidTicks(1);
+
+    CHECK(safety_lock);
+    CHECK(!safety_arm_requested);
+    CHECK(!safety_disarm_requested);
+    fault_imu1 = false;
+    fault_imu2 = false;
+  });
+
+  runCase("resume은 FS_DESCENDING이 아니면 거부된다", [] {
+    prepareResumeCommandState();
+    fs_phase = FS_NONE;
+
+    sendUdpCommandOnce("resume");
+
+    CHECK(!failsafe_resume_requested);
+    CHECK(countLogOccurrences("RESUME REFUSED phase") == 1U);
+  });
+
+  runCase("resume은 RC가 timeout이면 거부된다", [] {
+    prepareResumeCommandState();
+    lastRcMs = arduino_fake::millis_value - RC_TIMEOUT_MS - 1U;
+
+    sendUdpCommandOnce("resume");
+
+    CHECK(!failsafe_resume_requested);
+    CHECK(countLogOccurrences("RESUME REFUSED rc") == 1U);
+  });
+
+  runCase("resume은 과도기울기면 거부된다", [] {
+    prepareResumeCommandState();
+    angleX = SAFETY_ANGLE + 1.0f;
+
+    sendUdpCommandOnce("resume");
+
+    CHECK(!failsafe_resume_requested);
+    CHECK(countLogOccurrences("RESUME REFUSED tilt") == 1U);
+  });
+
+  runCase("resume은 사용 가능한 IMU가 없으면 거부된다", [] {
+    prepareResumeCommandState();
+    active_imus = 0;
+
+    sendUdpCommandOnce("resume");
+
+    CHECK(!failsafe_resume_requested);
+    CHECK(countLogOccurrences("RESUME REFUSED imu") == 1U);
+  });
+
+  runCase("resume은 hover_valid가 false면 거부된다", [] {
+    prepareResumeCommandState();
+    hover_valid = false;
+
+    sendUdpCommandOnce("resume");
+
+    CHECK(!failsafe_resume_requested);
+    CHECK(countLogOccurrences("RESUME REFUSED hover") == 1U);
+  });
+
+  runCase("resume 수락은 Core 1에서 phase와 hover throttle을 복원한다", [] {
+    prepareResumeCommandState();
+
+    sendUdpCommandOnce("resume");
+
+    CHECK(failsafe_resume_requested);
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK_EQ(base_throttle, 1360 - FS_DESCENT_DELTA_US);
+
+    runPidTicks(1);
+
+    CHECK(!failsafe_resume_requested);
+    CHECK_EQ((int)fs_phase, (int)FS_NONE);
+    CHECK_EQ(base_throttle, 1360);
+    CHECK_EQ(min_throttle, max(1050, 1360 - CTRL_MARGIN));
+    CHECK_EQ(max_throttle, min(1900, 1360 + CTRL_MARGIN));
+    CHECK(!fault_rc);
+    CHECK(!safety_lock);
+    CHECK(countLogOccurrences(">>> RESUME") == 1U);
   });
 
   runCase("회귀: stale failsafe phase로 무장돼도 첫 tick 뒤 RC 감시가 복구된다", [] {
@@ -691,8 +855,13 @@ int main() {
     setFakeAccelMagnitude(1.0f, 0);
 
     sendUdpCommandOnce("start");
-    CHECK(!safety_lock);
+    CHECK(safety_lock);
+    CHECK(safety_arm_requested);
     CHECK_EQ((int)fs_phase, (int)FS_CUT_ABORT);
+    runPidTicks(1);
+    CHECK(!safety_lock);
+    CHECK(!safety_arm_requested);
+    CHECK_EQ((int)fs_phase, (int)FS_NONE);
 
     base_throttle = 1360;
     primeHoverEstimate(1360.0f);

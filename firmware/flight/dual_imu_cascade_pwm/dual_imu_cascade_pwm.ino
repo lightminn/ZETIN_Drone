@@ -363,6 +363,12 @@ ICM42670WithLPF IMU2(SPI, SPI_CS2);
 DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 
 volatile bool  safety_lock  = true;
+// 런타임 safety_lock 전이는 Core 1(pid_task)만 수행한다. Core 0은 요청만
+// 게시하며, 두 요청이 함께 대기하면 disarm이 arm보다 우선한다.
+volatile bool  safety_disarm_requested = false;
+volatile bool  safety_arm_requested = false;
+volatile bool  failsafe_resume_requested = false;
+portMUX_TYPE safetyRequestMux = portMUX_INITIALIZER_UNLOCKED;
 // 런타임 쓰기는 pid_task만 담당한다. Core 0은 텔레메트리/명령 처리에서 읽기만 한다.
 volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
 volatile uint8_t fs_probe_state = FS_PROBE_WAIT;
@@ -434,6 +440,65 @@ volatile uint32_t lastRcSeq       = 0;
 volatile bool     rcSeqValid      = false;
 volatile uint32_t rcTotalPkts     = 0;
 volatile uint32_t rcDroppedPkts   = 0;
+
+static inline void requestSafetyDisarm() {
+  portENTER_CRITICAL(&safetyRequestMux);
+  safety_disarm_requested = true;
+  safety_arm_requested = false;
+  portEXIT_CRITICAL(&safetyRequestMux);
+}
+
+static inline void requestSafetyArm() {
+  portENTER_CRITICAL(&safetyRequestMux);
+  if (!safety_disarm_requested) safety_arm_requested = true;
+  portEXIT_CRITICAL(&safetyRequestMux);
+}
+
+static inline void applyPendingSafetyRequest() {
+  portENTER_CRITICAL(&safetyRequestMux);
+  if (safety_disarm_requested) {
+    safety_lock = true;
+    safety_disarm_requested = false;
+    safety_arm_requested = false;
+  } else if (safety_arm_requested) {
+    safety_lock = false;
+    safety_arm_requested = false;
+  }
+  portEXIT_CRITICAL(&safetyRequestMux);
+}
+
+static inline void requestFailsafeResume() {
+  portENTER_CRITICAL(&safetyRequestMux);
+  failsafe_resume_requested = true;
+  portEXIT_CRITICAL(&safetyRequestMux);
+}
+
+static inline bool takeFailsafeResumeRequest() {
+  portENTER_CRITICAL(&safetyRequestMux);
+  const bool requested = failsafe_resume_requested;
+  failsafe_resume_requested = false;
+  portEXIT_CRITICAL(&safetyRequestMux);
+  return requested;
+}
+
+static inline ResumeRefusalReason resumeRefusalReason(uint32_t nowMs) {
+  if (fs_phase != FS_DESCENDING) return RESUME_REFUSED_PHASE;
+  if (rcTimedOut(nowMs, lastRcMs)) return RESUME_REFUSED_RC;
+  if (fabsf(angleX) > SAFETY_ANGLE || fabsf(angleY) > SAFETY_ANGLE) {
+    return RESUME_REFUSED_TILT;
+  }
+  if (active_imus <= 0
+      || (imu1_frozen_now && imu2_frozen_now)
+      || imu_disagree_now) {
+    return RESUME_REFUSED_IMU;
+  }
+  if (!hover_valid) return RESUME_REFUSED_HOVER;
+  return RESUME_ALLOWED;
+}
+
+static inline void logResumeRefusal(ResumeRefusalReason reason) {
+  Serial.printf(">>> RESUME REFUSED %s\n", resumeRefusalName(reason));
+}
 
 static inline void publishMagSample(
     float x, float y, float z, uint32_t sample_ms) {
@@ -744,6 +809,7 @@ void pid_task(void *pv) {
       wake = afterWake;
     }
     uint32_t nowMs = millis();
+    applyPendingSafetyRequest();
     loopCount++;
     uint32_t loopElapsedMs = nowMs - loopMarkerMs;
     if (loopElapsedMs >= 1000) {
@@ -916,6 +982,19 @@ void pid_task(void *pv) {
       if (!fault_attitude) Serial.printf("[FAULT] OVER-TILT R:%.1f P:%.1f\n", angleX, angleY);
       fault_attitude = true;
       safety_lock = true;
+    }
+    if (takeFailsafeResumeRequest()) {
+      const ResumeRefusalReason refusal = resumeRefusalReason(nowMs);
+      if (refusal != RESUME_ALLOWED) {
+        logResumeRefusal(refusal);
+      } else {
+        fs_phase = FS_NONE;
+        fault_rc = false;
+        base_throttle = (int)lroundf(hover_est);
+        min_throttle = max(1050, base_throttle - CTRL_MARGIN);
+        max_throttle = min(1900, base_throttle + CTRL_MARGIN);
+        Serial.printf(">>> RESUME hover=%d\n", base_throttle);
+      }
     }
     // 잠금 해제 첫 tick의 D kick과 이전 목표 rate 잔류를 제거한다.
     // 이 블록은 RC timeout 진입 가드보다 먼저 실행해야 한다. 뒤에 두면 같은
@@ -1348,13 +1427,12 @@ void udp_task(void *pv) {
           }
           else if (!calibration_ok || overTilt || noUsableImu
                    || imu_disagree_now || mag_calibrating) {
-            safety_lock = true;
             Serial.printf(">>> START REFUSED calib=%d tilt=%d imu=%d disagree=%d magcal=%d\n",
                           (int)calibration_ok, (int)overTilt,
                           (int)noUsableImu, (int)imu_disagree_now,
                           (int)mag_calibrating);
           } else {
-            safety_lock = true; // 상태를 모두 초기화한 뒤 마지막에 해제
+            // safety_lock=true인 동안 나머지 비행 상태는 Core 0에서 초기화한다.
             fault_rc = false;
             fault_imu1 = imu1_frozen_now;
             fault_imu2 = imu2_frozen_now;
@@ -1375,14 +1453,22 @@ void udp_task(void *pv) {
             fs_probe_state = FS_PROBE_WAIT;
             fs_probe_no_response = 0;
             fs_probe_response_g = 0.0f;
-            safety_lock = false;
+            requestSafetyArm();
             Serial.println(">>> START");
           }
         }
         else if (strcmp(buf, "stop") == 0) {
-          safety_lock = true;
+          requestSafetyDisarm();
           base_throttle = 1000;
           Serial.println(">>> STOP");
+        }
+        else if (strcmp(buf, "resume") == 0) {
+          const ResumeRefusalReason refusal = resumeRefusalReason(millis());
+          if (refusal != RESUME_ALLOWED) {
+            logResumeRefusal(refusal);
+          } else {
+            requestFailsafeResume();
+          }
         }
         else if (strncmp(buf, "th", 2) == 0) {
           long parsed;

@@ -170,6 +170,8 @@ struct RunConfig {
       std::numeric_limits<uint32_t>::max();
   int base_throttle_us = 1150;
   uint32_t rc_disconnect_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t rc_reconnect_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t resume_tick = std::numeric_limits<uint32_t>::max();
   PlantParameters plant_parameters = kPlantParameters;
   double vertical_drag_n_per_ms = 0.0;
   uint32_t vertical_drag_start_tick =
@@ -244,6 +246,19 @@ void sendUdpCommandOnce(const std::string &command) {
   }
   arduino_fake::stop_on_task_delay = false;
   CHECK_MSG(stopped, "udp_task did not stop at the shim delay");
+}
+
+void runPidTicksForHarness(uint32_t ticks) {
+  arduino_fake::tick_index = 0;
+  arduino_fake::tick_limit = ticks;
+  try {
+    pid_task(nullptr);
+  } catch (const arduino_fake::TaskDelayExit &) {
+  } catch (...) {
+    arduino_fake::tick_limit = 0;
+    throw;
+  }
+  arduino_fake::tick_limit = 0;
 }
 
 int16_t roundedRaw(double value, bool &saturated) {
@@ -358,6 +373,9 @@ void resetFirmwareState(const PlantState &initial) {
   max_throttle = 1300;
   yaw_hold_override = false;
   safety_lock = true;
+  safety_disarm_requested = false;
+  safety_arm_requested = false;
+  failsafe_resume_requested = false;
   fs_phase = FS_NONE;
   fs_probe_state = FS_PROBE_WAIT;
   fs_probe_no_response = 0;
@@ -617,7 +635,8 @@ RunResult runSil(const RunConfig &config) {
   resetFirmwareState(state);
 
   sendUdpCommandOnce("start");
-  CHECK_MSG(!safety_lock, "start command was refused");
+  CHECK_MSG(safety_lock && safety_arm_requested,
+            "start command did not publish an arm request");
   if (config.base_throttle_us == 1150) {
     sendUdpCommandOnce("th 1150");
   } else {
@@ -626,6 +645,9 @@ RunResult runSil(const RunConfig &config) {
   CHECK_EQ(base_throttle, config.base_throttle_us);
   CHECK_EQ(min_throttle, std::max(1050, config.base_throttle_us - CTRL_MARGIN));
   CHECK_EQ(max_throttle, std::min(1900, config.base_throttle_us + CTRL_MARGIN));
+  runPidTicksForHarness(1);
+  CHECK_MSG(!safety_lock && !safety_arm_requested,
+            "Core 1 did not apply the arm request");
 
   targetAngleX = config.target_roll_deg;
   targetAngleY = config.target_pitch_deg;
@@ -656,7 +678,11 @@ RunResult runSil(const RunConfig &config) {
     }
     arduino_fake::millis_value += 1U;
     arduino_fake::micros_value += 1000U;
-    if (tick < config.rc_disconnect_tick) lastRcMs = millis();
+    if (tick < config.rc_disconnect_tick ||
+        tick >= config.rc_reconnect_tick) {
+      lastRcMs = millis();
+    }
+    if (tick == config.resume_tick) sendUdpCommandOnce("resume");
     bool raw_saturated_now = false;
     if (config.accel_noise_enabled) {
       CHECK_MSG(config.accel_noise_sd_g >= 0.0,
@@ -685,6 +711,7 @@ RunResult runSil(const RunConfig &config) {
     result.raw_saturated = raw_saturated_now || result.raw_saturated;
     appendSample(result, tick, state, plant_step);
   };
+  arduino_fake::tick_index = 0;
   arduino_fake::tick_limit = config.ticks;
 
   bool stopped = false;
@@ -1174,6 +1201,77 @@ RunConfig makeV5Config() {
     }
   };
   return config;
+}
+
+constexpr uint32_t kV6FailsafeEntryTick =
+    kHoverWarmupTicks + RC_TIMEOUT_MS + 1U;
+constexpr uint32_t kV6PostResumeTicks = 400U;
+
+RunConfig makeV6Config(uint32_t resume_delay_ticks) {
+  RunConfig config;
+  config.initial.z_m = 20.0;
+  config.base_throttle_us = 1340;
+  config.vertical_enabled = true;
+  config.plant_parameters.k_ge = 0.0;
+  config.rc_disconnect_tick = kHoverWarmupTicks;
+  config.rc_reconnect_tick =
+      kV6FailsafeEntryTick + resume_delay_ticks;
+  config.resume_tick = config.rc_reconnect_tick;
+  config.ticks = config.resume_tick + kV6PostResumeTicks + 2U;
+  return config;
+}
+
+struct ResumeMeasurement {
+  uint32_t delay_ticks = 0;
+  uint32_t transition_tick = 0;
+  double residual_vz_ms = 0.0;
+  double post_height_loss_m = 0.0;
+  double mean_post_acceleration_ms2 = 0.0;
+};
+
+ResumeMeasurement measureV6(const RunResult &result,
+                            uint32_t resume_delay_ticks) {
+  std::size_t transition_index = result.samples.size();
+  for (std::size_t index = 1; index < result.samples.size(); index++) {
+    if (result.samples[index - 1U].failsafe_phase == FS_DESCENDING &&
+        result.samples[index].failsafe_phase == FS_NONE) {
+      transition_index = index;
+      break;
+    }
+  }
+  CHECK_MSG(transition_index < result.samples.size(),
+            "V6 did not transition FS_DESCENDING -> FS_NONE");
+  const Sample &transition = result.samples[transition_index];
+  const uint32_t post_tick =
+      transition.tick + kV6PostResumeTicks;
+  const Sample &post = sampleAtTick(result, post_tick);
+
+  double acceleration_sum = 0.0;
+  uint32_t acceleration_count = 0;
+  for (uint32_t tick = transition.tick + 1U;
+       tick <= transition.tick + 100U; tick++) {
+    acceleration_sum += sampleAtTick(result, tick).vertical_acceleration_ms2;
+    acceleration_count++;
+  }
+
+  ResumeMeasurement measurement;
+  measurement.delay_ticks = resume_delay_ticks;
+  measurement.transition_tick = transition.tick;
+  measurement.residual_vz_ms = transition.plant.vz_ms;
+  measurement.post_height_loss_m =
+      transition.plant.z_m - post.plant.z_m;
+  measurement.mean_post_acceleration_ms2 =
+      acceleration_sum / static_cast<double>(acceleration_count);
+
+  CHECK_EQ(transition.base_throttle_us, 1340);
+  CHECK(!transition.safety_locked);
+  CHECK_MSG(std::fabs(measurement.mean_post_acceleration_ms2) < 0.02,
+            "V6 hover restore did not suppress descent acceleration");
+  CHECK_MSG(measurement.residual_vz_ms < 0.0,
+            "V6 unexpectedly removed the residual descent velocity");
+  CHECK_MSG(measurement.post_height_loss_m > 0.0,
+            "V6 unexpectedly recovered or held altitude");
+  return measurement;
 }
 
 }  // namespace
@@ -2115,6 +2213,36 @@ int main() {
     CHECK_MSG(trace.terminal_tick >= bounce_end_tick,
               "V5 terminal landing preceded bounce re-contact");
     checkLandedAfterContact("V5", trace);
+  });
+
+  runCase("V6: later explicit resume leaves more descent velocity and loss", [] {
+    constexpr std::array<uint32_t, 3> kResumeDelays = {
+        300U, 1000U, 2000U};
+    std::array<ResumeMeasurement, kResumeDelays.size()> measurements;
+    for (std::size_t index = 0; index < kResumeDelays.size(); index++) {
+      measurements[index] =
+          measureV6(runSil(makeV6Config(kResumeDelays[index])),
+                    kResumeDelays[index]);
+      const ResumeMeasurement &measurement = measurements[index];
+      std::cout << "[SIL] V6 resume_delay="
+                << measurement.delay_ticks * kDt
+                << "s transition=" << tickSeconds(measurement.transition_tick)
+                << " residual_vz=" << measurement.residual_vz_ms
+                << "m/s post_" << kV6PostResumeTicks * kDt
+                << "s_height_loss=" << measurement.post_height_loss_m
+                << "m mean_post_accel="
+                << measurement.mean_post_acceleration_ms2 << "m/s^2\n";
+    }
+    for (std::size_t index = 1; index < measurements.size(); index++) {
+      CHECK_MSG(
+          std::fabs(measurements[index].residual_vz_ms) >
+              std::fabs(measurements[index - 1U].residual_vz_ms),
+          "V6 residual descent speed did not grow with resume delay");
+      CHECK_MSG(
+          measurements[index].post_height_loss_m >
+              measurements[index - 1U].post_height_loss_m,
+          "V6 post-resume height loss did not grow with resume delay");
+    }
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count

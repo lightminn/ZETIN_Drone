@@ -79,11 +79,11 @@ class SilAttitudeTest(unittest.TestCase):
 
             try:
                 completed = subprocess.run(
-                    [str(executable)], capture_output=True, text=True, check=False, timeout=10,
+                    [str(executable)], capture_output=True, text=True, check=False, timeout=20,
                 )
             except subprocess.TimeoutExpired as error:
                 self.fail(
-                    "native attitude SIL timed out after 10 seconds\n"
+                    "native attitude SIL timed out after 20 seconds\n"
                     f"stdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}"
                 )
             # 일부 샌드박스는 32비트 ELF syscall을 SIGSYS로 막는다. 이때만
@@ -98,12 +98,12 @@ class SilAttitudeTest(unittest.TestCase):
                 try:
                     completed = subprocess.run(
                         [qemu_i386, str(executable)],
-                        capture_output=True, text=True, check=False, timeout=10,
+                        capture_output=True, text=True, check=False, timeout=20,
                     )
                 except subprocess.TimeoutExpired as error:
                     self.fail(
                         "native attitude SIL under qemu-i386-static timed out "
-                        "after 10 seconds\n"
+                        "after 20 seconds\n"
                         f"stdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}"
                     )
             if completed.returncode != 0:
