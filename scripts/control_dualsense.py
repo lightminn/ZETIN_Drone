@@ -94,8 +94,37 @@ def reliable_send(cmd: str):
         time.sleep(STOP_INTERVAL)
 
 
+def disarm(reason: str = "수동"):
+    global is_armed, current_throttle, throttle_f
+    reliable_send("stop")
+    is_armed         = False
+    current_throttle = 1000
+    throttle_f       = 1000.0
+    print(f"\n>>> [SYSTEM] DISARMED ({reason})")
+
+
+def send_trim():
+    """트림을 절대값으로 드론에 보낸다. 손실되면 자동착륙 방향이 틀어지므로
+    start/stop과 같은 급으로 반복 전송한다."""
+    reliable_send(f"trim {trim_roll:.2f} {trim_pitch:.2f}")
+
+
+def stop_streaming_only(reason: str):
+    """드론이 자동착륙 중일 때 쓰는 로컬 해제. stop을 보내지 않는다.
+
+    stop을 보내면 하강 중인 드론의 모터를 공중에서 꺼버린다. 업링크만 죽는
+    비대칭 고장에서는 링크가 간헐적으로 열려 그 stop이 실제로 도착한다.
+    """
+    global is_armed, current_throttle, throttle_f
+    is_armed = False
+    current_throttle = 1000
+    throttle_f = 1000.0
+    print(f"\n>>> [SYSTEM] 로컬 해제 ({reason}) - stop 미전송")
+
+
 def arm():
     global is_armed, last_arm_time, current_throttle, throttle_f, rc_seq
+    send_trim()   # 드론 재부팅으로 트림이 소실됐을 수 있다
     is_armed         = True
     last_arm_time    = time.monotonic()
     current_throttle = 1100
@@ -106,15 +135,6 @@ def arm():
     reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
     reliable_send("start")
     print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON)")
-
-
-def disarm(reason: str = "수동"):
-    global is_armed, current_throttle, throttle_f
-    reliable_send("stop")
-    is_armed         = False
-    current_throttle = 1000
-    throttle_f       = 1000.0
-    print(f"\n>>> [SYSTEM] DISARMED ({reason})")
 
 
 def deadzone(v: float, dz: float = 0.05) -> float:
@@ -150,8 +170,9 @@ def telemetry_thread():
             if is_armed and last_telem_time > 0:
                 elapsed = time.monotonic() - last_telem_time
                 if elapsed > TELEM_TIMEOUT_SEC:
-                    print(f"\n[FAULT] 텔레메트리 {elapsed:.1f}s 수신 없음 - 긴급 정지")
-                    disarm("연결 끊김")
+                    print(f"\n[FAULT] 텔레메트리 {elapsed:.1f}s 수신 없음 "
+                          f"- rc 중단, 드론 자동착륙에 맡김")
+                    stop_streaming_only("텔레메트리 끊김")
             continue
         except OSError as e:
             print(f"[TELEM ERR] 소켓 오류: {e}")
@@ -208,9 +229,9 @@ def telemetry_thread():
 
         # 드론 측 고장 플래그 — fault는 latch되므로 상승 엣지에서만 알린다.
         if fault_rc_drone and not prev_fault_rc:
-            print("\n[FAULT] 드론: RC 타임아웃 감지됨")
+            print("\n[FAULT] 드론: RC 타임아웃 - 자동착륙 진행 중")
             if is_armed:
-                disarm("드론 RC 타임아웃")
+                stop_streaming_only("드론 RC 타임아웃")
         prev_fault_rc = fault_rc_drone
 
         if fault_critical_drone and not prev_fault_critical:
@@ -346,16 +367,18 @@ def controller_thread():
                 elif hat == (1,  0): trim_roll  += TRIM_STEP
                 if hat != (0, 0):
                     print(f" [TRIM] Roll:{trim_roll:.1f}  Pitch:{trim_pitch:.1f}")
+                    send_trim()
             last_hat_state = hat
 
             if joy.get_button(12):
                 trim_roll = trim_pitch = 0.0
                 print(" [TRIM] RESET (0.0, 0.0)")
+                send_trim()
 
             # --- RC 명령 전송 (yaw는 각속도 dps) ---
             rc_seq += 1
-            final_roll  = deadzone(joy.get_axis(0))  * MAX_ANGLE + trim_roll
-            final_pitch = deadzone(-joy.get_axis(1)) * MAX_ANGLE + trim_pitch
+            final_roll  = deadzone(joy.get_axis(0))  * MAX_ANGLE
+            final_pitch = deadzone(-joy.get_axis(1)) * MAX_ANGLE
             yaw_rate    = deadzone(joy.get_axis(3), 0.12) * YAW_RATE_MAX_DPS
 
             send_cmd(f"rcr {rc_seq} {final_roll:.2f} {final_pitch:.2f} {yaw_rate:.1f}")
