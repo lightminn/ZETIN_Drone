@@ -988,6 +988,28 @@ def stop_streaming_only(reason: str):
                     stop_streaming_only("텔레메트리 끊김")
 ```
 
+- [ ] **Step 5b: 게임패드 분리 경로에서 `stop` 제거**
+
+`controller_thread()`의 컨트롤러 분리 처리:
+
+```python
+        if pygame.joystick.get_count() == 0:
+            if is_armed:
+                disarm("컨트롤러 분리")
+```
+
+교체:
+
+```python
+        if pygame.joystick.get_count() == 0:
+            if is_armed:
+                stop_streaming_only("컨트롤러 분리")
+```
+
+패드가 뽑혀도 WiFi 링크는 멀쩡하다. 사라진 것은 조종 입력 수단뿐이고 이는
+`Fault_RC`와 위험 구조가 같다. `stop`을 보내면 공중에서 모터가 꺼진다.
+수동 킬은 스크립트 stdin에 `stop`을 타이핑해 계속 가능하다.
+
 - [ ] **Step 6: `Fault_RC` 경로에서 `stop` 제거**
 
 현행 210~213줄:
