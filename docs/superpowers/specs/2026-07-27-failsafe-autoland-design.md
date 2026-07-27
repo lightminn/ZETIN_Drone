@@ -31,7 +31,7 @@ RC 링크가 끊겼을 때 즉시 모터를 끄는 대신, 수평 자세를 유�
 
 지상국의 **텔레메트리 손실**도 이 기능의 대상이지만 드론 입장에서는 RC
 타임아웃과 같은 사건이다(드론이 아는 것은 "rc가 오지 않는다"뿐이다).
-§6의 지상국 변경으로 연결된다.
+§7의 지상국 변경으로 연결된다.
 
 ## 1. 상태기계
 
@@ -50,7 +50,8 @@ latch되고 RC 타임아웃 검사도 매 tick 참이 되므로, 재진입을 �
 
 - `fs_entry_throttle = base_throttle` — 이 값이 호버 스로틀 추정치다
 - `base_throttle = fs_entry_throttle - FS_DESCENT_DELTA_US`
-- `targetAngleX = targetAngleY = 0.0f` — 수평
+- `targetAngleX = trim_roll; targetAngleY = trim_pitch;` — **0이 아니라 트림값**.
+  이유는 §3 참조
 - `targetYawRate = 0.0f` — 조종자의 마지막 yaw 명령을 지운다. 이후 yaw 자동
   잠금이 정착 후 heading을 잡는다(별도 처리 불필요)
 - `fs_enter_ms = millis()`
@@ -73,8 +74,8 @@ if (!safety_lock && rcTimedOut(nowMs, lastRcMs)) {
 **목표값을 매 tick 강제로 덮어쓴다:**
 
 ```c
-targetAngleX = 0.0f;
-targetAngleY = 0.0f;
+targetAngleX = trim_roll;
+targetAngleY = trim_pitch;
 targetYawRate = 0.0f;
 base_throttle = fs_entry_throttle - FS_DESCENT_DELTA_US;
 ```
@@ -117,7 +118,82 @@ sub-1g를 본 뒤 `|accel|`이 `1 ± FS_LAND_ACCEL_TOL_G` 범위에
 
 가속도는 이미 필터된 융합값(`accX/accY/accZ`)을 쓴다.
 
-## 3. 상수 — 전부 벤치 조정 대상
+## 3. 트림을 펌웨어로 이전
+
+### 왜 필요한가
+
+현재 트림은 지상국에만 있다.
+
+```text
+control_dualsense.py:52-53    trim_roll / trim_pitch          전역 상태
+control_dualsense.py:357-358  final_roll = 스틱 + trim_roll   송신 전 합산
+펌웨어                         트림 개념 없음                   합산된 각도만 받는다
+```
+
+트림이 필요하다는 것은 **추정기의 0°가 진짜 수평이 아니라는 뜻**이다(가속도계
+바이어스, IMU 장착 각도). 조종자가 `trim_roll = +2°`를 넣어야 흐르지 않는다면
+진짜 수평은 추정기 기준 +2°다.
+
+따라서 자동착륙에서 `targetAngle = 0`을 명령하면 **트림을 넣기 전의 흐름이
+그대로 재현된다.** 수평 가속도는 `g·tan(θ)`이고 이동거리는 시간의 제곱으로 늘어난다.
+
+| 트림 | 수평 가속도 | 5초 후 이동 | 접지 시 수평속도 |
+|---|---|---|---|
+| 1° | 0.17 m/s² | 2.1 m | 0.9 m/s |
+| 2° | 0.34 m/s² | **4.3 m** | **1.7 m/s** |
+| 3° | 0.51 m/s² | 6.4 m | 2.6 m/s |
+
+수평속도 1.7m/s로 접지하면 기체가 구른다. **"손상 없는 부드러운 착륙"이라는 이
+기능의 목적 자체가 무너진다.**
+
+rate 적분기는 이것을 고치지 못한다. 적분기는 각속도 오차만 없애므로 `angleX = 0`을
+정확히 유지할 뿐이고, 그 0이 기울어져 있다는 것이 문제다.
+
+### 부수 효과 — 기존 버그가 같이 고쳐진다
+
+`trim_roll`은 스크립트 전역변수라 `control_dualsense.py`를 재시작할 때마다 0으로
+초기화된다. 매 세션 트림을 다시 잡아야 하고, 잊으면 이륙부터 흐른다. 지금은 아무
+경고도 없다.
+
+이는 `target_yaw`와 같은 안티패턴이다 — **드론이 필요로 하는 상태가 지상국에만
+있다.** 같은 이유로 같은 방향의 해법을 쓴다.
+
+### 프로토콜
+
+```text
+trim <roll_deg> <pitch_deg>     # 절대값. 누적이 아니다
+```
+
+- 펌웨어가 `trim_roll`/`trim_pitch`에 저장하고 각각 ±`TRIM_MAX_DEG`(10°)로 클램프
+- 파싱 실패·비유한값은 기존 명령들과 동일하게 무시
+- **무장 중에도 수락한다.** 비행 중 트림 조정은 정상 작업이다
+- `start`/`stop`이 트림을 지우지 않는다. **기체 속성이지 비행별 상태가 아니다**
+- 재부팅 시 소실되지만 지상국이 시동 때 재전송하므로 복구된다
+
+### 펌웨어 목표각 합성
+
+`setRcTargets`에서 트림을 더한 뒤 클램프한다:
+
+```c
+targetAngleX = constrain(x + trim_roll,  -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
+targetAngleY = constrain(y + trim_pitch, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
+```
+
+합산 **후** 클램프해야 총합이 ±30°로 제한된다. 트림이 ±10°이므로 최악의 경우에도
+스틱 권한이 20° 이상 남는다.
+
+### 지상국
+
+- DPAD 트림 UI는 그대로 두고, 누적값을 **절대값으로** 보낸다
+- 전송 시점: 트림이 바뀔 때마다, 그리고 **시동할 때마다**
+- `reliable_send`(5회 반복)를 쓴다. UDP 손실로 트림이 어긋나면 자동착륙 방향이
+  틀어지므로 `start`/`stop`과 같은 급으로 취급한다
+- `final_roll`/`final_pitch`에서 트림 합산을 **제거**한다. 이제 드론이 더한다
+
+시동 시 재전송이 드론 재부팅 케이스를 덮는다 — 재부팅되면 무장이 풀려 재시동이
+필요하고, 그때 트림이 다시 간다.
+
+## 4. 상수 — 전부 벤치 조정 대상
 
 | 상수 | 초기값 | 근거와 조정 기준 |
 |---|---|---|
@@ -136,7 +212,7 @@ sub-1g를 본 뒤 `|accel|`이 `1 ± FS_LAND_ACCEL_TOL_G` 범위에
 벤치에서 값을 올릴 때 이 상한을 넘기지 않아야 한다. 넘겨야 한다면
 `min_throttle`도 함께 낮추는 별도 처리가 필요하다.
 
-## 4. 다른 fault는 자동착륙 중에도 즉시 컷
+## 5. 다른 fault는 자동착륙 중에도 즉시 컷
 
 `FS_DESCENDING` 상태에서 IMU 전멸이나 과도 기울기가 발생하면 즉시
 `FS_CUT_ABORT`로 끝낸다. 자세 추정이 죽은 채 모터를 돌리는 것은 fly-away
@@ -144,9 +220,10 @@ sub-1g를 본 뒤 `|accel|`이 `1 ± FS_LAND_ACCEL_TOL_G` 범위에
 
 즉 자동착륙은 **기존 안전장치를 대체하지 않고 RC 타임아웃 한 갈래만 바꾼다.**
 
-## 5. 텔레메트리 (35 → 36필드)
+## 6. 텔레메트리 (35 → 38필드)
 
-`Failsafe_Phase`(int)를 36번째 필드로 append한다. CSV는 37열.
+`Failsafe_Phase`(int, 36), `Trim_Roll`(float, 37), `Trim_Pitch`(float, 38)를
+append한다. CSV는 39열.
 
 | 값 | 의미 |
 |---|---|
@@ -162,7 +239,20 @@ sub-1g를 본 뒤 `|accel|`이 `1 ± FS_LAND_ACCEL_TOL_G` 범위에
 
 `Armed`는 하강 중 1을 유지한다(실제로 무장 상태다). 종료 시 0이 된다.
 
-## 6. 지상국 (`control_dualsense.py`)
+### 트림을 텔레메트리로 내보내는 이유
+
+`trim` 명령은 UDP라 **손실될 수 있다.** 손실되면 지상국 화면의 트림과 드론이
+실제로 쓰는 트림이 어긋나고, 정상 비행에서는 조종자가 감으로 다시 트림을 잡아
+넘어가지만 **자동착륙에서는 하강 방향이 그만큼 틀어진다.**
+
+`gains` readback을 만든 것과 같은 이유다(Tier 1 설계: "게인 명령엔 readback이
+없어 반영 확인이 불가했던 공백"). 다만 one-shot 응답 대신 텔레메트리에 실으면
+항상 최신이고 새 패킷 종류를 만들지 않아도 된다. 벤치 Stage E에서 하강 목표
+자세를 눈으로 확인하는 데도 필요하다.
+
+지상국이 불일치를 감지해 자동 재전송하는 것은 비목표다. 우선은 **보이게만** 한다.
+
+## 7. 지상국 (`control_dualsense.py`)
 
 `telemetry_thread`의 텔레메트리 타임아웃 경로가 지금은 `disarm()`을 호출하고,
 `disarm()`은 `stop`을 보낸다. 그러면 자동착륙이 아니라 **즉시 컷**이 된다.
@@ -174,7 +264,7 @@ sub-1g를 본 뒤 `|accel|`이 `1 ± FS_LAND_ACCEL_TOL_G` 범위에
 죽고 다운링크는 살아 있는 비대칭 고장이 실재한다.** 반대 경우(다운링크만 죽음)도
 가능하며, 그때 PC가 보내는 `stop`은 멀쩡히 도착해 자동착륙을 무력화한다.
 
-## 7. 테스트
+## 8. 테스트
 
 ### 순수 헬퍼 단위 테스트
 
@@ -200,9 +290,22 @@ yaw와 같은 패턴으로 `failsafe_land.h`에 순수 함수를 분리하고
     보내도 `targetAngleX`가 0으로 유지되고 상태가 `FS_DESCENDING`에 남는지
     (§1의 "매 tick 덮어쓰기" 회귀 테스트)
 
+### 트림 테스트 (`test_control_math.cpp`)
+
+13. `trim 1.5 -2.0`이 `trim_roll/trim_pitch`에 저장됨
+14. 트림이 ±`TRIM_MAX_DEG`(10°)로 클램프됨
+15. `setRcTargets`가 **트림을 더한 뒤** ±30°로 클램프함
+    (스틱 25° + 트림 10° → 30°, 35°가 아님)
+16. `start`와 `stop`이 트림을 지우지 않음
+17. 무장 중에도 `trim`이 수락됨
+18. **자동착륙 하강 목표가 0이 아니라 트림값** — 트림이 걸린 상태에서
+    failsafe에 진입하면 `targetAngleX == trim_roll`
+    (§3의 흐름 방지 회귀 테스트)
+
 ### 스키마 (`tools/test_telemetry_schema.py`)
 
-36필드 파싱, `Failsafe_Phase` 정수 타입, 35/34/31/30/22/21/14/10필드 하위호환.
+38필드 파싱, `Failsafe_Phase` 정수 타입과 `Trim_Roll`/`Trim_Pitch` 실수 타입,
+35/34/31/30/22/21/14/10필드 하위호환.
 
 ### ⚠️ SIL이 이 기능을 검증하지 못한다
 
@@ -217,7 +320,7 @@ yaw와 같은 패턴으로 `failsafe_land.h`에 순수 함수를 분리하고
 이는 yaw 각속도 명령과 같은 상황이다
 (`2026-07-27-yaw-rate-command-design.md` §6 참조).
 
-## 8. 벤치 절차 (신규 Stage E)
+## 9. 벤치 절차 (신규 Stage E)
 
 `docs/power_on_bench_procedure.md`에 추가한다. **반드시 이 순서로 진행한다.**
 
@@ -236,7 +339,7 @@ yaw와 같은 패턴으로 `failsafe_land.h`에 순수 함수를 분리하고
 
 각 단계에서 **종료 경로(`Failsafe_Phase` 최종값)와 소요 시간을 기록**한다.
 
-## 9. 위험
+## 10. 위험
 
 - **조종 불가 상태로 모터가 돈다.** 이것이 이 기능의 본질적 위험이며,
   `FS_MAX_MS`가 유일한 상한이다. 초기 5초는 이 노출을 최소화하기 위한 값이다
@@ -250,10 +353,11 @@ yaw와 같은 패턴으로 `failsafe_land.h`에 순수 함수를 분리하고
   갱신한다
 - 제어경로 변경이므로 **첫 자유비행 전 벤치 전 항목 재검증 필수**
 
-## 10. 문서 갱신 대상
+## 11. 문서 갱신 대상
 
-- `docs/udp_protocol.md` — `Failsafe_Phase` 필드, RC 타임아웃 동작 변경
-- `logs/README.md`, `scripts/README.md` — 36필드 / 37열
+- `docs/udp_protocol.md` — `trim` 명령, `Failsafe_Phase`·`Trim_Roll`·`Trim_Pitch`
+  필드, RC 타임아웃 동작 변경
+- `logs/README.md`, `scripts/README.md` — 38필드 / 39열
 - `docs/power_on_bench_procedure.md` — Stage B-2의 RC 타임아웃 기대 동작 수정,
   Stage E 신설
 - `docs/ground_station_link.md` — RC 타임아웃이 이제 자동착륙을 유발한다는 점
@@ -267,3 +371,6 @@ yaw와 같은 패턴으로 `failsafe_land.h`에 순수 함수를 분리하고
 - 링크 복구 시 자동 제어권 복귀 — 재시동을 요구한다
 - 하강률 폐루프 제어 — 수직속도를 측정할 수 없다
 - 자동착륙 상수의 런타임 변경 명령 — 벤치에서 상수로 확정한다
+- 트림의 NVS 영구 저장 — 시동 시 재전송으로 충분하다
+- 지상국이 텔레메트리의 트림 불일치를 감지해 자동 재전송하는 것 — 우선은
+  보이게만 하고, 실제로 어긋나는 일이 관측되면 그때 만든다
