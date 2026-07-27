@@ -460,6 +460,68 @@ int main() {
     CHECK(rcSeqValid);
   });
 
+  runCase("trim: 절대값이 저장된다", [] {
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+    sendUdpCommandOnce("trim 1.5 -2.0");
+    CHECK_NEAR(trim_roll, 1.5f, 1e-4f);
+    CHECK_NEAR(trim_pitch, -2.0f, 1e-4f);
+  });
+
+  runCase("trim: +-TRIM_MAX_DEG로 클램프된다", [] {
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+    sendUdpCommandOnce("trim 50 -50");
+    CHECK_NEAR(trim_roll, TRIM_MAX_DEG, 1e-4f);
+    CHECK_NEAR(trim_pitch, -TRIM_MAX_DEG, 1e-4f);
+  });
+
+  runCase("trim: 잘못된 입력은 무시된다", [] {
+    trim_roll = 1.0f; trim_pitch = 2.0f;
+    sendUdpCommandOnce("trim abc 1");
+    sendUdpCommandOnce("trim 1");
+    sendUdpCommandOnce("trim 1 2 3");
+    CHECK_NEAR(trim_roll, 1.0f, 1e-4f);
+    CHECK_NEAR(trim_pitch, 2.0f, 1e-4f);
+  });
+
+  runCase("trim: 무장 중에도 수락된다", [] {
+    trim_roll = 0.0f;
+    safety_lock = false;
+    sendUdpCommandOnce("trim 3 0");
+    CHECK_NEAR(trim_roll, 3.0f, 1e-4f);
+    safety_lock = true;
+  });
+
+  runCase("목표각은 트림을 더한 뒤 +-30도로 클램프된다", [] {
+    resetRcState();
+    trim_roll = 10.0f; trim_pitch = -10.0f;
+    sendRcr("rcr 1 25 -25 0");
+    // 25 + 10 = 35 -> 30 으로 클램프 (35가 아니다)
+    CHECK_NEAR(targetAngleX, 30.0f, 1e-4f);
+    CHECK_NEAR(targetAngleY, -30.0f, 1e-4f);
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+  });
+
+  runCase("트림이 목표각에 실제로 더해진다", [] {
+    resetRcState();
+    trim_roll = 2.0f; trim_pitch = -1.0f;
+    sendRcr("rcr 1 0 0 0");
+    CHECK_NEAR(targetAngleX, 2.0f, 1e-4f);
+    CHECK_NEAR(targetAngleY, -1.0f, 1e-4f);
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+  });
+
+  runCase("start와 stop은 트림을 지우지 않는다", [] {
+    trim_roll = 4.0f; trim_pitch = -3.0f;
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    CHECK_NEAR(trim_roll, 4.0f, 1e-4f);
+    sendUdpCommandOnce("stop");
+    CHECK_NEAR(trim_roll, 4.0f, 1e-4f);
+    CHECK_NEAR(trim_pitch, -3.0f, 1e-4f);
+    trim_roll = 0.0f; trim_pitch = 0.0f;
+  });
+
   runCase("rcr: 정상 패킷이 yaw 각속도와 roll/pitch를 설정한다", [] {
     resetRcState();
     sendRcr("rcr 1 5.5 -6.5 45.0");

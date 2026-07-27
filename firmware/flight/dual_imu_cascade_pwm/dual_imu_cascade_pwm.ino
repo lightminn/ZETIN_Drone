@@ -117,6 +117,7 @@ const float ACCEL_SCALE  = 1.0f / 2048.0f;   // raw -> g
 const float SAFETY_ANGLE = 60.0f;
 const float YAW_DEADZONE = 0.3f;
 const float MAX_TARGET_ANGLE_RP = 30.0f;     // UDP 오입력에 대한 자세 명령 제한
+const float TRIM_MAX_DEG = 10.0f;   // 트림 절대값 상한
 const float MAX_TARGET_RATE_RP  = 300.0f;    // outer-loop 출력 제한 (deg/s)
 const float MAX_TARGET_RATE_YAW = 180.0f;
 // yaw 모드 판정 임계치. 벤치에서 조정한다(설계 문서 §1 참조).
@@ -310,6 +311,10 @@ DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 
 volatile bool  safety_lock  = true;
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
+// 기체 트림(도). 추정기 0°와 진짜 수평의 차이를 보정한다. 비행별 상태가 아니라
+// 기체 속성이므로 start/stop이 지우지 않는다.
+volatile float trim_roll = 0.0f;
+volatile float trim_pitch = 0.0f;
 volatile float targetYawRate = 0.0f;   // rcr이 준 yaw 각속도 명령 (dps)
 
 volatile float angleX = 0.0f, angleY = 0.0f, angleZ = 0.0f; // 추정 각도
@@ -950,8 +955,9 @@ static bool parseIntStrict(const char *text, long &out) {
 
 static bool setRcTargets(float x, float y, float z, bool hasYaw) {
   if (!isfinite(x) || !isfinite(y) || (hasYaw && !isfinite(z))) return false;
-  targetAngleX = constrain(x, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
-  targetAngleY = constrain(y, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
+  // 트림을 더한 뒤 클램프해야 총합이 ±30°로 제한된다.
+  targetAngleX = constrain(x + trim_roll,  -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
+  targetAngleY = constrain(y + trim_pitch, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
   if (hasYaw) targetAngleZ = z;
   lastRcMs = millis();
   return true;
@@ -1251,6 +1257,22 @@ void udp_task(void *pv) {
               mag_reference_pending = true;
               mag_enabled = true;
               Serial.println(">>> Mag ON");
+            }
+          }
+        }
+        else if (strncmp(buf, "trim", 4) == 0 &&
+                 (buf[4] == ' ' || buf[4] == '\t')) {
+          char *save = nullptr;
+          (void)strtok_r(buf, " \t", &save);          // "trim"
+          char *arg0 = strtok_r(nullptr, " \t", &save);
+          char *arg1 = strtok_r(nullptr, " \t", &save);
+          if (arg0 != nullptr && arg1 != nullptr &&
+              strtok_r(nullptr, " \t", &save) == nullptr) {
+            float r, p;
+            if (parseFloatStrict(arg0, r) && parseFloatStrict(arg1, p)) {
+              trim_roll  = constrain(r, -TRIM_MAX_DEG, TRIM_MAX_DEG);
+              trim_pitch = constrain(p, -TRIM_MAX_DEG, TRIM_MAX_DEG);
+              Serial.printf(">>> Trim R:%.2f P:%.2f\n", trim_roll, trim_pitch);
             }
           }
         }
