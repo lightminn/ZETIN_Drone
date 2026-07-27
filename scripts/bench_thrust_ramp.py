@@ -92,6 +92,9 @@ def sender():
     send("connect")
     time.sleep(0.2)
     for _ in range(3):
+        send("trim 0 0")
+        time.sleep(0.05)
+    for _ in range(3):
         send("start")
         time.sleep(0.05)
     while _running:

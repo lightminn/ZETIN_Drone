@@ -103,6 +103,9 @@ def sender():
     global _seq
     send("connect")
     time.sleep(0.2)
+    for _ in range(3):
+        send("trim 0 0")
+        time.sleep(0.05)
     send("yaw 1")          # 시동 해제 상태에서만 수락된다 (start보다 먼저)
     time.sleep(0.05)
     for _ in range(3):

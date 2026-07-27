@@ -23,6 +23,7 @@ MAX_ANGLE     = 15.0
 YAW_RATE_MAX_DPS = 90.0     # 스틱 최대 편향 시 yaw 각속도 (dps). 조종감은 여기서 조정
 THROTTLE_RATE = 200.0        # 오른쪽 스틱 최대 편향 시 스로틀 변화율 (µs/s)
 TRIM_STEP     = 0.2
+TRIM_MAX_DEG  = 10.0
 STOP_RETRIES  = 5            # stop/start 재전송 횟수
 STOP_INTERVAL = 0.02         # 재전송 간격 (초)
 
@@ -51,7 +52,9 @@ current_throttle = 1000
 throttle_f       = 1000.0   # 아날로그 스로틀 적분용 (µs, float)
 trim_roll        = 0.0
 trim_pitch       = 0.0
+trim_synced      = False
 is_armed         = False
+is_streaming     = False
 last_arm_time    = 0.0      # 드론 Armed 필드와 대조할 grace 기준 시각
 
 # [FIX] RC 시퀀스 번호 — 지연 도착한 낡은 패킷을 드론 측에서 폐기할 수 있도록
@@ -75,6 +78,7 @@ last_btn_L1    = False
 last_trig_R2   = False
 last_trig_L2   = False
 last_hat_state = (0, 0)
+last_btn_trim_reset = False
 
 
 # ==========================================================
@@ -95,9 +99,10 @@ def reliable_send(cmd: str):
 
 
 def disarm(reason: str = "수동"):
-    global is_armed, current_throttle, throttle_f
+    global is_armed, is_streaming, current_throttle, throttle_f
     reliable_send("stop")
     is_armed         = False
+    is_streaming     = False
     current_throttle = 1000
     throttle_f       = 1000.0
     print(f"\n>>> [SYSTEM] DISARMED ({reason})")
@@ -115,21 +120,21 @@ def stop_streaming_only(reason: str):
     stop을 보내면 하강 중인 드론의 모터를 공중에서 꺼버린다. 업링크만 죽는
     비대칭 고장에서는 링크가 간헐적으로 열려 그 stop이 실제로 도착한다.
     """
-    global is_armed, current_throttle, throttle_f
-    is_armed = False
+    global is_streaming, current_throttle, throttle_f
+    is_streaming = False
     current_throttle = 1000
     throttle_f = 1000.0
     print(f"\n>>> [SYSTEM] 로컬 해제 ({reason}) - stop 미전송")
 
 
 def arm():
-    global is_armed, last_arm_time, current_throttle, throttle_f, rc_seq
-    send_trim()   # 드론 재부팅으로 트림이 소실됐을 수 있다
+    global is_armed, is_streaming, last_arm_time
+    global current_throttle, throttle_f
     is_armed         = True
+    is_streaming     = True
     last_arm_time    = time.monotonic()
     current_throttle = 1100
     throttle_f       = 1100.0
-    rc_seq           = 0   # 재시동 시 시퀀스 번호 리셋
     # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
     # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
     reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
@@ -149,6 +154,7 @@ def telemetry_thread():
     global telem_angle_x, telem_angle_y, telem_throttle
     global fault_rc_drone, fault_critical_drone
     global telem_total_pkts, telem_dropped_pkts
+    global trim_roll, trim_pitch, trim_synced
 
     print("[TELEM] 수신 스레드 시작")
     prev_fault_rc = False
@@ -167,7 +173,7 @@ def telemetry_thread():
         try:
             data, _ = sock.recvfrom(512)
         except socket.timeout:
-            if is_armed and last_telem_time > 0:
+            if is_streaming and last_telem_time > 0:
                 elapsed = time.monotonic() - last_telem_time
                 if elapsed > TELEM_TIMEOUT_SEC:
                     print(f"\n[FAULT] 텔레메트리 {elapsed:.1f}s 수신 없음 "
@@ -195,6 +201,13 @@ def telemetry_thread():
             telem_total_pkts   = sample["RC_Total_Pkts"] or 0
             telem_dropped_pkts = sample["RC_Dropped_Pkts"] or 0
             last_telem_time    = time.monotonic()
+            if not trim_synced:
+                received_trim_roll = sample["Trim_Roll"]
+                received_trim_pitch = sample["Trim_Pitch"]
+                if received_trim_roll is not None and received_trim_pitch is not None:
+                    trim_roll = received_trim_roll
+                    trim_pitch = received_trim_pitch
+                    trim_synced = True
 
         now_str = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         csv_writer.writerow(sample_to_csv_row(now_str, sample))
@@ -230,7 +243,7 @@ def telemetry_thread():
         # 드론 측 고장 플래그 — fault는 latch되므로 상승 엣지에서만 알린다.
         if fault_rc_drone and not prev_fault_rc:
             print("\n[FAULT] 드론: RC 타임아웃 - 자동착륙 진행 중")
-            if is_armed:
+            if is_streaming:
                 stop_streaming_only("드론 RC 타임아웃")
         prev_fault_rc = fault_rc_drone
 
@@ -259,8 +272,8 @@ def telemetry_thread():
 # 컨트롤러 처리 스레드
 # ==========================================================
 def controller_thread():
-    global current_throttle, throttle_f, trim_roll, trim_pitch, rc_seq
-    global last_btn_start, last_btn_R1, last_btn_L1
+    global current_throttle, throttle_f, trim_roll, trim_pitch, trim_synced, rc_seq
+    global last_btn_start, last_btn_R1, last_btn_L1, last_btn_trim_reset
     global last_trig_R2, last_trig_L2, last_hat_state
 
     pygame.init()
@@ -296,7 +309,7 @@ def controller_thread():
 
         # --- 컨트롤러 분리 감지: RC 송신을 중단하고 자동착륙에 맡김 ---
         if pygame.joystick.get_count() == 0:
-            if is_armed:
+            if is_streaming:
                 stop_streaming_only("컨트롤러 분리")
             print("\n[ERR] 컨트롤러 분리됨 - 재연결 대기 중...")
             while pygame.joystick.get_count() == 0:
@@ -317,7 +330,7 @@ def controller_thread():
                 arm()
         last_btn_start = btn_start
 
-        if is_armed:
+        if is_streaming:
             # 실측 매핑(gamepad_probe): R1=b5, L1=b4, R2=a5, L2=a2 (트리거 휴지 -1.0)
             curr_R1 = joy.get_button(5)
             curr_L1 = joy.get_button(4)
@@ -361,19 +374,32 @@ def controller_thread():
             # --- DPAD 트림 ---
             hat = joy.get_hat(0)
             if hat != last_hat_state:
-                if   hat == (0,  1): trim_pitch -= TRIM_STEP
-                elif hat == (0, -1): trim_pitch += TRIM_STEP
-                elif hat == (-1, 0): trim_roll  -= TRIM_STEP
-                elif hat == (1,  0): trim_roll  += TRIM_STEP
-                if hat != (0, 0):
+                trim_changed = False
+                if hat in ((0, 1), (0, -1), (-1, 0), (1, 0)):
+                    with telem_lock:
+                        previous_trim = (trim_roll, trim_pitch)
+                        if   hat == (0,  1): trim_pitch -= TRIM_STEP
+                        elif hat == (0, -1): trim_pitch += TRIM_STEP
+                        elif hat == (-1, 0): trim_roll  -= TRIM_STEP
+                        elif hat == (1,  0): trim_roll  += TRIM_STEP
+                        trim_roll = max(-TRIM_MAX_DEG, min(TRIM_MAX_DEG, trim_roll))
+                        trim_pitch = max(-TRIM_MAX_DEG, min(TRIM_MAX_DEG, trim_pitch))
+                        trim_changed = (trim_roll, trim_pitch) != previous_trim
+                        if trim_changed:
+                            trim_synced = True
+                if trim_changed:
                     print(f" [TRIM] Roll:{trim_roll:.1f}  Pitch:{trim_pitch:.1f}")
                     send_trim()
             last_hat_state = hat
 
-            if joy.get_button(12):
-                trim_roll = trim_pitch = 0.0
+            btn_trim_reset = bool(joy.get_button(12))
+            if btn_trim_reset and not last_btn_trim_reset:
+                with telem_lock:
+                    trim_synced = True
+                    trim_roll = trim_pitch = 0.0
                 print(" [TRIM] RESET (0.0, 0.0)")
                 send_trim()
+            last_btn_trim_reset = btn_trim_reset
 
             # --- RC 명령 전송 (yaw는 각속도 dps) ---
             rc_seq += 1
