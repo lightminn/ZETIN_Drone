@@ -294,10 +294,10 @@ def controller_thread():
 
         pygame.event.pump()
 
-        # --- 컨트롤러 분리 감지: RC 스트림이 끊기기 전에 능동적으로 disarm ---
+        # --- 컨트롤러 분리 감지: RC 송신을 중단하고 자동착륙에 맡김 ---
         if pygame.joystick.get_count() == 0:
             if is_armed:
-                disarm("컨트롤러 분리")
+                stop_streaming_only("컨트롤러 분리")
             print("\n[ERR] 컨트롤러 분리됨 - 재연결 대기 중...")
             while pygame.joystick.get_count() == 0:
                 time.sleep(0.5)
