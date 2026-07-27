@@ -57,6 +57,12 @@ yaw 각속도까지 정착하면 회전이 멈춘 heading을 자동으로 잠그
 SPI 행업 등으로 정지하면 태스크 워치독(500ms)이 재부팅을 강제해 마지막
 PWM으로 모터가 고정되는 것을 막는다.
 
+RC 입력이 500ms 끊기면 즉시 모터를 끄지 않고, 펌웨어에 저장된 roll·pitch
+트림을 유지하며 자동착륙한다. 초기 하강값 `FS_DESCENT_DELTA_US=60`은
+`CTRL_MARGIN=150`보다 작게 유지하며, 백스톱 `FS_MAX_MS`는 처음 5000ms다.
+착지 감지기를 벤치 검증한 뒤에만 10000ms로 올린다. RC 타임아웃만 이 경로를
+사용하고, IMU 전멸·과도 기울기·`stop`은 즉시 컷한다.
+
 ### 핀 배치
 
 ```text
@@ -108,10 +114,11 @@ M4 = T + P + R + Y
 | [`analyze_flight_log.py`](../scripts/analyze_flight_log.py) | Offline CSV analysis |
 | [`receive_dual_imu_debug.py`](../scripts/receive_dual_imu_debug.py) | Paired loop diagnostic receiver |
 
-현행 펌웨어는 UDP 패킷마다 35개 텔레메트리 필드를 보낸다. 마지막 35번
-`Yaw_Hold`는 0=각속도 모드, 1=heading 잠금이다. PC 수신기는 맨 앞에 수신
-`Timestamp`를 추가하므로 CSV는 36개 열이다. 공유 파서는 오래된
-10·14·21·22·30·31·34필드 패킷도 받아들이며, 없는 값은 빈 CSV 셀로 남긴다.
+현행 펌웨어는 UDP 패킷마다 38개 텔레메트리 필드를 보낸다. 마지막 세 필드는
+`Failsafe_Phase`(36), `Trim_Roll`(37), `Trim_Pitch`(38)이며, PC 수신기는 맨
+앞에 수신 `Timestamp`를 추가하므로 CSV는 39개 열이다. 공유 파서는 오래된
+10·14·21·22·30·31·34·35필드 패킷도 받아들이며, 없는 값은 빈 CSV 셀로
+남긴다.
 
 ## 빌드와 실행
 
@@ -158,5 +165,5 @@ PC를 펌웨어의 `Drone_Tuning` SoftAP에 연결한 뒤 필요한 도구를 �
    두 IMU 부호를 확인한다.
 4. [`icm42670_dual_loop_debug`](../firmware/diagnostics/icm42670_dual_loop_debug/)로
    추정각·루프 주기·보정 방향을 확인한다.
-5. 전원 극성, 비상 정지, RC timeout, 과도 기울기 정지를 확인한 뒤에만
-   제한된 테스트 리그에서 비행 후보를 평가한다.
+5. 전원 극성, 비상 정지, RC timeout 자동착륙, 과도 기울기 정지를 확인한
+   뒤에만 제한된 테스트 리그에서 비행 후보를 평가한다.

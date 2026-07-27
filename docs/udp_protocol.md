@@ -31,6 +31,7 @@ stop
 rc <seq> <roll> <pitch> <yaw>
 rcr <seq> <roll> <pitch> <yaw_rate>  # yaw_rate는 dps
 th <microseconds>
+trim <roll_deg> <pitch_deg>          # 절대 트림(도), 각 축 ±10°로 클램프
 yaw <0|1>
 mag <0|1>                # 자기계 yaw 드리프트 보정 ON/OFF (기본 OFF)
 magcal <0|1>             # 하드아이언 캘리브레이션 시작/종료 (시동 해제 상태에서만)
@@ -57,6 +58,13 @@ ar|at|ay <value>      # roll / pitch / yaw
   이미 시동된 상태에서 도착한 중복 `start`는 무시되므로, 지연 도착한 재전송이
   비행 중 fault latch나 스로틀 창을 되돌리지 않는다. `stop`은 즉시 시동을
   해제한다.
+- RC 스트림이 `RC_TIMEOUT_MS`(500ms) 동안 끊기면 `Fault_RC`를 세우고 즉시
+  컷하지 않고 자동착륙에 진입한다. 자세 목표는 적용 중인 트림, yaw 각속도
+  목표는 0이며, 진입 스로틀에서 `FS_DESCENT_DELTA_US = 60`을 낮춰 하강한다.
+  이 값은 믹서의 `CTRL_MARGIN = 150`보다 반드시 작아야 한다. 착지를 감지하면
+  컷하고, 감지하지 못하면 초기 `FS_MAX_MS = 5000`에서 백스톱 컷한다.
+  `FS_MAX_MS`는 착지 감지기를 벤치 검증한 뒤에만 10000으로 올린다.
+  IMU 전멸·과도 기울기·명시적 `stop`은 계속 즉시 컷이다.
 - `rcr`은 패킷 시퀀스와 목표 roll·pitch 각도, yaw 각속도(dps)를 담는 현행
   조종 명령이다. roll·pitch 목표는 ±30°, yaw 각속도는 펌웨어에서 ±180dps로
   제한된다. `control_dualsense.py`는 이 펌웨어 한도와 별개인
@@ -69,6 +77,10 @@ ar|at|ay <value>      # roll / pitch / yaw
   도착·중복)은 폐기된다.
 - `th`는 기본 ESC 펄스 폭을 마이크로초 단위로 설정한다. 1000~1900으로
   제한되며, min/max 스로틀 창을 기본값 ±150 마진으로 함께 재설정한다.
+- `trim`은 roll·pitch 트림의 절대값(도)을 설정한다. 각 축은 ±10°로
+  클램프되며 시동 중에도 수락된다. 기체 속성이므로 `start`와 `stop`은
+  지우지 않는다. roll·pitch 조종 목표에는 트림을 더한 뒤 총합 ±30° 제한을
+  적용한다.
 - `yaw 0`은 항상 수락되며 자동 모드로 돌아간다. 자동 모드가 기본값이다.
   스틱이 편향되면 `rcr`의 yaw 각속도를 추종하고, 스틱이 중립이면서 실제 yaw
   각속도까지 정착하면 회전이 멈춘 그 heading을 자동으로 잠근다. 실제 각속도가
@@ -105,7 +117,7 @@ ar|at|ay <value>      # roll / pitch / yaw
 
 ## 드론 → 지상국
 
-텔레메트리는 다음 35개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
+텔레메트리는 다음 38개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
 
 ```text
 Roll, Pitch, Yaw,
@@ -120,11 +132,13 @@ Armed,
 Motor_M1, Motor_M2, Motor_M3, Motor_M4, PID_Loop_Hz,
 TgtRate_Roll, TgtRate_Pitch, TgtRate_Yaw,
 MagHeading, Mag_X, Mag_Y, Mag_Z,
-Yaw_Hold
+Yaw_Hold,
+Failsafe_Phase, Trim_Roll, Trim_Pitch
 ```
 
 기존 21개 필드 뒤에 `Armed`(22), Tier 1 관측 필드(23~30), `MagHeading`(31),
-`Mag_X`/`Mag_Y`/`Mag_Z`(32~34), `Yaw_Hold`(35)를 차례로 append한다.
+`Mag_X`/`Mag_Y`/`Mag_Z`(32~34), `Yaw_Hold`(35), `Failsafe_Phase`(36),
+`Trim_Roll`/`Trim_Pitch`(37~38)를 차례로 append한다.
 
 - `Armed`는 펌웨어 safety lock의 반전값이다. `start`가 거부되거나
   펌웨어가 스스로 시동을 해제한 것을 지상국이 이 필드로 감지한다.
@@ -137,6 +151,8 @@ Yaw_Hold
 | 31 | `MagHeading` | float | BMM350 틸트보정 heading(deg). throttle 간섭 보정 적용값. `mag 0`이면 갱신되지 않는다 |
 | 32~34 | `Mag_X`, `Mag_Y`, `Mag_Z` | float | 하드아이언·throttle 간섭 보정 후 자기장 성분(µT). `magc` 계수 0이면 raw(=보정 전) |
 | 35 | `Yaw_Hold` | int | 0=각속도 모드, 1=heading 잠금 |
+| 36 | `Failsafe_Phase` | int | 0=정상, 1=하강 중, 2=착지컷, 3=백스톱컷, 4=중단컷 |
+| 37~38 | `Trim_Roll`, `Trim_Pitch` | float | 드론이 적용 중인 roll·pitch 트림(도) |
 
 `Yaw`(3번, 융합 결과)와 `MagHeading`(31번, mag heading)의 차이를 보면
 융합이 실제로 동작하는지 확인할 수 있다. `Mag_X`~`Mag_Z`는 모터 전류 간섭
@@ -166,9 +182,10 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 - 30필드 패킷은 `TgtRate_Yaw`에서 끝난다 (BMM350 mag 융합 도입 이전 펌웨어).
 - 31필드 패킷은 `MagHeading`에서 끝난다 (Mag XYZ 텔레메트리 도입 이전 펌웨어).
 - 34필드 패킷은 `Mag_Z`에서 끝난다 (`Yaw_Hold` 도입 이전 펌웨어).
+- 35필드 패킷은 `Yaw_Hold`에서 끝난다 (자동착륙·기체 트림 도입 이전 펌웨어).
 - 과거 패킷에 없는 값은 정규화된 CSV에서 빈 셀이 된다.
 - `Timestamp`는 드론이 보내지 않는다. 지상 도구가 CSV의 첫 열로 추가하므로
-  현행 CSV는 36개 열이 된다.
+  현행 CSV는 39개 열이 된다.
 
 공유 구현은
 [`telemetry_schema.py`](../scripts/telemetry_schema.py)에 있다.
