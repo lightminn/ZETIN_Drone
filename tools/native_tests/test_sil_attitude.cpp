@@ -163,6 +163,8 @@ struct RunConfig {
   float ki_yaw = 0.05f;
   bool inject_roll_sign_fault = false;
   bool vertical_enabled = false;
+  bool accel_noise_enabled = false;
+  double accel_noise_sd_g = 0.04;
   int base_throttle_us = 1150;
   uint32_t rc_disconnect_tick = std::numeric_limits<uint32_t>::max();
   PlantParameters plant_parameters = kPlantParameters;
@@ -394,6 +396,30 @@ Disturbance disturbanceAt(const RunConfig &config, uint32_t interval) {
   return config.disturbance_for_interval(interval);
 }
 
+double deterministicAccelNoiseG(uint32_t tick, double target_sd_g) {
+  // 세 로그는 20Hz(|a|만)라 10Hz를 넘는 축별/프롭 진동의 근거가 없다.
+  // 따라서 관측되고 착지 LPF를 통과하는 1~8Hz만 합성한다. 10초 창에서
+  // 서로소 cycle 수(11/17/23/41/73)를 갖는 고정 위상 사인 합이라 매 실행이
+  // 동일하며, 이론 RMS가 target_sd_g가 되도록 가중치를 정규화한다.
+  constexpr std::array<double, 5> frequencies_hz = {
+      1.1, 1.7, 2.3, 4.1, 7.3};
+  constexpr std::array<double, 5> weights = {
+      1.0, 0.75, 0.50, 0.20, 0.10};
+  constexpr std::array<double, 5> phases_rad = {
+      0.31, 1.17, -0.83, 2.29, -1.91};
+  constexpr double weight_square_sum =
+      1.0 * 1.0 + 0.75 * 0.75 + 0.50 * 0.50 +
+      0.20 * 0.20 + 0.10 * 0.10;
+  const double time_s = tick * kDt;
+  double unit_sum = 0.0;
+  for (std::size_t index = 0; index < frequencies_hz.size(); index++) {
+    unit_sum += weights[index] *
+                std::sin(2.0 * PI * frequencies_hz[index] * time_s +
+                         phases_rad[index]);
+  }
+  return target_sd_g * std::sqrt(2.0 / weight_square_sum) * unit_sum;
+}
+
 PlantStep integratePlant(PlantState &state, const Disturbance &disturbance,
                          bool inject_roll_sign_fault, bool vertical_enabled,
                          const PlantParameters &parameters) {
@@ -593,10 +619,23 @@ RunResult runSil(const RunConfig &config) {
     arduino_fake::millis_value += 1U;
     arduino_fake::micros_value += 1000U;
     if (tick < config.rc_disconnect_tick) lastRcMs = millis();
-    const bool raw_saturated_now =
-        config.vertical_enabled
-            ? injectImuFromPlant(state, tick, plant_step.specific_force_g)
-            : injectImuFromPlant(state, tick);
+    bool raw_saturated_now = false;
+    if (config.accel_noise_enabled) {
+      CHECK_MSG(config.accel_noise_sd_g >= 0.0,
+                "accel noise sd must be non-negative");
+      const double nominal_specific_force_g =
+          config.vertical_enabled ? plant_step.specific_force_g : 1.0;
+      raw_saturated_now = injectImuFromPlant(
+          state, tick,
+          nominal_specific_force_g +
+              deterministicAccelNoiseG(tick, config.accel_noise_sd_g));
+    } else {
+      // 기본 OFF는 5e5f51e의 기존 분기와 연산 순서를 그대로 보존한다.
+      raw_saturated_now =
+          config.vertical_enabled
+              ? injectImuFromPlant(state, tick, plant_step.specific_force_g)
+              : injectImuFromPlant(state, tick);
+    }
     if (raw_saturated_now && !result.raw_saturated) {
       result.first_raw_saturation_tick = tick;
     }
@@ -923,6 +962,57 @@ void printFailsafeTrace(const char *label, const RunResult &result) {
             << '\n';
 }
 
+RunConfig makeV3Config(double k_ge) {
+  RunConfig config;
+  config.initial.z_m = 0.5;
+  config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.base_throttle_us = 1340;
+  config.vertical_enabled = true;
+  config.rc_disconnect_tick = 0;
+  config.plant_parameters.k_ge = k_ge;
+  return config;
+}
+
+RunConfig makeV1Config(bool noise_enabled = false,
+                       double noise_sd_g = 0.04) {
+  RunConfig config;
+  config.initial.z_m = 1.0;
+  config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.base_throttle_us = 1340;
+  config.vertical_enabled = true;
+  config.rc_disconnect_tick = 0;
+  config.accel_noise_enabled = noise_enabled;
+  config.accel_noise_sd_g = noise_sd_g;
+  return config;
+}
+
+RunConfig makeV4Config(bool noise_enabled = false,
+                       double noise_sd_g = 0.04) {
+  RunConfig config;
+  config.initial.z_m = 2.0;
+  config.initial.vz_ms = -1.2;
+  config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+  config.base_throttle_us = 1400;
+  config.vertical_enabled = true;
+  config.rc_disconnect_tick = 0;
+  config.plant_parameters.k_ge = 0.0;
+  config.accel_noise_enabled = noise_enabled;
+  config.accel_noise_sd_g = noise_sd_g;
+  const double weight_n =
+      config.plant_parameters.mass_kg * kGravityMs2;
+  config.disturbance_for_interval = [weight_n](uint32_t tick) {
+    if (tick >= RC_TIMEOUT_MS && tick < RC_TIMEOUT_MS + 150U) {
+      return Disturbance{0.0, 0.0, 0.0, -0.20 * weight_n};
+    }
+    if (tick >= RC_TIMEOUT_MS + 150U &&
+        tick < RC_TIMEOUT_MS + 200U) {
+      return Disturbance{0.0, 0.0, 0.0, 0.40 * weight_n};
+    }
+    return Disturbance{};
+  };
+  return config;
+}
+
 }  // namespace
 
 int main() {
@@ -1084,6 +1174,85 @@ int main() {
     CHECK_LE(std::fabs(ground_effect.samples[1].specific_force_g - 1.15),
              1e-9);
     CHECK_LE(std::fabs(force.samples[1].specific_force_g - 1.40), 1e-9);
+  });
+
+  runCase("vibration: configured sd survives the firmware 5Hz LPF", [] {
+    constexpr uint32_t kWarmupTicks = 2000;
+    constexpr uint32_t kMeasureTicks = 10000;
+    constexpr std::array<uint32_t, 6> kRepeatTicks = {
+        0, 1, 137, 2048, 7123, kWarmupTicks + kMeasureTicks};
+    std::array<double, kRepeatTicks.size()> first_sequence = {};
+    std::array<double, kRepeatTicks.size()> second_sequence = {};
+    for (std::size_t index = 0; index < kRepeatTicks.size(); index++) {
+      first_sequence[index] =
+          deterministicAccelNoiseG(kRepeatTicks[index], 0.04);
+    }
+    for (std::size_t index = 0; index < kRepeatTicks.size(); index++) {
+      second_sequence[index] =
+          deterministicAccelNoiseG(kRepeatTicks[index], 0.04);
+    }
+    CHECK(first_sequence == second_sequence);
+
+    RunConfig config;
+    config.initial.z_m = 10.0;
+    config.ticks = kWarmupTicks + kMeasureTicks;
+    config.base_throttle_us = 1340;
+    config.vertical_enabled = true;
+    config.plant_parameters.k_ge = 0.0;
+    config.accel_noise_enabled = true;
+    config.accel_noise_sd_g = 0.04;
+    const RunResult result = runSil(config);
+
+    double filtered_g = result.samples.front().accel_magnitude_g;
+    double raw_sum_g = 0.0;
+    double raw_sum_sq_g = 0.0;
+    double filtered_sum_g = 0.0;
+    double filtered_sum_sq_g = 0.0;
+    uint32_t sample_count = 0;
+    for (const Sample &sample : result.samples) {
+      filtered_g += FS_LAND_LPF_ALPHA *
+                    (sample.accel_magnitude_g - filtered_g);
+      if (sample.tick <= kWarmupTicks) continue;
+      raw_sum_g += sample.accel_magnitude_g;
+      raw_sum_sq_g +=
+          sample.accel_magnitude_g * sample.accel_magnitude_g;
+      filtered_sum_g += filtered_g;
+      filtered_sum_sq_g += filtered_g * filtered_g;
+      sample_count++;
+    }
+
+    const double raw_mean_g = raw_sum_g / sample_count;
+    const double filtered_mean_g = filtered_sum_g / sample_count;
+    const double raw_sd_g = std::sqrt(
+        raw_sum_sq_g / sample_count - raw_mean_g * raw_mean_g);
+    const double filtered_sd_g = std::sqrt(
+        filtered_sum_sq_g / sample_count -
+        filtered_mean_g * filtered_mean_g);
+    const double attenuation =
+        1.0 - filtered_sd_g / raw_sd_g;
+    std::cout << "[SIL] vibration sd_config=" << config.accel_noise_sd_g
+              << "g raw_sd=" << raw_sd_g
+              << "g lpf5_sd=" << filtered_sd_g
+              << "g attenuation=" << 100.0 * attenuation << "%\n";
+
+    CHECK_LE(std::fabs(raw_sd_g - config.accel_noise_sd_g), 0.002);
+    CHECK_GE(attenuation, 0.0);
+    CHECK_LE(attenuation, 0.10);
+  });
+
+  constexpr std::array<double, 3> kV3GroundEffects = {0.15, 0.25, 0.35};
+  std::array<RunResult, kV3GroundEffects.size()> v3_results;
+  runCase("V3: hover entry descends through the ground-effect region", [&] {
+    for (std::size_t index = 0; index < kV3GroundEffects.size(); index++) {
+      v3_results[index] = runSil(makeV3Config(kV3GroundEffects[index]));
+      const FailsafeTrace trace = analyzeFailsafeTrace(v3_results[index]);
+      CHECK_MSG(std::isfinite(trace.entry_z_m), "V3 did not enter failsafe");
+      CHECK_MSG(std::isfinite(trace.terminal_z_m), "V3 did not terminate");
+      CHECK_MSG(trace.contact_tick != std::numeric_limits<uint32_t>::max(),
+                "V3 did not pass through the ground-effect region to contact");
+      CHECK_MSG(trace.terminal_z_m - trace.entry_z_m < 0.0,
+                "V3 terminal delta_z is not descending");
+    }
   });
 
   runCase("gyro transform: prescribed +30deg roll tracks by 150ms", [] {
@@ -1441,14 +1610,38 @@ int main() {
               << "dps -- 플랜트 yaw 부호 미해결, 벤치 Stage D에서 확정\n";
   });
 
-  runReport("V1 normal descent to ground (current firmware)", [] {
-    RunConfig config;
-    config.initial.z_m = 1.0;
-    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
-    config.base_throttle_us = 1340;
-    config.vertical_enabled = true;
-    config.rc_disconnect_tick = 0;
-    printFailsafeTrace("V1", runSil(config));
+  RunResult v1_noise_004;
+  runReport("V1 noise OFF/ON normal descent (current firmware)", [&] {
+    std::cout << "[SIL] V1 noise comparison OFF(label=V1) then "
+                 "ON(sd=0.04g)\n";
+    printFailsafeTrace("V1", runSil(makeV1Config()));
+    v1_noise_004 = runSil(makeV1Config(true, 0.04));
+    printFailsafeTrace("V1 noise=ON sd=0.04g", v1_noise_004);
+  });
+
+  runReport("V1 accel noise sd sweep (current firmware)", [&] {
+    constexpr std::array<double, 3> kNoiseSweepG = {0.02, 0.04, 0.06};
+    double first_failure_sd_g = std::numeric_limits<double>::quiet_NaN();
+    for (double noise_sd_g : kNoiseSweepG) {
+      const RunResult result =
+          noise_sd_g == 0.04
+              ? v1_noise_004
+              : runSil(makeV1Config(true, noise_sd_g));
+      std::ostringstream label;
+      label << std::fixed << std::setprecision(2)
+            << "V1 noise sweep sd=" << noise_sd_g << "g";
+      printFailsafeTrace(label.str().c_str(), result);
+      const FailsafeTrace trace = analyzeFailsafeTrace(result);
+      if (!std::isfinite(first_failure_sd_g) &&
+          trace.terminal_phase != FS_CUT_LANDED) {
+        first_failure_sd_g = noise_sd_g;
+      }
+    }
+    std::cout << "[SIL] V1 noise sweep first_landing_failure_sd="
+              << (std::isfinite(first_failure_sd_g)
+                      ? std::to_string(first_failure_sd_g) + "g"
+                      : "none_through_0.06g")
+              << '\n';
   });
 
   runReport("V2 link loss while climbing (current firmware)", [] {
@@ -1461,55 +1654,50 @@ int main() {
     printFailsafeTrace("V2", runSil(config));
   });
 
-  runReport("V3 ground-effect passage (current firmware)", [] {
-    RunConfig config;
-    config.initial.z_m = 0.5;
-    config.initial.vz_ms = -0.7;
-    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
-    config.base_throttle_us = 1430;
-    config.vertical_enabled = true;
-    config.rc_disconnect_tick = 0;
-    const double weight_n =
-        config.plant_parameters.mass_kg * kGravityMs2;
-    std::cout << "[SIL] V3 setup z0=0.5000m vz0=-0.7000m/s "
-                 "pre-entry balance=-0.27g post-entry gust=-0.30g/100ms\n";
-    config.disturbance_for_interval = [weight_n](uint32_t tick) {
-      if (tick < RC_TIMEOUT_MS) {
-        // 진입 스로틀 1430us의 초과추력만 상쇄해 -0.7m/s 하강을 유지한다.
-        return Disturbance{0.0, 0.0, 0.0, -0.27 * weight_n};
+  runReport("V3 ground-effect k_ge boundary (current firmware)", [&] {
+    std::cout << "[SIL] V3 setup z0=0.5000m vz0=0.0000m/s "
+                 "entry_throttle=1340us descent_throttle=1280us "
+                 "external_force=0\n";
+    double first_precontact_impact_k_ge =
+        std::numeric_limits<double>::quiet_NaN();
+    for (std::size_t index = 0; index < kV3GroundEffects.size(); index++) {
+      std::ostringstream label;
+      label << std::fixed << std::setprecision(2)
+            << "V3 k_ge=" << kV3GroundEffects[index];
+      printFailsafeTrace(label.str().c_str(), v3_results[index]);
+      const FailsafeTrace trace = analyzeFailsafeTrace(v3_results[index]);
+      double precontact_accel_max_g =
+          -std::numeric_limits<double>::infinity();
+      for (const Sample &sample : v3_results[index].samples) {
+        if (sample.tick < trace.entry_tick ||
+            sample.tick >= trace.contact_tick) {
+          continue;
+        }
+        precontact_accel_max_g =
+            std::max(precontact_accel_max_g, sample.accel_magnitude_g);
       }
-      if (tick < RC_TIMEOUT_MS + 100U) {
-        return Disturbance{0.0, 0.0, 0.0, -0.30 * weight_n};
+      std::cout << "[SIL] " << label.str()
+                << " precontact_accel_max=" << precontact_accel_max_g
+                << "g impact_threshold=" << 1.0 + FS_LAND_IMPACT_G
+                << "g\n";
+      if (!std::isfinite(first_precontact_impact_k_ge) &&
+          trace.saw_impact_tick < trace.contact_tick) {
+        first_precontact_impact_k_ge = kV3GroundEffects[index];
       }
-      return Disturbance{};
-    };
-    printFailsafeTrace("V3", runSil(config));
+    }
+    std::cout << "[SIL] V3 boundary first_precontact_saw_impact_k_ge="
+              << (std::isfinite(first_precontact_impact_k_ge)
+                      ? std::to_string(first_precontact_impact_k_ge)
+                      : "none_through_0.35")
+              << '\n';
   });
 
-  runReport("V4 upward gust then steady descent (current firmware)", [] {
-    RunConfig config;
-    config.initial.z_m = 2.0;
-    config.initial.vz_ms = -1.2;
-    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
-    config.base_throttle_us = 1400;
-    config.vertical_enabled = true;
-    config.rc_disconnect_tick = 0;
-    config.plant_parameters.k_ge = 0.0;
-    const double weight_n =
-        config.plant_parameters.mass_kg * kGravityMs2;
+  runReport("V4 noise OFF/ON upward gust then steady descent", [] {
+    std::cout << "[SIL] V4 noise comparison OFF(label=V4) then "
+                 "ON(sd=0.04g)\n";
     std::cout << "[SIL] V4 setup z0=2.0000m vz0=-1.2000m/s "
                  "down=-0.20g/150ms up=+0.40g/50ms then zero force\n";
-    config.disturbance_for_interval = [weight_n](uint32_t tick) {
-      if (tick >= RC_TIMEOUT_MS && tick < RC_TIMEOUT_MS + 150U) {
-        return Disturbance{0.0, 0.0, 0.0, -0.20 * weight_n};
-      }
-      if (tick >= RC_TIMEOUT_MS + 150U &&
-          tick < RC_TIMEOUT_MS + 200U) {
-        return Disturbance{0.0, 0.0, 0.0, 0.40 * weight_n};
-      }
-      return Disturbance{};
-    };
-    const RunResult result = runSil(config);
+    const RunResult result = runSil(makeV4Config());
     printFailsafeTrace("V4", result);
     const Sample &quiet_start = sampleAtTick(result, 702U);
     const Sample &quiet_400ms = sampleAtTick(result, 1102U);
@@ -1527,6 +1715,8 @@ int main() {
               << quiet_start.plant.z_m << "->" << quiet_400ms.plant.z_m
               << "m accel_min=" << quiet_min_accel_g
               << "g accel_max=" << quiet_max_accel_g << "g\n";
+    printFailsafeTrace(
+        "V4 noise=ON sd=0.04g", runSil(makeV4Config(true, 0.04)));
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count
