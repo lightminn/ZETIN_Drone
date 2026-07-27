@@ -18,6 +18,7 @@ namespace {
 constexpr double kDt = 0.001;
 constexpr double kDegToRad = PI / 180.0;
 constexpr double kRadToDeg = 180.0 / PI;
+constexpr double kGravityMs2 = 9.81;
 
 #ifdef SIL_INJECT_SIGN_FAULT
 constexpr bool kInjectRollSignFault = true;
@@ -115,6 +116,17 @@ struct PlantParameters {
   double iy_kg_m2 = 0.003;
   double iz_kg_m2 = 0.006;
   double thrust_per_us_n = 0.0025;
+  // 4 * 0.0025 N/us * (1340 - 1000) us / 9.81: hover 1340us에서
+  // 총추력과 중력이 평형을 이루는 질량이다(약 0.3466 kg).
+  double mass_kg = 4.0 * 0.0025 * (1340.0 - 1000.0) / kGravityMs2;
+  // 기본 접지는 0.4m/s 접촉에서 약 2cm 이내로 눌리는 중간 정도 표면이다.
+  // 두 값은 RunConfig::plant_parameters를 통해 표면별로 바꿀 수 있다.
+  // 140 N/m 근사치에서 시작해 아래 0.4m/s 접촉 회귀를 돌린 결과, 이
+  // 1ms 준음적분/댐퍼 조합에서는 80 N/m가 2cm·0.45g·113ms에 더 가깝다.
+  double k_ground = 80.0;  // N/m
+  double c_ground = 4.5;   // N*s/m
+  double k_ge = 0.15;
+  double z_ge = 0.15;      // m
 
   double arm_projection_m() const { return arm_length_m / std::sqrt(2.0); }
   double yaw_moment_arm_m() const { return 0.06 * arm_projection_m(); }
@@ -129,12 +141,15 @@ struct PlantState {
   double p = 0.0;
   double q = 0.0;
   double r = 0.0;
+  double z_m = 0.0;
+  double vz_ms = 0.0;
 };
 
 struct Disturbance {
   double x_nm = 0.0;
   double y_nm = 0.0;
   double z_nm = 0.0;
+  double vertical_force_n = 0.0;
 };
 
 struct RunConfig {
@@ -147,7 +162,17 @@ struct RunConfig {
   float ki_pitch = 0.005f;
   float ki_yaw = 0.05f;
   bool inject_roll_sign_fault = false;
+  bool vertical_enabled = false;
+  int base_throttle_us = 1150;
+  uint32_t rc_disconnect_tick = std::numeric_limits<uint32_t>::max();
+  PlantParameters plant_parameters = kPlantParameters;
   std::function<Disturbance(uint32_t)> disturbance_for_interval;
+};
+
+struct PlantStep {
+  double vertical_acceleration_ms2 = 0.0;
+  double specific_force_g = 1.0;
+  double ground_force_n = 0.0;
 };
 
 struct Sample {
@@ -163,6 +188,11 @@ struct Sample {
   bool yaw_hold = false;
   bool mixer_scaled_now = false;
   bool safety_locked = false;
+  uint8_t failsafe_phase = FS_NONE;
+  double accel_magnitude_g = 1.0;
+  double vertical_acceleration_ms2 = 0.0;
+  double specific_force_g = 1.0;
+  double ground_force_n = 0.0;
 };
 
 struct RunResult {
@@ -225,7 +255,8 @@ int16_t addRaw(int16_t value, int delta, bool &saturated) {
       std::min(static_cast<int>(std::numeric_limits<int16_t>::max()), sum)));
 }
 
-bool injectImuFromPlant(const PlantState &state, uint32_t tick) {
+bool injectImuFromPlantImpl(const PlantState &state, uint32_t tick,
+                            const double *specific_force_g) {
   bool saturated = false;
   const double p_dps = state.p * kRadToDeg;
   const double q_dps = state.q * kRadToDeg;
@@ -242,9 +273,19 @@ bool injectImuFromPlant(const PlantState &state, uint32_t tick) {
   const double gbx = -std::sin(state.theta);
   const double gby = std::sin(state.phi) * std::cos(state.theta);
   const double gbz = std::cos(state.phi) * std::cos(state.theta);
-  e1.accel[0] = roundedRaw(-gby / ACCEL_SCALE, saturated);
-  e1.accel[1] = roundedRaw(gbx / ACCEL_SCALE, saturated);
-  e1.accel[2] = roundedRaw(gbz / ACCEL_SCALE, saturated);
+  if (specific_force_g == nullptr) {
+    // vertical_enabled=false의 기존 경로. 연산 순서까지 보존한다.
+    e1.accel[0] = roundedRaw(-gby / ACCEL_SCALE, saturated);
+    e1.accel[1] = roundedRaw(gbx / ACCEL_SCALE, saturated);
+    e1.accel[2] = roundedRaw(gbz / ACCEL_SCALE, saturated);
+  } else {
+    e1.accel[0] =
+        roundedRaw(*specific_force_g * -gby / ACCEL_SCALE, saturated);
+    e1.accel[1] =
+        roundedRaw(*specific_force_g * gbx / ACCEL_SCALE, saturated);
+    e1.accel[2] =
+        roundedRaw(*specific_force_g * gbz / ACCEL_SCALE, saturated);
+  }
 
   // 정착 후에도 freeze 감시가 동일 프레임으로 오인하지 않게 하는 결정적
   // zero-mean dither다. gyro 1 LSB는 약 0.061 dps, accel은 2 LSB다.
@@ -264,6 +305,15 @@ bool injectImuFromPlant(const PlantState &state, uint32_t tick) {
   IMU1.read_status = 0;
   IMU2.read_status = 0;
   return saturated;
+}
+
+bool injectImuFromPlant(const PlantState &state, uint32_t tick) {
+  return injectImuFromPlantImpl(state, tick, nullptr);
+}
+
+bool injectImuFromPlant(const PlantState &state, uint32_t tick,
+                        double specific_force_g) {
+  return injectImuFromPlantImpl(state, tick, &specific_force_g);
 }
 
 void resetFirmwareState(const PlantState &initial) {
@@ -294,6 +344,7 @@ void resetFirmwareState(const PlantState &initial) {
   max_throttle = 1300;
   yaw_hold_override = false;
   safety_lock = true;
+  fs_phase = FS_NONE;
   calibration_ok = true;
 
   targetAngleX = 0.0f;
@@ -343,8 +394,9 @@ Disturbance disturbanceAt(const RunConfig &config, uint32_t interval) {
   return config.disturbance_for_interval(interval);
 }
 
-void integratePlant(PlantState &state, const Disturbance &disturbance,
-                    bool inject_roll_sign_fault) {
+PlantStep integratePlant(PlantState &state, const Disturbance &disturbance,
+                         bool inject_roll_sign_fault, bool vertical_enabled,
+                         const PlantParameters &parameters) {
   std::array<double, 4> applied = {
       static_cast<double>(motorOut[0]), static_cast<double>(motorOut[1]),
       static_cast<double>(motorOut[2]), static_cast<double>(motorOut[3])};
@@ -368,16 +420,43 @@ void integratePlant(PlantState &state, const Disturbance &disturbance,
 
   std::array<double, 4> thrust = {};
   for (std::size_t index = 0; index < thrust.size(); index++) {
-    thrust[index] = kPlantParameters.thrust_per_us_n *
+    thrust[index] = parameters.thrust_per_us_n *
                     std::max(0.0, applied[index] - 1000.0);
   }
 
-  const double a = kPlantParameters.arm_projection_m();
+  const double a = parameters.arm_projection_m();
   const double tau_x = a * (thrust[0] - thrust[1] - thrust[2] + thrust[3]);
   const double tau_y = a * (-thrust[0] + thrust[1] - thrust[2] + thrust[3]);
   // CW(+)/CCW(-) 반작용 관례다. 실제 yaw 부호는 전원 벤치에서 확정한다.
-  const double tau_z = kPlantParameters.yaw_moment_arm_m() *
+  const double tau_z = parameters.yaw_moment_arm_m() *
                        (thrust[0] + thrust[1] - thrust[2] - thrust[3]);
+
+  PlantStep step;
+  if (vertical_enabled) {
+    const double height_m = std::max(0.0, state.z_m);
+    // 지면 아래 spring 압축에서는 고도를 0으로 clamp해 ge를 [1, 1+k_ge]에
+    // 묶는다. 물리적인 지면 위(z>=0)에서는 요구된 지수식 그대로다.
+    const double ground_effect =
+        1.0 + parameters.k_ge * std::exp(-height_m / parameters.z_ge);
+    const double total_thrust_n =
+        ground_effect *
+        (thrust[0] + thrust[1] + thrust[2] + thrust[3]);
+    if (state.z_m < 0.0) {
+      step.ground_force_n =
+          std::max(0.0, -parameters.k_ground * state.z_m -
+                            parameters.c_ground * state.vz_ms);
+    }
+    step.vertical_acceleration_ms2 =
+        total_thrust_n * std::cos(state.phi) * std::cos(state.theta) /
+            parameters.mass_kg -
+        kGravityMs2 + step.ground_force_n / parameters.mass_kg +
+        disturbance.vertical_force_n / parameters.mass_kg;
+    step.specific_force_g =
+        (step.vertical_acceleration_ms2 + kGravityMs2) / kGravityMs2;
+    // 준음적분: 새 속도로 위치를 갱신해 1ms spring contact를 안정적으로 푼다.
+    state.vz_ms += step.vertical_acceleration_ms2 * kDt;
+    state.z_m += state.vz_ms * kDt;
+  }
 
   const double old_p = state.p;
   const double old_q = state.q;
@@ -385,18 +464,21 @@ void integratePlant(PlantState &state, const Disturbance &disturbance,
   state.phi += old_p * kDt;
   state.theta += old_q * kDt;
   state.psi += old_r * kDt;
-  state.p += (tau_x + disturbance.x_nm) / kPlantParameters.ix_kg_m2 * kDt;
-  state.q += (tau_y + disturbance.y_nm) / kPlantParameters.iy_kg_m2 * kDt;
-  state.r += (tau_z + disturbance.z_nm) / kPlantParameters.iz_kg_m2 * kDt;
+  state.p += (tau_x + disturbance.x_nm) / parameters.ix_kg_m2 * kDt;
+  state.q += (tau_y + disturbance.y_nm) / parameters.iy_kg_m2 * kDt;
+  state.r += (tau_z + disturbance.z_nm) / parameters.iz_kg_m2 * kDt;
+  return step;
 }
 
 bool finiteState(const PlantState &state) {
   return std::isfinite(state.phi) && std::isfinite(state.theta) &&
          std::isfinite(state.psi) && std::isfinite(state.p) &&
-         std::isfinite(state.q) && std::isfinite(state.r);
+         std::isfinite(state.q) && std::isfinite(state.r) &&
+         std::isfinite(state.z_m) && std::isfinite(state.vz_ms);
 }
 
-void appendSample(RunResult &result, uint32_t tick, const PlantState &state) {
+void appendSample(RunResult &result, uint32_t tick, const PlantState &state,
+                  const PlantStep &plant_step) {
   Sample sample;
   sample.tick = tick;
   sample.time_s = tick * kDt;
@@ -409,6 +491,14 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state) {
   sample.yaw_hold = yaw_hold_now;
   sample.mixer_scaled_now = mixer_scaled;
   sample.safety_locked = safety_lock;
+  sample.failsafe_phase = fs_phase;
+  sample.accel_magnitude_g =
+      std::sqrt(static_cast<double>(accX) * accX +
+                static_cast<double>(accY) * accY +
+                static_cast<double>(accZ) * accZ);
+  sample.vertical_acceleration_ms2 = plant_step.vertical_acceleration_ms2;
+  sample.specific_force_g = plant_step.specific_force_g;
+  sample.ground_force_n = plant_step.ground_force_n;
   for (int index = 0; index < 4; index++) sample.motors[index] = motorOut[index];
   result.samples.push_back(sample);
 
@@ -471,10 +561,14 @@ RunResult runSil(const RunConfig &config) {
 
   sendUdpCommandOnce("start");
   CHECK_MSG(!safety_lock, "start command was refused");
-  sendUdpCommandOnce("th 1150");
-  CHECK_EQ(base_throttle, 1150);
-  CHECK_EQ(min_throttle, 1050);
-  CHECK_EQ(max_throttle, 1300);
+  if (config.base_throttle_us == 1150) {
+    sendUdpCommandOnce("th 1150");
+  } else {
+    sendUdpCommandOnce("th " + std::to_string(config.base_throttle_us));
+  }
+  CHECK_EQ(base_throttle, config.base_throttle_us);
+  CHECK_EQ(min_throttle, std::max(1050, config.base_throttle_us - CTRL_MARGIN));
+  CHECK_EQ(max_throttle, std::min(1900, config.base_throttle_us + CTRL_MARGIN));
 
   targetAngleX = config.target_roll_deg;
   targetAngleY = config.target_pitch_deg;
@@ -488,20 +582,26 @@ RunResult runSil(const RunConfig &config) {
 
   RunResult result;
   result.samples.reserve(static_cast<std::size_t>(config.ticks) + 1U);
+  PlantStep plant_step;
   arduino_fake::pre_tick_hook = [&](uint32_t tick) {
     if (tick > 0) {
-      integratePlant(state, disturbanceAt(config, tick - 1U),
-                     config.inject_roll_sign_fault);
+      plant_step = integratePlant(
+          state, disturbanceAt(config, tick - 1U),
+          config.inject_roll_sign_fault, config.vertical_enabled,
+          config.plant_parameters);
     }
     arduino_fake::millis_value += 1U;
     arduino_fake::micros_value += 1000U;
-    lastRcMs = millis();
-    const bool raw_saturated_now = injectImuFromPlant(state, tick);
+    if (tick < config.rc_disconnect_tick) lastRcMs = millis();
+    const bool raw_saturated_now =
+        config.vertical_enabled
+            ? injectImuFromPlant(state, tick, plant_step.specific_force_g)
+            : injectImuFromPlant(state, tick);
     if (raw_saturated_now && !result.raw_saturated) {
       result.first_raw_saturation_tick = tick;
     }
     result.raw_saturated = raw_saturated_now || result.raw_saturated;
-    appendSample(result, tick, state);
+    appendSample(result, tick, state, plant_step);
   };
   arduino_fake::tick_limit = config.ticks;
 
@@ -690,6 +790,139 @@ double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
   return sum / static_cast<double>(n - start);
 }
 
+const char *failsafePhaseName(uint8_t phase) {
+  switch (phase) {
+    case FS_NONE: return "FS_NONE";
+    case FS_DESCENDING: return "FS_DESCENDING";
+    case FS_CUT_LANDED: return "FS_CUT_LANDED";
+    case FS_CUT_TIMEOUT: return "FS_CUT_TIMEOUT";
+    case FS_CUT_ABORT: return "FS_CUT_ABORT";
+    default: return "FS_UNKNOWN";
+  }
+}
+
+struct FailsafeTrace {
+  std::vector<std::pair<uint32_t, uint8_t>> transitions;
+  uint32_t entry_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t terminal_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t contact_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t saw_sub_1g_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t saw_impact_tick = std::numeric_limits<uint32_t>::max();
+  uint8_t terminal_phase = FS_NONE;
+  double entry_z_m = std::numeric_limits<double>::quiet_NaN();
+  double terminal_z_m = std::numeric_limits<double>::quiet_NaN();
+  double accel_min_g = std::numeric_limits<double>::infinity();
+  double accel_max_g = -std::numeric_limits<double>::infinity();
+};
+
+FailsafeTrace analyzeFailsafeTrace(const RunResult &result) {
+  FailsafeTrace trace;
+  if (result.samples.empty()) return trace;
+
+  uint8_t previous_phase = result.samples.front().failsafe_phase;
+  trace.transitions.push_back({result.samples.front().tick, previous_phase});
+  std::size_t entry_index = result.samples.size();
+  std::size_t terminal_index = result.samples.size();
+  for (std::size_t index = 1; index < result.samples.size(); index++) {
+    const Sample &previous = result.samples[index - 1U];
+    const Sample &sample = result.samples[index];
+    if (sample.failsafe_phase != previous_phase) {
+      trace.transitions.push_back({sample.tick, sample.failsafe_phase});
+      previous_phase = sample.failsafe_phase;
+    }
+    if (entry_index == result.samples.size() &&
+        sample.failsafe_phase == FS_DESCENDING) {
+      entry_index = index;
+      trace.entry_tick = sample.tick;
+      trace.entry_z_m = sample.plant.z_m;
+    }
+    if (trace.contact_tick == std::numeric_limits<uint32_t>::max() &&
+        previous.plant.z_m > 0.0 && sample.plant.z_m <= 0.0) {
+      trace.contact_tick = sample.tick;
+    }
+    if (terminal_index == result.samples.size() &&
+        sample.failsafe_phase != FS_NONE &&
+        sample.failsafe_phase != FS_DESCENDING) {
+      terminal_index = index;
+      trace.terminal_tick = sample.tick;
+      trace.terminal_phase = sample.failsafe_phase;
+      trace.terminal_z_m = sample.plant.z_m;
+    }
+  }
+
+  if (entry_index == result.samples.size()) return trace;
+  const std::size_t last_index =
+      terminal_index == result.samples.size()
+          ? result.samples.size() - 1U
+          : terminal_index;
+  LandDetector shadow = {};
+  for (std::size_t index = entry_index; index <= last_index; index++) {
+    const Sample &sample = result.samples[index];
+    trace.accel_min_g = std::min(trace.accel_min_g, sample.accel_magnitude_g);
+    trace.accel_max_g = std::max(trace.accel_max_g, sample.accel_magnitude_g);
+    const uint32_t elapsed_ms =
+        sample.tick - result.samples[entry_index].tick;
+    (void)updateLandDetector(
+        shadow, static_cast<float>(sample.accel_magnitude_g), elapsed_ms,
+        FS_LAND_LPF_ALPHA, FS_LAND_SETTLE_TOL_G, FS_LAND_IMPACT_G,
+        FS_MIN_DESCEND_MS, FS_LAND_CONFIRM_MS);
+    if (shadow.saw_sub_1g &&
+        trace.saw_sub_1g_tick == std::numeric_limits<uint32_t>::max()) {
+      trace.saw_sub_1g_tick = sample.tick;
+    }
+    if (shadow.saw_impact &&
+        trace.saw_impact_tick == std::numeric_limits<uint32_t>::max()) {
+      trace.saw_impact_tick = sample.tick;
+    }
+  }
+  return trace;
+}
+
+std::string tickSeconds(uint32_t tick) {
+  if (tick == std::numeric_limits<uint32_t>::max()) return "none";
+  std::ostringstream text;
+  text << std::fixed << std::setprecision(3) << tick * kDt << "s";
+  return text.str();
+}
+
+void printFailsafeTrace(const char *label, const RunResult &result) {
+  const FailsafeTrace trace = analyzeFailsafeTrace(result);
+  std::cout << "[SIL] " << label << " transitions=";
+  for (std::size_t index = 0; index < trace.transitions.size(); index++) {
+    if (index > 0) std::cout << " -> ";
+    std::cout << failsafePhaseName(trace.transitions[index].second)
+              << "@" << tickSeconds(trace.transitions[index].first);
+  }
+  std::cout << '\n';
+
+  const uint8_t final_phase =
+      result.samples.empty() ? FS_NONE : result.samples.back().failsafe_phase;
+  const double elapsed_s =
+      trace.entry_tick == std::numeric_limits<uint32_t>::max() ||
+              trace.terminal_tick == std::numeric_limits<uint32_t>::max()
+          ? std::numeric_limits<double>::quiet_NaN()
+          : (trace.terminal_tick - trace.entry_tick) * kDt;
+  std::cout << "[SIL] " << label
+            << " final_phase=" << failsafePhaseName(final_phase)
+            << "(" << static_cast<int>(final_phase) << ")"
+            << " elapsed=" << elapsed_s << "s"
+            << " entry_z=" << trace.entry_z_m << "m"
+            << " terminal_z=" << trace.terminal_z_m << "m"
+            << " delta_z=" << trace.terminal_z_m - trace.entry_z_m << "m"
+            << " contact=" << tickSeconds(trace.contact_tick)
+            << " accel_min=" << trace.accel_min_g << "g"
+            << " accel_max=" << trace.accel_max_g << "g\n";
+  std::cout << "[SIL] " << label
+            << " shadow_saw_sub_1g=" << tickSeconds(trace.saw_sub_1g_tick)
+            << " shadow_saw_impact=" << tickSeconds(trace.saw_impact_tick)
+            << " impact_before_contact="
+            << (trace.saw_impact_tick < trace.contact_tick)
+            << " landed_before_contact="
+            << (trace.terminal_phase == FS_CUT_LANDED &&
+                trace.terminal_tick < trace.contact_tick)
+            << '\n';
+}
+
 }  // namespace
 
 int main() {
@@ -738,6 +971,119 @@ int main() {
     invalid.plant.phi = std::numeric_limits<double>::quiet_NaN();
     result.samples.push_back(invalid);
     CHECK(!std::isfinite(settlingTime90(result, true, 8.0)));
+  });
+
+  runCase("vertical: 1g specific force preserves legacy IMU raw bytes", [] {
+    PlantState state;
+    state.phi = 8.0 * kDegToRad;
+    state.theta = -6.0 * kDegToRad;
+    state.p = 12.0 * kDegToRad;
+    state.q = -9.0 * kDegToRad;
+    state.r = 4.0 * kDegToRad;
+
+    resetFirmwareState(state);
+    (void)injectImuFromPlant(state, 42);
+    const inv_imu_sensor_event_t legacy_imu1 = IMU1.next_event;
+    const inv_imu_sensor_event_t legacy_imu2 = IMU2.next_event;
+
+    (void)injectImuFromPlant(state, 42, 1.0);
+    for (int axis = 0; axis < 3; axis++) {
+      CHECK_EQ(IMU1.next_event.gyro[axis], legacy_imu1.gyro[axis]);
+      CHECK_EQ(IMU1.next_event.accel[axis], legacy_imu1.accel[axis]);
+      CHECK_EQ(IMU2.next_event.gyro[axis], legacy_imu2.gyro[axis]);
+      CHECK_EQ(IMU2.next_event.accel[axis], legacy_imu2.accel[axis]);
+    }
+  });
+
+  runCase("vertical: 1340us hovers when ground effect is disabled", [] {
+    RunConfig config;
+    config.initial.z_m = 1.0;
+    config.ticks = 1000;
+    config.base_throttle_us = 1340;
+    config.vertical_enabled = true;
+    config.plant_parameters.k_ge = 0.0;
+    const RunResult result = runSil(config);
+
+    CHECK_MSG(result.all_finite,
+              tickDetail("non-finite vertical hover state",
+                         result.first_nonfinite_tick));
+    CHECK_LE(std::fabs(result.samples.back().plant.z_m - 1.0), 0.002);
+    CHECK_LE(std::fabs(result.samples.back().plant.vz_ms), 0.005);
+  });
+
+  runCase("vertical: 0.4mps contact stays shallow and produces a pulse", [] {
+    RunConfig config;
+    config.initial.z_m = 0.0;
+    config.initial.vz_ms = -0.4;
+    config.ticks = 500;
+    config.base_throttle_us = 1280;
+    config.vertical_enabled = true;
+    config.plant_parameters.k_ge = 0.0;
+    const RunResult result = runSil(config);
+
+    double min_z_m = 0.0;
+    double peak_upward_accel_g = 0.0;
+    uint32_t pulse_samples = 0;
+    for (const Sample &sample : result.samples) {
+      min_z_m = std::min(min_z_m, sample.plant.z_m);
+      const double upward_accel_g =
+          sample.vertical_acceleration_ms2 / kGravityMs2;
+      peak_upward_accel_g = std::max(peak_upward_accel_g, upward_accel_g);
+      if (upward_accel_g >= 0.25) pulse_samples++;
+    }
+
+    std::cout << "[SIL] vertical contact min_z=" << min_z_m
+              << "m peak_upward_accel=" << peak_upward_accel_g
+              << "g duration>=0.25g=" << pulse_samples << "ms\n";
+    CHECK_GE(min_z_m, -0.025);
+    CHECK_LE(min_z_m, -0.015);
+    CHECK_GE(peak_upward_accel_g, 0.35);
+    CHECK_LE(peak_upward_accel_g, 0.55);
+    CHECK_GE(pulse_samples, 80U);
+    CHECK_LE(pulse_samples, 140U);
+  });
+
+  runCase("vertical: RC disconnect enters the real firmware failsafe", [] {
+    RunConfig config;
+    config.initial.z_m = 1.0;
+    config.ticks = RC_TIMEOUT_MS + 100U;
+    config.base_throttle_us = 1340;
+    config.vertical_enabled = true;
+    config.rc_disconnect_tick = 0;
+    const RunResult result = runSil(config);
+
+    CHECK_EQ(result.samples.back().failsafe_phase,
+             static_cast<uint8_t>(FS_DESCENDING));
+    CHECK_MSG(std::isfinite(result.samples.back().accel_magnitude_g),
+              "recorded firmware accel magnitude is non-finite");
+  });
+
+  runCase("vertical: ground effect and vertical force scale specific force", [] {
+    RunConfig baseline_config;
+    baseline_config.initial.z_m = 1.0;
+    baseline_config.ticks = 2;
+    baseline_config.base_throttle_us = 1340;
+    baseline_config.vertical_enabled = true;
+    baseline_config.plant_parameters.k_ge = 0.0;
+    const RunResult baseline = runSil(baseline_config);
+
+    RunConfig ground_effect_config = baseline_config;
+    ground_effect_config.initial.z_m = 0.0;
+    ground_effect_config.plant_parameters.k_ge = 0.15;
+    const RunResult ground_effect = runSil(ground_effect_config);
+
+    RunConfig force_config = baseline_config;
+    const double weight_n =
+        force_config.plant_parameters.mass_kg * kGravityMs2;
+    force_config.disturbance_for_interval = [weight_n](uint32_t) {
+      return Disturbance{0.0, 0.0, 0.0, 0.40 * weight_n};
+    };
+    const RunResult force = runSil(force_config);
+
+    CHECK_LE(std::fabs(baseline.samples[1].specific_force_g - 1.0), 1e-9);
+    CHECK_LE(std::fabs(ground_effect.samples[1].specific_force_g - 1.15),
+             1e-9);
+    CHECK_LE(std::fabs(force.samples[1].specific_force_g - 1.40), 1e-9);
   });
 
   runCase("gyro transform: prescribed +30deg roll tracks by 150ms", [] {
@@ -1093,6 +1439,94 @@ int main() {
               << tailMeanAbsYawRateDps(p_only, 500) << "dps Ki=0.05="
               << tailMeanAbsYawRateDps(with_i, 500)
               << "dps -- 플랜트 yaw 부호 미해결, 벤치 Stage D에서 확정\n";
+  });
+
+  runReport("V1 normal descent to ground (current firmware)", [] {
+    RunConfig config;
+    config.initial.z_m = 1.0;
+    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+    config.base_throttle_us = 1340;
+    config.vertical_enabled = true;
+    config.rc_disconnect_tick = 0;
+    printFailsafeTrace("V1", runSil(config));
+  });
+
+  runReport("V2 link loss while climbing (current firmware)", [] {
+    RunConfig config;
+    config.initial.z_m = 1.0;
+    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+    config.base_throttle_us = 1450;
+    config.vertical_enabled = true;
+    config.rc_disconnect_tick = 0;
+    printFailsafeTrace("V2", runSil(config));
+  });
+
+  runReport("V3 ground-effect passage (current firmware)", [] {
+    RunConfig config;
+    config.initial.z_m = 0.5;
+    config.initial.vz_ms = -0.7;
+    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+    config.base_throttle_us = 1430;
+    config.vertical_enabled = true;
+    config.rc_disconnect_tick = 0;
+    const double weight_n =
+        config.plant_parameters.mass_kg * kGravityMs2;
+    std::cout << "[SIL] V3 setup z0=0.5000m vz0=-0.7000m/s "
+                 "pre-entry balance=-0.27g post-entry gust=-0.30g/100ms\n";
+    config.disturbance_for_interval = [weight_n](uint32_t tick) {
+      if (tick < RC_TIMEOUT_MS) {
+        // 진입 스로틀 1430us의 초과추력만 상쇄해 -0.7m/s 하강을 유지한다.
+        return Disturbance{0.0, 0.0, 0.0, -0.27 * weight_n};
+      }
+      if (tick < RC_TIMEOUT_MS + 100U) {
+        return Disturbance{0.0, 0.0, 0.0, -0.30 * weight_n};
+      }
+      return Disturbance{};
+    };
+    printFailsafeTrace("V3", runSil(config));
+  });
+
+  runReport("V4 upward gust then steady descent (current firmware)", [] {
+    RunConfig config;
+    config.initial.z_m = 2.0;
+    config.initial.vz_ms = -1.2;
+    config.ticks = RC_TIMEOUT_MS + FS_MAX_MS + 1000U;
+    config.base_throttle_us = 1400;
+    config.vertical_enabled = true;
+    config.rc_disconnect_tick = 0;
+    config.plant_parameters.k_ge = 0.0;
+    const double weight_n =
+        config.plant_parameters.mass_kg * kGravityMs2;
+    std::cout << "[SIL] V4 setup z0=2.0000m vz0=-1.2000m/s "
+                 "down=-0.20g/150ms up=+0.40g/50ms then zero force\n";
+    config.disturbance_for_interval = [weight_n](uint32_t tick) {
+      if (tick >= RC_TIMEOUT_MS && tick < RC_TIMEOUT_MS + 150U) {
+        return Disturbance{0.0, 0.0, 0.0, -0.20 * weight_n};
+      }
+      if (tick >= RC_TIMEOUT_MS + 150U &&
+          tick < RC_TIMEOUT_MS + 200U) {
+        return Disturbance{0.0, 0.0, 0.0, 0.40 * weight_n};
+      }
+      return Disturbance{};
+    };
+    const RunResult result = runSil(config);
+    printFailsafeTrace("V4", result);
+    const Sample &quiet_start = sampleAtTick(result, 702U);
+    const Sample &quiet_400ms = sampleAtTick(result, 1102U);
+    double quiet_min_accel_g = std::numeric_limits<double>::infinity();
+    double quiet_max_accel_g = -std::numeric_limits<double>::infinity();
+    for (uint32_t tick = 702U; tick <= 1102U; tick++) {
+      const Sample &sample = sampleAtTick(result, tick);
+      quiet_min_accel_g =
+          std::min(quiet_min_accel_g, sample.accel_magnitude_g);
+      quiet_max_accel_g =
+          std::max(quiet_max_accel_g, sample.accel_magnitude_g);
+    }
+    std::cout << "[SIL] V4 quiet400 vz=" << quiet_start.plant.vz_ms
+              << "->" << quiet_400ms.plant.vz_ms << "m/s z="
+              << quiet_start.plant.z_m << "->" << quiet_400ms.plant.z_m
+              << "m accel_min=" << quiet_min_accel_g
+              << "g accel_max=" << quiet_max_accel_g << "g\n";
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count
