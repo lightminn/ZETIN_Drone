@@ -1,5 +1,6 @@
 import csv
 import datetime
+import math
 import socket
 import threading
 import time
@@ -26,6 +27,8 @@ TRIM_STEP     = 0.2
 TRIM_MAX_DEG  = 10.0
 STOP_RETRIES  = 5            # stop/start 재전송 횟수
 STOP_INTERVAL = 0.02         # 재전송 간격 (초)
+RESUME_RC_TIMEOUT_SEC = 2.0   # 새 RC가 드론에 수락됐음을 기다리는 시간
+RESUME_RESULT_TIMEOUT_SEC = 1.0  # resume 후 phase=0 확인 대기
 
 # --- 고장진단 상수 ---
 TELEM_TIMEOUT_SEC = 1.5
@@ -62,6 +65,7 @@ rc_seq = 0
 
 # 텔레메트리 상태
 telem_lock        = threading.Lock()
+safety_cmd_lock   = threading.Lock()
 last_telem_time   = 0.0
 telem_angle_x     = 0.0
 telem_angle_y     = 0.0
@@ -70,9 +74,23 @@ fault_rc_drone    = False
 fault_critical_drone = False   # Fault_Critical: IMU 상실/과도 기울기/캘리브레이션 실패
 telem_total_pkts  = 0
 telem_dropped_pkts = 0
+telem_failsafe_phase = None
+telem_hover_est = None
+telem_hover_valid = False
+
+# 명시적 resume 시도 상태. 텔레메트리로 RC 수락과 phase 전이를 확인한다.
+resume_state = "idle"  # idle | wait_rc | send_pending | wait_phase
+resume_deadline = 0.0
+resume_rc_total_baseline = 0
+resume_rc_dropped_baseline = 0
+resume_result_total_baseline = 0
+resume_result_dropped_baseline = 0
+resume_hover_est_snapshot = None
+resume_attempt_id = 0
 
 # 버튼 엣지 감지용
 last_btn_start = False
+last_btn_resume = False
 last_btn_R1    = False
 last_btn_L1    = False
 last_trig_R2   = False
@@ -100,11 +118,15 @@ def reliable_send(cmd: str):
 
 def disarm(reason: str = "수동"):
     global is_armed, is_streaming, current_throttle, throttle_f
-    reliable_send("stop")
-    is_armed         = False
-    is_streaming     = False
-    current_throttle = 1000
-    throttle_f       = 1000.0
+    with safety_cmd_lock:
+        cancelled_resume = _invalidate_resume_attempt()
+        is_armed         = False
+        is_streaming     = False
+        current_throttle = 1000
+        throttle_f       = 1000.0
+        reliable_send("stop")
+    if cancelled_resume:
+        print(f"\n[RESUME] 실패: {reason}으로 복구 시도 취소")
     print(f"\n>>> [SYSTEM] DISARMED ({reason})")
 
 
@@ -121,10 +143,211 @@ def stop_streaming_only(reason: str):
     비대칭 고장에서는 링크가 간헐적으로 열려 그 stop이 실제로 도착한다.
     """
     global is_streaming, current_throttle, throttle_f
-    is_streaming = False
-    current_throttle = 1000
-    throttle_f = 1000.0
+    with safety_cmd_lock:
+        cancelled_resume = _invalidate_resume_attempt()
+        is_streaming = False
+        current_throttle = 1000
+        throttle_f = 1000.0
+    if cancelled_resume:
+        print(f"\n[RESUME] 실패: {reason}으로 복구 시도 취소")
     print(f"\n>>> [SYSTEM] 로컬 해제 ({reason}) - stop 미전송")
+
+
+def _invalidate_resume_attempt():
+    """safety_cmd_lock 보유자가 현재 resume 세대를 무효화한다."""
+    global resume_state, resume_attempt_id
+    with telem_lock:
+        was_active = resume_state != "idle"
+        resume_state = "idle"
+        resume_attempt_id += 1
+    return was_active
+
+
+def cancel_resume_attempt():
+    """킬/링크 재상실 뒤 늦은 텔레메트리가 resume을 보내지 못하게 한다."""
+    with safety_cmd_lock:
+        _invalidate_resume_attempt()
+
+
+def _forward_counter_delta(current, baseline):
+    """uint32 정방향(wrap 포함)만 작은 delta로 인정하고 rollback은 거부한다."""
+    if current is None:
+        return None
+    delta = (int(current) - int(baseline)) & 0xFFFFFFFF
+    return delta if delta < 0x80000000 else None
+
+
+def check_resume_timeout(now=None):
+    """수신 성공 여부와 무관하게 resume 상태의 wall-clock deadline을 집행한다."""
+    global resume_state, resume_attempt_id
+    if now is None:
+        now = time.monotonic()
+    expired_state = None
+    with safety_cmd_lock:
+        with telem_lock:
+            if resume_state != "idle" and now >= resume_deadline:
+                expired_state = resume_state
+                resume_state = "idle"
+                resume_attempt_id += 1
+    if expired_state is not None:
+        print(f"[RESUME] 실패: {expired_state} 확인 시간 초과")
+
+
+def request_resume(source: str) -> bool:
+    """명시적 resume을 시작하되, RC 수락 확인 전에는 명령을 보내지 않는다."""
+    global is_streaming, resume_state, resume_deadline
+    global resume_rc_total_baseline, resume_rc_dropped_baseline
+    global resume_hover_est_snapshot, resume_attempt_id
+
+    with safety_cmd_lock:
+        now = time.monotonic()
+        with telem_lock:
+            if resume_state != "idle":
+                print("\n[RESUME] 이미 복구 시도 중")
+                return False
+            if not is_armed:
+                print("\n[RESUME] 실패: 지상국이 드론을 무장 상태로 보지 않음")
+                return False
+            if telem_failsafe_phase != 1:
+                print(f"\n[RESUME] 실패: Failsafe_Phase={telem_failsafe_phase!r}, 하강 중이 아님")
+                return False
+            if last_telem_time <= 0 or now - last_telem_time > TELEM_TIMEOUT_SEC:
+                print("\n[RESUME] 실패: 마지막 텔레메트리가 너무 오래됨")
+                return False
+            if (not telem_hover_valid or telem_hover_est is None
+                    or not math.isfinite(telem_hover_est)):
+                print("\n[RESUME] 실패: 유효한 Hover_Est 텔레메트리가 없음")
+                return False
+
+            resume_attempt_id += 1
+            resume_state = "wait_rc"
+            resume_deadline = now + RESUME_RC_TIMEOUT_SEC
+            resume_rc_total_baseline = telem_total_pkts
+            resume_rc_dropped_baseline = telem_dropped_pkts
+            resume_hover_est_snapshot = float(telem_hover_est)
+            is_streaming = True
+
+    print(f"\n[RESUME] {source}: RC 스트리밍 재개, 드론 수락 확인 대기")
+    return True
+
+
+def advance_resume_attempt(sample, now=None):
+    """텔레메트리 확인을 진행하고, 수락된 RC가 생긴 뒤에만 resume을 보낸다."""
+    global resume_state, resume_deadline, resume_attempt_id
+    global resume_result_total_baseline, resume_result_dropped_baseline
+    global current_throttle, throttle_f
+
+    if now is None:
+        now = time.monotonic()
+    send_resume = False
+    send_token = None
+    resumed_hover = None
+    failure = None
+    with telem_lock:
+        if resume_state != "idle" and sample.get("Armed") != 1:
+            resume_state = "idle"
+            resume_attempt_id += 1
+            failure = f"Armed={sample.get('Armed')!r}"
+        elif resume_state != "idle" and sample.get("Fault_Critical") != 0:
+            resume_state = "idle"
+            resume_attempt_id += 1
+            failure = f"Fault_Critical={sample.get('Fault_Critical')!r}"
+
+        if resume_state == "wait_rc":
+            phase = sample.get("Failsafe_Phase")
+            if phase != 1:
+                resume_state = "idle"
+                resume_attempt_id += 1
+                failure = f"Failsafe_Phase={phase!r}, 하강 중이 아님"
+            else:
+                total = sample.get("RC_Total_Pkts")
+                dropped = sample.get("RC_Dropped_Pkts")
+                accepted_rc = False
+                if total is not None and dropped is not None:
+                    total_delta = _forward_counter_delta(
+                        total, resume_rc_total_baseline
+                    )
+                    dropped_delta = _forward_counter_delta(
+                        dropped, resume_rc_dropped_baseline
+                    )
+                else:
+                    total_delta = dropped_delta = None
+                if ((total is not None and total_delta is None)
+                        or (dropped is not None and dropped_delta is None)):
+                    resume_state = "idle"
+                    resume_attempt_id += 1
+                    failure = "RC 텔레메트리 카운터 rollback/reset 감지"
+                elif (total_delta is not None and dropped_delta is not None
+                        and total_delta > dropped_delta):
+                    resume_state = "send_pending"
+                    resume_deadline = now + RESUME_RESULT_TIMEOUT_SEC
+                    resume_result_total_baseline = int(total)
+                    resume_result_dropped_baseline = int(dropped)
+                    send_resume = True
+                    send_token = resume_attempt_id
+                elif now >= resume_deadline:
+                    resume_state = "idle"
+                    resume_attempt_id += 1
+                    failure = "RC 수락을 텔레메트리로 확인하지 못함"
+        elif resume_state == "wait_phase":
+            phase = sample.get("Failsafe_Phase")
+            total = sample.get("RC_Total_Pkts")
+            dropped = sample.get("RC_Dropped_Pkts")
+            total_delta = _forward_counter_delta(
+                total, resume_result_total_baseline
+            )
+            dropped_delta = _forward_counter_delta(
+                dropped, resume_result_dropped_baseline
+            )
+            if ((total is not None and total_delta is None)
+                    or (dropped is not None and dropped_delta is None)):
+                resume_state = "idle"
+                resume_attempt_id += 1
+                failure = "resume 확인 텔레메트리 카운터 rollback/reset 감지"
+            elif not (total_delta is not None and dropped_delta is not None
+                      and total_delta > dropped_delta):
+                if now >= resume_deadline:
+                    resume_state = "idle"
+                    resume_attempt_id += 1
+                    failure = "resume 후 수락된 RC/phase 확인 시간 초과"
+            elif phase == 0:
+                hover = sample.get("Hover_Est")
+                if hover is None or not math.isfinite(float(hover)):
+                    hover = resume_hover_est_snapshot
+                resumed_hover = max(1000.0, min(1900.0, float(hover)))
+                throttle_f = resumed_hover
+                current_throttle = int(round(resumed_hover))
+                resume_state = "idle"
+            elif phase is not None and phase != 1:
+                resume_state = "idle"
+                resume_attempt_id += 1
+                failure = f"Failsafe_Phase={phase}, 자동착륙이 이미 종료됨"
+            elif now >= resume_deadline:
+                resume_state = "idle"
+                resume_attempt_id += 1
+                failure = f"Failsafe_Phase={phase!r} 유지 (resume 거부 또는 확인 시간 초과)"
+
+    if send_resume:
+        with safety_cmd_lock:
+            with telem_lock:
+                token_is_current = (
+                    resume_state == "send_pending"
+                    and resume_attempt_id == send_token
+                )
+            if token_is_current:
+                reliable_send("resume")
+                with telem_lock:
+                    if (resume_state == "send_pending"
+                            and resume_attempt_id == send_token):
+                        resume_state = "wait_phase"
+                print("[RESUME] RC 수락 확인됨, resume 전송 - Failsafe_Phase 확인 대기")
+    if resumed_hover is not None:
+        print(
+            f"[RESUME] 성공: Failsafe_Phase=0, Hover_Est={resumed_hover:.1f}µs 동기화. "
+            "고도는 복구되지 않습니다. 즉시 스로틀을 올리십시오!"
+        )
+    if failure is not None:
+        print(f"[RESUME] 실패: {failure}")
 
 
 def arm():
@@ -146,6 +369,19 @@ def deadzone(v: float, dz: float = 0.05) -> float:
     return v if abs(v) > dz else 0.0
 
 
+def handle_stdin_command(msg: str):
+    """stdin resume은 RC 선행 확인 경로로 보내고, 나머지는 기존대로 전달한다."""
+    command = msg.strip()
+    if not command:
+        return
+    if command.lower() == "resume":
+        request_resume("stdin")
+    elif command.lower() == "stop":
+        disarm("stdin stop")
+    else:
+        send_cmd(command)
+
+
 # ==========================================================
 # 텔레메트리 수신 + 고장진단 스레드
 # ==========================================================
@@ -154,6 +390,7 @@ def telemetry_thread():
     global telem_angle_x, telem_angle_y, telem_throttle
     global fault_rc_drone, fault_critical_drone
     global telem_total_pkts, telem_dropped_pkts
+    global telem_failsafe_phase, telem_hover_est, telem_hover_valid
     global trim_roll, trim_pitch, trim_synced
 
     print("[TELEM] 수신 스레드 시작")
@@ -164,6 +401,7 @@ def telemetry_thread():
     packet_count = 0
 
     while True:
+        check_resume_timeout()
         # 시동 전에도 텔레메트리를 받도록 주기적으로 목적지를 등록한다.
         now = time.monotonic()
         if now - last_connect >= 1.0:
@@ -200,6 +438,9 @@ def telemetry_thread():
             fault_critical_drone = sample["Fault_Critical"] == 1
             telem_total_pkts   = sample["RC_Total_Pkts"] or 0
             telem_dropped_pkts = sample["RC_Dropped_Pkts"] or 0
+            telem_failsafe_phase = sample["Failsafe_Phase"]
+            telem_hover_est = sample["Hover_Est"]
+            telem_hover_valid = sample["Hover_Valid"] == 1
             last_telem_time    = time.monotonic()
             if not trim_synced:
                 received_trim_roll = sample["Trim_Roll"]
@@ -254,6 +495,9 @@ def telemetry_thread():
                 disarm("드론 치명 고장")
         prev_fault_critical = fault_critical_drone
 
+        # Armed/critical/RC 안전 처리가 resume보다 항상 우선한다.
+        advance_resume_attempt(sample)
+
         # 패킷 드롭률 출력 (10% 초과 시 경고)
         if telem_total_pkts > 100 and telem_total_pkts % 50 == 0:
             drop_rate = telem_dropped_pkts / telem_total_pkts * 100
@@ -273,7 +517,8 @@ def telemetry_thread():
 # ==========================================================
 def controller_thread():
     global current_throttle, throttle_f, trim_roll, trim_pitch, trim_synced, rc_seq
-    global last_btn_start, last_btn_R1, last_btn_L1, last_btn_trim_reset
+    global last_btn_start, last_btn_resume
+    global last_btn_R1, last_btn_L1, last_btn_trim_reset
     global last_trig_R2, last_trig_L2, last_hat_state
 
     pygame.init()
@@ -287,6 +532,7 @@ def controller_thread():
 
     print("========== DRONE CONTROLLER ==========")
     print(f" [X]        Arm / Disarm")
+    print(f" [△]        Resume (자동착륙 중 명시적 복구)")
     print(f" [R2/L2]    Throttle ↑/↓ (누르는 동안 연속, {THROTTLE_RATE:.0f}µs/s)")
     print(f" [R1/L1]    Throttle +1 / -1 (정밀)")
     print(f" [DPAD]     Trim  |  [PS] Trim Reset")
@@ -329,6 +575,12 @@ def controller_thread():
             else:
                 arm()
         last_btn_start = btn_start
+
+        # --- 자동착륙 복구 (X와 분리된 명시적 입력) ---
+        btn_resume = joy.get_button(3)
+        if btn_resume and not last_btn_resume:
+            request_resume("△ 버튼")
+        last_btn_resume = btn_resume
 
         if is_streaming:
             # 실측 매핑(gamepad_probe): R1=b5, L1=b4, R2=a5, L2=a2 (트리거 휴지 -1.0)
@@ -423,7 +675,7 @@ try:
         try:
             msg = input()
             if msg:
-                send_cmd(msg)
+                handle_stdin_command(msg)
         except KeyboardInterrupt:
             if is_armed:
                 disarm("키보드 인터럽트")

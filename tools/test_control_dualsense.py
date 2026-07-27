@@ -69,9 +69,18 @@ class _LoopEvent:
 
 
 class _Joystick:
-    def __init__(self, event, *, start=False, reset=False, hats=None):
+    def __init__(
+        self,
+        event,
+        *,
+        start=False,
+        resume=False,
+        reset=False,
+        hats=None,
+    ):
         self.event = event
         self.start = start
+        self.resume = resume
         self.reset = reset
         self.hats = hats or [(0, 0)]
 
@@ -84,6 +93,8 @@ class _Joystick:
     def get_button(self, index):
         if index == 0:
             return self.start
+        if index == 3:
+            return self.resume
         if index == 12:
             return self.reset
         return False
@@ -122,6 +133,9 @@ def _telemetry_sample(**overrides):
         "Armed": 1,
         "Trim_Roll": 0.0,
         "Trim_Pitch": 0.0,
+        "Failsafe_Phase": 1,
+        "Hover_Est": 1360.0,
+        "Hover_Valid": 1,
     }
     sample.update(overrides)
     return sample
@@ -157,15 +171,25 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         ):
             spec.loader.exec_module(module)
         self.module = module
+        self.module.last_telem_time = self.module.time.monotonic()
 
     def tearDown(self):
         sys.modules.pop(self.module.__name__, None)
 
-    def _run_controller(self, *, iterations, start=False, reset=False, hats=None):
+    def _run_controller(
+        self,
+        *,
+        iterations,
+        start=False,
+        resume=False,
+        reset=False,
+        hats=None,
+    ):
         event = _LoopEvent(iterations)
         joystick = _Joystick(
             event,
             start=start,
+            resume=resume,
             reset=reset,
             hats=hats,
         )
@@ -201,6 +225,567 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             self.assertRaises(_LoopComplete),
         ):
             self.module.telemetry_thread()
+
+    def test_resume_request_restarts_streaming_before_sending_resume(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+
+        request_resume = getattr(self.module, "request_resume", None)
+        self.assertIsNotNone(request_resume, "resume must be reachable from the ground station")
+        accepted = request_resume("stdin")
+
+        self.assertTrue(accepted)
+        self.assertTrue(self.module.is_streaming)
+        self.assertEqual(commands, [])
+
+    def test_resume_request_rejects_stale_cached_telemetry(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.last_telem_time = 1.0
+
+        output = io.StringIO()
+        with (
+            mock.patch.object(self.module.time, "monotonic", return_value=10.0),
+            contextlib.redirect_stdout(output),
+        ):
+            accepted = self.module.request_resume("test")
+
+        self.assertFalse(accepted)
+        self.assertFalse(self.module.is_streaming)
+        self.assertEqual(commands, [])
+        self.assertIn("오래됨", output.getvalue())
+
+    def test_resume_is_sent_only_after_telemetry_confirms_an_accepted_rc(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        with mock.patch.object(self.module.time, "monotonic", return_value=10.0):
+            self.module.request_resume("test")
+
+        advance = getattr(self.module, "advance_resume_attempt", None)
+        self.assertIsNotNone(
+            advance,
+            "telemetry must gate resume on an RC packet accepted by firmware",
+        )
+        advance(
+            _telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=4),
+            now=10.1,
+        )
+        self.assertEqual(commands, [])
+
+        advance(
+            _telemetry_sample(RC_Total_Pkts=43, RC_Dropped_Pkts=5),
+            now=10.2,
+        )
+        self.assertEqual(commands, ["resume"])
+
+    def test_resume_wait_rc_times_out_when_every_new_packet_is_dropped(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        with mock.patch.object(self.module.time, "monotonic", return_value=10.0):
+            self.module.request_resume("test")
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(RC_Total_Pkts=45, RC_Dropped_Pkts=8),
+                now=12.1,
+            )
+
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(commands, [])
+        self.assertIn("실패", output.getvalue())
+        self.assertIn("RC 수락", output.getvalue())
+
+    def test_resume_rejects_rc_counter_rollback_instead_of_treating_it_as_wrap(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 10
+        self.module.telem_dropped_pkts = 100
+        self.module.request_resume("test")
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(RC_Total_Pkts=0, RC_Dropped_Pkts=0),
+                now=self.module.resume_deadline - 0.1,
+            )
+
+        self.assertEqual(commands, [])
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertIn("카운터", output.getvalue())
+
+    def test_resume_accepts_a_small_forward_uint32_counter_wrap(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 0xFFFFFFFE
+        self.module.telem_dropped_pkts = 7
+        self.module.request_resume("test")
+
+        self.module.advance_resume_attempt(
+            _telemetry_sample(RC_Total_Pkts=0, RC_Dropped_Pkts=7),
+            now=self.module.resume_deadline - 0.1,
+        )
+
+        self.assertEqual(commands, ["resume"])
+        self.assertEqual(self.module.resume_state, "wait_phase")
+
+    def test_resume_success_syncs_local_throttle_to_hover_est_and_warns_operator(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.current_throttle = 1000
+        self.module.throttle_f = 1000.0
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        with mock.patch.object(self.module.time, "monotonic", return_value=10.0):
+            self.module.request_resume("test")
+        self.module.advance_resume_attempt(
+            _telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=3),
+            now=10.1,
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(
+                    Failsafe_Phase=0,
+                    Hover_Est=1378.6,
+                    Hover_Valid=1,
+                    RC_Total_Pkts=42,
+                    RC_Dropped_Pkts=3,
+                ),
+                now=10.2,
+            )
+
+        self.assertEqual(commands, ["resume"])
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(self.module.current_throttle, 1379)
+        self.assertAlmostEqual(self.module.throttle_f, 1378.6)
+        self.assertIn("성공", output.getvalue())
+        self.assertIn("즉시 스로틀을 올리", output.getvalue())
+
+    def test_stale_phase_zero_packet_cannot_confirm_resume_success(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.current_throttle = 1000
+        self.module.throttle_f = 1000.0
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+        self.module.advance_resume_attempt(
+            _telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=3),
+            now=10.1,
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(
+                    Failsafe_Phase=0,
+                    Hover_Est=1378.6,
+                    Hover_Valid=1,
+                    RC_Total_Pkts=39,
+                    RC_Dropped_Pkts=3,
+                ),
+                now=10.2,
+            )
+
+        self.assertEqual(commands, ["resume"])
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(self.module.current_throttle, 1000)
+        self.assertEqual(self.module.throttle_f, 1000.0)
+        self.assertIn("실패", output.getvalue())
+        self.assertNotIn("성공", output.getvalue())
+
+    def test_resume_refusal_is_reported_when_phase_stays_descending(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.current_throttle = 1000
+        self.module.throttle_f = 1000.0
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        with mock.patch.object(self.module.time, "monotonic", return_value=10.0):
+            self.module.request_resume("test")
+        self.module.advance_resume_attempt(
+            _telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=3),
+            now=10.1,
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(
+                    Failsafe_Phase=1,
+                    RC_Total_Pkts=42,
+                    RC_Dropped_Pkts=3,
+                ),
+                now=11.2,
+            )
+
+        self.assertEqual(commands, ["resume"])
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(self.module.current_throttle, 1000)
+        self.assertEqual(self.module.throttle_f, 1000.0)
+        self.assertIn("실패", output.getvalue())
+        self.assertIn("Failsafe_Phase=1", output.getvalue())
+        self.assertNotIn("성공", output.getvalue())
+
+    def test_resume_timeout_is_checked_without_a_valid_telemetry_sample(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        with mock.patch.object(self.module.time, "monotonic", return_value=10.0):
+            self.module.request_resume("test")
+
+        check_timeout = getattr(self.module, "check_resume_timeout", None)
+        self.assertIsNotNone(
+            check_timeout,
+            "resume deadlines must advance even during malformed/absent telemetry",
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            check_timeout(now=12.1)
+
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(commands, [])
+        self.assertIn("실패", output.getvalue())
+        self.assertIn("시간 초과", output.getvalue())
+
+    def test_telemetry_thread_advances_resume_attempt(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        self._run_telemetry([
+            _telemetry_sample(
+                Failsafe_Phase=1,
+                Hover_Est=1360.0,
+                Hover_Valid=1,
+                RC_Total_Pkts=41,
+                RC_Dropped_Pkts=3,
+            ),
+        ])
+
+        self.assertEqual(commands, ["resume"])
+        self.assertEqual(self.module.resume_state, "wait_phase")
+
+    def test_critical_fault_sample_cancels_resume_before_command_send(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(
+                    Fault_Critical=1,
+                    RC_Total_Pkts=41,
+                    RC_Dropped_Pkts=3,
+                ),
+                now=10.0,
+            )
+
+        self.assertEqual(commands, [])
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertIn("실패", output.getvalue())
+        self.assertIn("Fault_Critical", output.getvalue())
+
+    def test_disarmed_sample_cancels_resume_before_command_send(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.advance_resume_attempt(
+                _telemetry_sample(
+                    Armed=0,
+                    RC_Total_Pkts=41,
+                    RC_Dropped_Pkts=3,
+                ),
+                now=10.0,
+            )
+
+        self.assertEqual(commands, [])
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertIn("실패", output.getvalue())
+        self.assertIn("Armed=0", output.getvalue())
+
+    def test_triangle_button_starts_resume_without_disarming(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+
+        self._run_controller(iterations=2, resume=True)
+
+        self.assertTrue(self.module.is_armed)
+        self.assertTrue(self.module.is_streaming)
+        self.assertEqual(self.module.resume_state, "wait_rc")
+        self.assertEqual(commands, [])
+
+    def test_stdin_resume_uses_the_guarded_sequence_instead_of_direct_send(self):
+        direct_commands = []
+        reliable_commands = []
+        self.module.send_cmd = direct_commands.append
+        self.module.reliable_send = reliable_commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+
+        handler = getattr(self.module, "handle_stdin_command", None)
+        self.assertIsNotNone(handler, "stdin resume must use the guarded resume path")
+        handler("  resume  ")
+
+        self.assertEqual(self.module.resume_state, "wait_rc")
+        self.assertTrue(self.module.is_streaming)
+        self.assertEqual(direct_commands, [])
+        self.assertEqual(reliable_commands, [])
+
+    def test_stdin_stop_cancels_resume_before_sending_stop(self):
+        direct_commands = []
+        reliable_commands = []
+        self.module.send_cmd = direct_commands.append
+        self.module.reliable_send = reliable_commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        self.module.handle_stdin_command("stop")
+        self.module.advance_resume_attempt(
+            _telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=3),
+            now=10.0,
+        )
+
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(direct_commands, [])
+        self.assertEqual(reliable_commands, ["stop"])
+
+    def test_disarm_cancels_a_ground_station_resume_attempt(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        self.module.disarm("test")
+        self.module.advance_resume_attempt(
+            _telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=3),
+            now=10.0,
+        )
+
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(commands, ["stop"])
+
+    def test_streaming_loss_reports_that_the_resume_attempt_failed(self):
+        commands = []
+        self.module.reliable_send = commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.module.stop_streaming_only("텔레메트리 끊김")
+
+        self.assertEqual(self.module.resume_state, "idle")
+        self.assertEqual(commands, [])
+        self.assertIn("[RESUME] 실패", output.getvalue())
+        self.assertIn("텔레메트리 끊김", output.getvalue())
+
+    def test_concurrent_disarm_cannot_be_followed_by_resume(self):
+        commands = []
+        resume_send_started = threading.Event()
+        release_resume_send = threading.Event()
+        stop_sent = threading.Event()
+
+        def controlled_reliable_send(command):
+            if command == "resume":
+                resume_send_started.set()
+                release_resume_send.wait(timeout=2.0)
+            commands.append(command)
+            if command == "stop":
+                stop_sent.set()
+
+        self.module.reliable_send = controlled_reliable_send
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+        self.module.request_resume("test")
+
+        resume_thread = threading.Thread(
+            target=self.module.advance_resume_attempt,
+            args=(_telemetry_sample(RC_Total_Pkts=41, RC_Dropped_Pkts=3),),
+            kwargs={"now": 10.0},
+        )
+        resume_thread.start()
+        self.assertTrue(resume_send_started.wait(timeout=1.0))
+
+        disarm_thread = threading.Thread(
+            target=self.module.disarm,
+            args=("test",),
+        )
+        disarm_thread.start()
+        stop_sent.wait(timeout=0.2)
+        release_resume_send.set()
+        resume_thread.join(timeout=2.0)
+        disarm_thread.join(timeout=2.0)
+
+        self.assertFalse(resume_thread.is_alive())
+        self.assertFalse(disarm_thread.is_alive())
+        self.assertEqual(commands, ["resume", "stop"])
+        self.assertEqual(self.module.resume_state, "idle")
+
+    def test_resume_request_is_serialized_behind_an_in_progress_stop(self):
+        stop_send_started = threading.Event()
+        release_stop_send = threading.Event()
+        request_done = threading.Event()
+        request_results = []
+
+        def controlled_reliable_send(command):
+            if command == "stop":
+                stop_send_started.set()
+                release_stop_send.wait(timeout=2.0)
+
+        self.module.reliable_send = controlled_reliable_send
+        self.module.is_armed = True
+        self.module.is_streaming = False
+        self.module.telem_failsafe_phase = 1
+        self.module.telem_hover_est = 1360.0
+        self.module.telem_hover_valid = True
+        self.module.telem_total_pkts = 40
+        self.module.telem_dropped_pkts = 3
+
+        disarm_thread = threading.Thread(
+            target=self.module.disarm,
+            args=("test",),
+        )
+        disarm_thread.start()
+        self.assertTrue(stop_send_started.wait(timeout=1.0))
+
+        def request_in_thread():
+            request_results.append(self.module.request_resume("test"))
+            request_done.set()
+
+        request_thread = threading.Thread(target=request_in_thread)
+        request_thread.start()
+        finished_before_stop = request_done.wait(timeout=0.2)
+        release_stop_send.set()
+        disarm_thread.join(timeout=2.0)
+        request_thread.join(timeout=2.0)
+
+        self.assertFalse(finished_before_stop)
+        self.assertFalse(disarm_thread.is_alive())
+        self.assertFalse(request_thread.is_alive())
+        self.assertEqual(request_results, [False])
+        self.assertEqual(self.module.resume_state, "idle")
 
     def test_x_button_disarms_after_streaming_stops(self):
         commands = []
