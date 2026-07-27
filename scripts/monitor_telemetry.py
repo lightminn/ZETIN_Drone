@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+from failsafe_telemetry import render_monitor_title
 from telemetry_schema import (
     CSV_FIELDS,
     active_fault_names,
@@ -40,6 +41,7 @@ scaled_data = deque(maxlen=MAX_LEN)
 critical_fault_data = deque(maxlen=MAX_LEN)
 any_fault_data = deque(maxlen=MAX_LEN)
 calibration_ok_data = deque(maxlen=MAX_LEN)
+failsafe_phase_data = deque(maxlen=MAX_LEN)
 
 filename = f"flight_log_{datetime.datetime.now():%Y-%m-%d_%H%M%S}.csv"
 file_path = LOG_DIR / filename
@@ -108,6 +110,7 @@ def update_plot(_frame):
             scaled_data.append(optional_number(sample["Mixer_Scaled"]))
             critical_fault_data.append(optional_number(sample["Fault_Critical"]))
             calibration_ok_data.append(optional_number(sample["Calibration_OK"]))
+            failsafe_phase_data.append(optional_number(sample["Failsafe_Phase"]))
 
             known_fault_fields = [
                 sample[name]
@@ -177,9 +180,17 @@ def update_plot(_frame):
     ax4.step(x, critical_fault_data, where="post", label="Critical fault", alpha=0.8)
     ax4.step(x, any_fault_data, where="post", label="Any fault", alpha=0.8)
     ax4.step(x, calibration_ok_data, where="post", label="Calibration OK", alpha=0.8)
+    ax4.step(
+        x,
+        failsafe_phase_data,
+        where="post",
+        label="Failsafe phase",
+        color="crimson",
+        linewidth=2,
+    )
     ax4.set_ylabel("State")
-    ax4.set_ylim(-0.1, 2.2)
-    ax4.set_yticks([0, 1, 2])
+    ax4.set_ylim(-0.1, 4.2)
+    ax4.set_yticks([0, 1, 2, 3, 4])
     ax4.set_xlabel("Recent sample")
     ax4.grid(True)
     ax4.legend(loc="upper right", fontsize="small", ncol=3)
@@ -191,7 +202,11 @@ def update_plot(_frame):
         active_text = "legacy/unknown" if active is None else str(active)
         faults = active_fault_names(latest_sample)
         fault_text = ", ".join(faults) if faults else "none"
-        ax4.set_title(f"System status — active IMUs: {active_text}, faults: {fault_text}")
+        render_monitor_title(
+            ax4,
+            f"System status — active IMUs: {active_text}, faults: {fault_text}",
+            latest_sample,
+        )
 
     fig.tight_layout(rect=(0, 0, 1, 0.97))
 

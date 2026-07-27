@@ -4,6 +4,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from failsafe_telemetry import format_failsafe_phase, phase_number
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_DIR = SCRIPT_DIR.parent / "logs"
@@ -55,6 +57,7 @@ cols_attitude = ["Roll", "Pitch", "Yaw"]
 cols_gyro = ["Gyro_X", "Gyro_Y", "Gyro_Z"]
 cols_accel = ["Accel_X", "Accel_Y", "Accel_Z"]
 cols_control = ["Throttle", "Active_IMUs", "Mixer_Scaled"]
+cols_trim = ["Trim_Roll", "Trim_Pitch"]
 cols_fault = [
     "Fault_RC",
     "Fault_Critical",
@@ -67,7 +70,7 @@ cols_fault = [
 
 summary_columns = [
     column
-    for column in cols_attitude + cols_gyro + cols_accel + cols_control
+    for column in cols_attitude + cols_gyro + cols_accel + cols_control + cols_trim
     if column in df.columns and df[column].notna().any()
 ]
 
@@ -121,7 +124,134 @@ if all(column in df.columns for column in ("RC_Total_Pkts", "RC_Dropped_Pkts")):
         dropped = int(dropped_series.iloc[-1])
         rate = dropped / total * 100 if total > 0 else 0.0
         print(f"  RC packet drops: {dropped}/{total} ({rate:.2f}%)")
+
+
+def latest_number(column):
+    if column not in df.columns:
+        return None
+    valid = df[column].dropna()
+    return None if valid.empty else float(valid.iloc[-1])
+
+
+trim_roll = latest_number("Trim_Roll")
+trim_pitch = latest_number("Trim_Pitch")
+if trim_roll is None and trim_pitch is None:
+    print("  Trim: legacy/unknown")
+else:
+    roll_text = "unknown" if trim_roll is None else f"{trim_roll:+.2f}°"
+    pitch_text = "unknown" if trim_pitch is None else f"{trim_pitch:+.2f}°"
+    print(f"  Trim: Roll {roll_text}, Pitch {pitch_text}")
 print("=" * 72)
+
+
+def timestamp_seconds(value):
+    parsed = pd.to_timedelta(str(value), errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.total_seconds()
+
+
+def collect_failsafe_analysis(frame):
+    if "Failsafe_Phase" not in frame.columns:
+        return [], [], [], False
+
+    valid_samples = []
+    day_offset = 0.0
+    previous_seconds = None
+    for index, raw_phase in frame["Failsafe_Phase"].items():
+        phase = phase_number(raw_phase)
+        if phase is None:
+            continue
+
+        timestamp = (
+            str(frame.at[index, "Timestamp"])
+            if "Timestamp" in frame.columns
+            else str(index)
+        )
+        seconds = timestamp_seconds(timestamp)
+        if seconds is not None:
+            seconds += day_offset
+            if previous_seconds is not None and seconds < previous_seconds - 43200.0:
+                day_offset += 86400.0
+                seconds += 86400.0
+            previous_seconds = seconds
+        valid_samples.append(
+            {
+                "index": int(index),
+                "timestamp": timestamp,
+                "seconds": seconds,
+                "phase": phase,
+            }
+        )
+
+    transitions = []
+    for previous, current in zip(valid_samples, valid_samples[1:]):
+        if previous["phase"] != current["phase"]:
+            transitions.append(
+                {
+                    "index": current["index"],
+                    "timestamp": current["timestamp"],
+                    "from": previous["phase"],
+                    "to": current["phase"],
+                }
+            )
+
+    episodes = []
+    descent_start = None
+    for sample in valid_samples:
+        if sample["phase"] == 1 and descent_start is None:
+            descent_start = sample
+        elif sample["phase"] != 1 and descent_start is not None:
+            duration = None
+            if descent_start["seconds"] is not None and sample["seconds"] is not None:
+                duration = sample["seconds"] - descent_start["seconds"]
+            episodes.append(
+                {
+                    "start": descent_start,
+                    "end": sample,
+                    "duration": duration,
+                    "terminal_phase": sample["phase"],
+                }
+            )
+            descent_start = None
+
+    had_descent = any(sample["phase"] == 1 for sample in valid_samples)
+    return valid_samples, transitions, episodes, had_descent
+
+
+phase_samples, phase_transitions, auto_land_episodes, had_descent = (
+    collect_failsafe_analysis(df)
+)
+
+print("\n🛬 Failsafe phase transitions")
+if not phase_samples:
+    print("  Failsafe_Phase: 전이 없음 (legacy/unknown)")
+elif not phase_transitions:
+    print(
+        "  Failsafe_Phase: 전이 없음 "
+        f"(전체 {format_failsafe_phase(phase_samples[0]['phase'])})"
+    )
+else:
+    print(f"  {'시각':<15} {'샘플':>7}  전이")
+    for transition in phase_transitions:
+        print(
+            f"  {transition['timestamp']:<15} {transition['index']:>7}  "
+            f"{format_failsafe_phase(transition['from'])} → "
+            f"{format_failsafe_phase(transition['to'])}"
+        )
+
+for episode_number, episode in enumerate(auto_land_episodes, start=1):
+    prefix = "" if len(auto_land_episodes) == 1 else f" #{episode_number}"
+    if episode["duration"] is None:
+        print(f"  자동착륙{prefix} 소요 시간: 계산 불가")
+    else:
+        print(f"  자동착륙{prefix} 소요 시간: {episode['duration']:.3f}초")
+    print(
+        f"  종료 phase: {format_failsafe_phase(episode['terminal_phase'])}"
+    )
+
+if had_descent and not auto_land_episodes:
+    print("  자동착륙: 로그 종료 시점에도 DESCENDING (종료 phase 없음)")
 
 plt.style.use(
     "seaborn-v0_8-darkgrid"
@@ -240,6 +370,20 @@ ax4_active.set_yticks([0, 1, 2])
 ax4.set_title("4. Saturation, Redundancy & Fault Events")
 ax4.set_xlabel("Sample count")
 ax4.grid(True, axis="x", alpha=0.4)
+
+if "Failsafe_Phase" in df.columns and df["Failsafe_Phase"].notna().any():
+    descending = df["Failsafe_Phase"].eq(1).fillna(False)
+    start = None
+    for index, active in descending.items():
+        if active and start is None:
+            start = int(index)
+        elif not active and start is not None:
+            for axis in (ax1, ax2, ax3, ax4):
+                axis.axvspan(start - 0.5, int(index) - 0.5, color="gold", alpha=0.16)
+            start = None
+    if start is not None:
+        for axis in (ax1, ax2, ax3, ax4):
+            axis.axvspan(start - 0.5, len(df) - 0.5, color="gold", alpha=0.16)
 
 fig.tight_layout(rect=(0, 0, 1, 0.97))
 plt.show()
