@@ -196,6 +196,23 @@ class MonitorFailsafeTelemetryTests(unittest.TestCase):
                 self.assertTrue(alert)
                 self.assertIn(expected_name, text)
 
+    def test_probe_unavailable_and_no_response_count_are_visible(self):
+        text, alert = self.formatter()(
+            {
+                "Failsafe_Phase": 1,
+                "Trim_Roll": 0.0,
+                "Trim_Pitch": 0.0,
+                "Failsafe_Probe_State": 3,
+                "Failsafe_Probe_NoResponse": 0,
+                "Failsafe_Probe_Response_G": 0.0,
+            }
+        )
+
+        self.assertTrue(alert)
+        self.assertIn("Probe UNAVAILABLE (3)", text)
+        self.assertIn("no-response 0", text)
+        self.assertIn("response 0.000g", text)
+
     def test_renderer_applies_alert_box_to_nonzero_phase(self):
         figure, axis = plt.subplots()
         try:

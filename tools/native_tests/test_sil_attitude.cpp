@@ -165,9 +165,15 @@ struct RunConfig {
   bool vertical_enabled = false;
   bool accel_noise_enabled = false;
   double accel_noise_sd_g = 0.04;
+  double accel_common_mode_g = 0.0;
+  uint32_t accel_common_mode_start_tick =
+      std::numeric_limits<uint32_t>::max();
   int base_throttle_us = 1150;
   uint32_t rc_disconnect_tick = std::numeric_limits<uint32_t>::max();
   PlantParameters plant_parameters = kPlantParameters;
+  double vertical_drag_n_per_ms = 0.0;
+  uint32_t vertical_drag_start_tick =
+      std::numeric_limits<uint32_t>::max();
   std::function<Disturbance(uint32_t)> disturbance_for_interval;
   std::function<int(uint32_t)> throttle_for_tick;
   std::function<void(uint32_t, PlantState &)> state_for_tick;
@@ -193,6 +199,10 @@ struct Sample {
   bool mixer_scaled_now = false;
   bool safety_locked = false;
   uint8_t failsafe_phase = FS_NONE;
+  int base_throttle_us = 1000;
+  uint8_t failsafe_probe_state = FS_PROBE_WAIT;
+  uint8_t failsafe_probe_no_response = 0;
+  double failsafe_probe_response_g = 0.0;
   double accel_magnitude_g = 1.0;
   double vertical_acceleration_ms2 = 0.0;
   double specific_force_g = 1.0;
@@ -349,6 +359,9 @@ void resetFirmwareState(const PlantState &initial) {
   yaw_hold_override = false;
   safety_lock = true;
   fs_phase = FS_NONE;
+  fs_probe_state = FS_PROBE_WAIT;
+  fs_probe_no_response = 0;
+  fs_probe_response_g = 0.0f;
   hover_est = 0.0f;
   hover_valid = false;
   calibration_ok = true;
@@ -397,9 +410,17 @@ void resetFirmwareState(const PlantState &initial) {
   (void)injectImuFromPlant(initial, 0);
 }
 
-Disturbance disturbanceAt(const RunConfig &config, uint32_t interval) {
-  if (!config.disturbance_for_interval) return {};
-  return config.disturbance_for_interval(interval);
+Disturbance disturbanceAt(const RunConfig &config, uint32_t interval,
+                          const PlantState &state) {
+  Disturbance disturbance =
+      config.disturbance_for_interval
+          ? config.disturbance_for_interval(interval)
+          : Disturbance{};
+  if (interval >= config.vertical_drag_start_tick) {
+    disturbance.vertical_force_n -=
+        config.vertical_drag_n_per_ms * state.vz_ms;
+  }
+  return disturbance;
 }
 
 double deterministicAccelNoiseG(uint32_t tick, double target_sd_g) {
@@ -524,6 +545,10 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state,
   sample.mixer_scaled_now = mixer_scaled;
   sample.safety_locked = safety_lock;
   sample.failsafe_phase = fs_phase;
+  sample.base_throttle_us = base_throttle;
+  sample.failsafe_probe_state = fs_probe_state;
+  sample.failsafe_probe_no_response = fs_probe_no_response;
+  sample.failsafe_probe_response_g = fs_probe_response_g;
   sample.accel_magnitude_g =
       std::sqrt(static_cast<double>(accX) * accX +
                 static_cast<double>(accY) * accY +
@@ -618,7 +643,7 @@ RunResult runSil(const RunConfig &config) {
   arduino_fake::pre_tick_hook = [&](uint32_t tick) {
     if (tick > 0) {
       plant_step = integratePlant(
-          state, disturbanceAt(config, tick - 1U),
+          state, disturbanceAt(config, tick - 1U, state),
           config.inject_roll_sign_fault, config.vertical_enabled,
           config.plant_parameters);
     }
@@ -638,10 +663,15 @@ RunResult runSil(const RunConfig &config) {
                 "accel noise sd must be non-negative");
       const double nominal_specific_force_g =
           config.vertical_enabled ? plant_step.specific_force_g : 1.0;
+      const double common_mode_g =
+          tick >= config.accel_common_mode_start_tick
+              ? config.accel_common_mode_g
+              : 0.0;
       raw_saturated_now = injectImuFromPlant(
           state, tick,
           nominal_specific_force_g +
-              deterministicAccelNoiseG(tick, config.accel_noise_sd_g));
+              deterministicAccelNoiseG(tick, config.accel_noise_sd_g) +
+              common_mode_g);
     } else {
       // 기본 OFF는 5e5f51e의 기존 분기와 연산 순서를 그대로 보존한다.
       raw_saturated_now =
@@ -858,13 +888,14 @@ struct FailsafeTrace {
   uint32_t entry_tick = std::numeric_limits<uint32_t>::max();
   uint32_t terminal_tick = std::numeric_limits<uint32_t>::max();
   uint32_t contact_tick = std::numeric_limits<uint32_t>::max();
-  uint32_t saw_sub_1g_tick = std::numeric_limits<uint32_t>::max();
-  uint32_t saw_impact_tick = std::numeric_limits<uint32_t>::max();
+  uint32_t probe_evaluation_count = 0;
   uint8_t terminal_phase = FS_NONE;
   double entry_z_m = std::numeric_limits<double>::quiet_NaN();
   double terminal_z_m = std::numeric_limits<double>::quiet_NaN();
   double accel_min_g = std::numeric_limits<double>::infinity();
   double accel_max_g = -std::numeric_limits<double>::infinity();
+  double max_probe_response_g = 0.0;
+  uint8_t last_probe_no_response = 0;
 };
 
 FailsafeTrace analyzeFailsafeTrace(const RunResult &result) {
@@ -907,25 +938,20 @@ FailsafeTrace analyzeFailsafeTrace(const RunResult &result) {
       terminal_index == result.samples.size()
           ? result.samples.size() - 1U
           : terminal_index;
-  LandDetector shadow = {};
+  uint8_t previous_probe_state = FS_PROBE_WAIT;
   for (std::size_t index = entry_index; index <= last_index; index++) {
     const Sample &sample = result.samples[index];
     trace.accel_min_g = std::min(trace.accel_min_g, sample.accel_magnitude_g);
     trace.accel_max_g = std::max(trace.accel_max_g, sample.accel_magnitude_g);
-    const uint32_t elapsed_ms =
-        sample.tick - result.samples[entry_index].tick;
-    (void)updateLandDetector(
-        shadow, static_cast<float>(sample.accel_magnitude_g), elapsed_ms,
-        FS_LAND_LPF_ALPHA, FS_LAND_SETTLE_TOL_G, FS_LAND_IMPACT_G,
-        FS_MIN_DESCEND_MS, FS_LAND_CONFIRM_MS);
-    if (shadow.saw_sub_1g &&
-        trace.saw_sub_1g_tick == std::numeric_limits<uint32_t>::max()) {
-      trace.saw_sub_1g_tick = sample.tick;
+    if (sample.failsafe_probe_state == FS_PROBE_EVALUATE &&
+        previous_probe_state != FS_PROBE_EVALUATE) {
+      trace.probe_evaluation_count++;
+      trace.max_probe_response_g =
+          std::max(trace.max_probe_response_g,
+                   sample.failsafe_probe_response_g);
     }
-    if (shadow.saw_impact &&
-        trace.saw_impact_tick == std::numeric_limits<uint32_t>::max()) {
-      trace.saw_impact_tick = sample.tick;
-    }
+    trace.last_probe_no_response = sample.failsafe_probe_no_response;
+    previous_probe_state = sample.failsafe_probe_state;
   }
   return trace;
 }
@@ -965,20 +991,73 @@ void printFailsafeTrace(const char *label, const RunResult &result) {
             << " accel_min=" << trace.accel_min_g << "g"
             << " accel_max=" << trace.accel_max_g << "g\n";
   std::cout << "[SIL] " << label
-            << " shadow_saw_sub_1g=" << tickSeconds(trace.saw_sub_1g_tick)
-            << " shadow_saw_impact=" << tickSeconds(trace.saw_impact_tick)
-            << " impact_before_contact="
-            << (trace.saw_impact_tick < trace.contact_tick)
+            << " probe_evaluations=" << trace.probe_evaluation_count
+            << " max_probe_response=" << trace.max_probe_response_g << "g"
+            << " no_response=" << static_cast<int>(trace.last_probe_no_response)
             << " landed_before_contact="
             << (trace.terminal_phase == FS_CUT_LANDED &&
                 trace.terminal_tick < trace.contact_tick)
             << '\n';
 }
 
+std::vector<double> groundProbeResponses(const RunResult &result,
+                                         uint32_t contact_tick) {
+  std::vector<double> responses;
+  uint8_t previous_probe_state = FS_PROBE_WAIT;
+  for (const Sample &sample : result.samples) {
+    if (sample.tick >= contact_tick && sample.plant.z_m <= 0.005 &&
+        std::fabs(sample.plant.vz_ms) < 0.10 &&
+        sample.failsafe_probe_state == FS_PROBE_EVALUATE &&
+        previous_probe_state != FS_PROBE_EVALUATE) {
+      responses.push_back(sample.failsafe_probe_response_g);
+    }
+    previous_probe_state = sample.failsafe_probe_state;
+  }
+  return responses;
+}
+
+void checkLandedAfterContact(const char *label, const FailsafeTrace &trace) {
+  std::ostringstream detail;
+  detail << label << " terminal=" << failsafePhaseName(trace.terminal_phase)
+         << "@" << tickSeconds(trace.terminal_tick)
+         << " contact=" << tickSeconds(trace.contact_tick)
+         << "; expected FS_CUT_LANDED at/after contact";
+  CHECK_MSG(trace.terminal_phase == FS_CUT_LANDED &&
+                trace.contact_tick != std::numeric_limits<uint32_t>::max() &&
+                trace.terminal_tick >= trace.contact_tick,
+            detail.str());
+}
+
+void printProbeEvaluations(const char *label, const RunResult &result) {
+  uint8_t previous_probe_state = FS_PROBE_WAIT;
+  for (const Sample &sample : result.samples) {
+    if (sample.failsafe_probe_state == FS_PROBE_EVALUATE &&
+        previous_probe_state != FS_PROBE_EVALUATE) {
+      std::cout << "[SIL] " << label
+                << " probe@" << tickSeconds(sample.tick)
+                << " z=" << sample.plant.z_m
+                << "m vz=" << sample.plant.vz_ms
+                << "m/s response=" << sample.failsafe_probe_response_g
+                << "g no_response="
+                << static_cast<int>(sample.failsafe_probe_no_response)
+                << '\n';
+    }
+    previous_probe_state = sample.failsafe_probe_state;
+  }
+}
+
 constexpr uint32_t kHoverWarmupTicks = 3000;
 constexpr uint32_t kV2ClimbTicks = 200;
 constexpr uint32_t kV2DisconnectTick =
     kHoverWarmupTicks + kV2ClimbTicks;
+
+void configureNormalLandingSurface(RunConfig &config) {
+  // V1~V4의 일반 착지 표면은 임계감쇠로 둔다. k=80N/m, m=0.3466kg에서
+  // c_crit=2*sqrt(k*m)=약 10.53N*s/m다. V5 바운스는 별도 임펄스로 만든다.
+  config.plant_parameters.c_ground =
+      2.0 * std::sqrt(config.plant_parameters.k_ground *
+                      config.plant_parameters.mass_kg);
+}
 
 RunConfig makeV3Config(double k_ge) {
   RunConfig config;
@@ -989,6 +1068,7 @@ RunConfig makeV3Config(double k_ge) {
   config.vertical_enabled = true;
   config.rc_disconnect_tick = kHoverWarmupTicks;
   config.plant_parameters.k_ge = k_ge;
+  configureNormalLandingSurface(config);
   return config;
 }
 
@@ -1003,6 +1083,7 @@ RunConfig makeV1Config(bool noise_enabled = false,
   config.rc_disconnect_tick = kHoverWarmupTicks;
   config.accel_noise_enabled = noise_enabled;
   config.accel_noise_sd_g = noise_sd_g;
+  configureNormalLandingSurface(config);
   return config;
 }
 
@@ -1015,6 +1096,7 @@ RunConfig makeV2Config() {
   config.vertical_enabled = true;
   config.rc_disconnect_tick = kV2DisconnectTick;
   config.plant_parameters.k_ge = 0.0;
+  configureNormalLandingSurface(config);
   config.throttle_for_tick = [](uint32_t tick) {
     return tick < kHoverWarmupTicks ? 1340 : 1450;
   };
@@ -1044,6 +1126,7 @@ RunConfig makeV4Config(bool noise_enabled = false,
   config.plant_parameters.k_ge = 0.0;
   config.accel_noise_enabled = noise_enabled;
   config.accel_noise_sd_g = noise_sd_g;
+  configureNormalLandingSurface(config);
   config.throttle_for_tick = [](uint32_t tick) {
     return tick < kHoverWarmupTicks ? 1340 : 1400;
   };
@@ -1054,26 +1137,41 @@ RunConfig makeV4Config(bool noise_enabled = false,
       config.plant_parameters.mass_kg * kGravityMs2;
   const double descent_balance_n =
       weight_n * FS_DESCENT_DELTA_US / (1340.0 - 1000.0);
+  const uint32_t failsafe_entry_tick =
+      kHoverWarmupTicks + RC_TIMEOUT_MS;
+  // 1.2m/s 하강에서 추력 부족분을 상쇄하는 선형 항력이다. v_z=0인 지면에서는
+  // 0이 되어 ground reaction이 실제 무게 부족분을 지지한다.
+  config.vertical_drag_n_per_ms = descent_balance_n / 1.2;
+  config.vertical_drag_start_tick = failsafe_entry_tick;
   config.disturbance_for_interval =
-      [weight_n, descent_balance_n](uint32_t tick) {
-    const uint32_t failsafe_entry_tick =
-        kHoverWarmupTicks + RC_TIMEOUT_MS;
+      [weight_n, failsafe_entry_tick](uint32_t tick) {
     if (tick >= failsafe_entry_tick &&
         tick < failsafe_entry_tick + 150U) {
-      return Disturbance{
-          0.0, 0.0, 0.0, descent_balance_n - 0.20 * weight_n};
+      return Disturbance{0.0, 0.0, 0.0, -0.20 * weight_n};
     }
     if (tick >= failsafe_entry_tick + 150U &&
         tick < failsafe_entry_tick + 200U) {
-      return Disturbance{
-          0.0, 0.0, 0.0, descent_balance_n + 0.40 * weight_n};
-    }
-    if (tick >= failsafe_entry_tick) {
-      // 단순 수직 플랜트에는 항력이 없다. hover-60us에서도 등속 하강하는
-      // V4 조건을 만들기 위해 추력 부족분과 같은 위쪽 항력을 명시한다.
-      return Disturbance{0.0, 0.0, 0.0, descent_balance_n};
+      return Disturbance{0.0, 0.0, 0.0, 0.40 * weight_n};
     }
     return Disturbance{};
+  };
+  return config;
+}
+
+RunConfig makeV5Config() {
+  RunConfig config = makeV1Config();
+  config.initial.z_m = 0.5;
+  config.ticks =
+      kHoverWarmupTicks + RC_TIMEOUT_MS + FS_MAX_MS + 1500U;
+  config.plant_parameters.k_ge = 0.0;
+  // 첫 지상 무반응 프로브 직후 1.0m/s 위쪽 임펄스를 준다. confirm=2이면
+  // 다음 공중 프로브가 카운트를 지우지만 confirm=1 변조는 이미 컷한 뒤다.
+  config.state_for_tick = [bounced = false](uint32_t, PlantState &state) mutable {
+    if (!bounced && fs_probe_no_response == 1 && state.z_m <= 0.0) {
+      state.z_m = 0.0;
+      state.vz_ms = 1.0;
+      bounced = true;
+    }
   };
   return config;
 }
@@ -1194,12 +1292,15 @@ int main() {
         "implausible accel calibration did not emit the safety warning");
   });
 
-  runCase("telemetry: hover estimate and validity are appended", [] {
+  runCase("telemetry: hover and failsafe probe diagnostics are appended", [] {
     PlantState state;
     resetFirmwareState(state);
     connectionEstablished = true;
     hover_est = 1337.5f;
     hover_valid = true;
+    fs_probe_state = FS_PROBE_UNAVAILABLE;
+    fs_probe_no_response = 2;
+    fs_probe_response_g = 0.0125f;
 
     sendTelemetry();
 
@@ -1213,11 +1314,12 @@ int main() {
     detail << "actual field_count=" << field_count
            << ", packet_suffix="
            << packet.substr(packet.size() > 24U ? packet.size() - 24U : 0U)
-           << "; expected field_count=40 and suffix ,1337.50,1";
-    CHECK_MSG(field_count == 40U, detail.str());
+           << "; expected field_count=43 and suffix ,1337.50,1,3,2,0.013";
+    CHECK_MSG(field_count == 43U, detail.str());
     CHECK_MSG(
-        packet.size() >= 10U &&
-            packet.compare(packet.size() - 10U, 10U, ",1337.50,1") == 0,
+        packet.size() >= 20U &&
+            packet.compare(
+                packet.size() - 20U, 20U, ",1337.50,1,3,2,0.013") == 0,
         detail.str());
   });
 
@@ -1406,6 +1508,10 @@ int main() {
                 "V3 did not pass through the ground-effect region to contact");
       CHECK_MSG(trace.terminal_z_m - trace.entry_z_m < 0.0,
                 "V3 terminal delta_z is not descending");
+      CHECK_MSG(
+          trace.terminal_phase != FS_CUT_LANDED ||
+              trace.terminal_tick >= trace.contact_tick,
+          "V3 declared landing before first contact");
     }
   });
 
@@ -1764,16 +1870,39 @@ int main() {
               << "dps -- 플랜트 yaw 부호 미해결, 벤치 Stage D에서 확정\n";
   });
 
+  RunResult v1_no_noise;
   RunResult v1_noise_004;
-  runReport("V1 noise OFF/ON normal descent (current firmware)", [&] {
+  runCase("V1: noise OFF/ON normal descent lands after contact", [&] {
     std::cout << "[SIL] V1 noise comparison OFF(label=V1) then "
                  "ON(sd=0.04g)\n";
-    printFailsafeTrace("V1", runSil(makeV1Config()));
+    v1_no_noise = runSil(makeV1Config());
+    printFailsafeTrace("V1", v1_no_noise);
+    printProbeEvaluations("V1", v1_no_noise);
+    checkLandedAfterContact("V1", analyzeFailsafeTrace(v1_no_noise));
     v1_noise_004 = runSil(makeV1Config(true, 0.04));
     printFailsafeTrace("V1 noise=ON sd=0.04g", v1_noise_004);
+    checkLandedAfterContact(
+        "V1 noise=ON sd=0.04g", analyzeFailsafeTrace(v1_noise_004));
+
+    const FailsafeTrace trace = analyzeFailsafeTrace(v1_no_noise);
+    const std::vector<double> responses =
+        groundProbeResponses(v1_no_noise, trace.contact_tick);
+    CHECK_MSG(responses.size() >= FS_PROBE_CONFIRM_N,
+              "V1 did not record enough settled-ground probe responses");
+    const double max_ground_response =
+        *std::max_element(responses.begin(), responses.end());
+    std::cout << "[SIL] V1 ground probe responses=";
+    for (std::size_t index = 0; index < responses.size(); index++) {
+      if (index > 0) std::cout << ",";
+      std::cout << responses[index] << "g";
+    }
+    std::cout << " max=" << max_ground_response
+              << "g threshold=" << FS_PROBE_RESPONSE_G << "g\n";
+    CHECK_MSG(max_ground_response < FS_PROBE_RESPONSE_G,
+              "settled ground absorbed less of the dip than expected");
   });
 
-  runReport("V1 accel noise sd sweep (current firmware)", [&] {
+  runCase("V1: accel noise sd 0.02/0.04/0.06g all land", [&] {
     constexpr std::array<double, 3> kNoiseSweepG = {0.02, 0.04, 0.06};
     double first_failure_sd_g = std::numeric_limits<double>::quiet_NaN();
     for (double noise_sd_g : kNoiseSweepG) {
@@ -1786,6 +1915,7 @@ int main() {
             << "V1 noise sweep sd=" << noise_sd_g << "g";
       printFailsafeTrace(label.str().c_str(), result);
       const FailsafeTrace trace = analyzeFailsafeTrace(result);
+      checkLandedAfterContact(label.str().c_str(), trace);
       if (!std::isfinite(first_failure_sd_g) &&
           trace.terminal_phase != FS_CUT_LANDED) {
         first_failure_sd_g = noise_sd_g;
@@ -1796,11 +1926,23 @@ int main() {
                       ? std::to_string(first_failure_sd_g) + "g"
                       : "none_through_0.06g")
               << '\n';
+
+    RunConfig common_mode = makeV1Config(true, 0.06);
+    common_mode.accel_common_mode_start_tick =
+        kHoverWarmupTicks + RC_TIMEOUT_MS;
+    common_mode.accel_common_mode_g = -0.08;
+    const RunResult common_mode_result = runSil(common_mode);
+    constexpr const char *kCommonModeLabel =
+        "V1 noise sweep sd=0.06g common-mode trough=-0.08g";
+    printFailsafeTrace(kCommonModeLabel, common_mode_result);
+    checkLandedAfterContact(
+        kCommonModeLabel, analyzeFailsafeTrace(common_mode_result));
   });
 
   runCase("V2: hover estimate makes climbing link loss descend", [] {
     const RunResult result = runSil(makeV2Config());
     printFailsafeTrace("V2", result);
+    printProbeEvaluations("V2", result);
     const FailsafeTrace trace = analyzeFailsafeTrace(result);
     CHECK_MSG(std::isfinite(trace.entry_z_m), "V2 did not enter failsafe");
     CHECK_MSG(std::isfinite(trace.terminal_z_m), "V2 did not terminate");
@@ -1808,6 +1950,13 @@ int main() {
     std::ostringstream detail;
     detail << "actual delta_z=" << delta_z_m << "m, expected delta_z<0";
     CHECK_MSG(delta_z_m < 0.0, detail.str());
+    checkLandedAfterContact("V2", trace);
+    const double contact_to_cut_s =
+        (trace.terminal_tick - trace.contact_tick) * kDt;
+    std::cout << "[SIL] V2 contact_to_cut=" << contact_to_cut_s
+              << "s expected<=1.0000s\n";
+    CHECK_MSG(contact_to_cut_s <= 1.0,
+              "V2 contact-to-cut delay did not materially beat timeout");
   });
 
   runCase("V2b: link loss without prior hover cuts immediately", [] {
@@ -1840,17 +1989,18 @@ int main() {
               << " entered_descending=" << entered_descending << '\n';
   });
 
-  runReport("V3 ground-effect k_ge boundary (current firmware)", [&] {
+  runCase("V3: k_ge 0.15/0.25/0.35 has no precontact landing", [&] {
     std::cout << "[SIL] V3 setup z0=0.5000m vz0=0.0000m/s "
                  "entry_throttle=1340us descent_throttle=1280us "
                  "external_force=0\n";
-    double first_precontact_impact_k_ge =
+    double first_precontact_landing_k_ge =
         std::numeric_limits<double>::quiet_NaN();
     for (std::size_t index = 0; index < kV3GroundEffects.size(); index++) {
       std::ostringstream label;
       label << std::fixed << std::setprecision(2)
             << "V3 k_ge=" << kV3GroundEffects[index];
       printFailsafeTrace(label.str().c_str(), v3_results[index]);
+      printProbeEvaluations(label.str().c_str(), v3_results[index]);
       const FailsafeTrace trace = analyzeFailsafeTrace(v3_results[index]);
       double precontact_accel_max_g =
           -std::numeric_limits<double>::infinity();
@@ -1864,28 +2014,35 @@ int main() {
       }
       std::cout << "[SIL] " << label.str()
                 << " precontact_accel_max=" << precontact_accel_max_g
-                << "g impact_threshold=" << 1.0 + FS_LAND_IMPACT_G
+                << "g probe_response_threshold=" << FS_PROBE_RESPONSE_G
                 << "g\n";
-      if (!std::isfinite(first_precontact_impact_k_ge) &&
-          trace.saw_impact_tick < trace.contact_tick) {
-        first_precontact_impact_k_ge = kV3GroundEffects[index];
+      const bool landed_before_contact =
+          trace.terminal_phase == FS_CUT_LANDED &&
+          trace.terminal_tick < trace.contact_tick;
+      if (!std::isfinite(first_precontact_landing_k_ge) &&
+          landed_before_contact) {
+        first_precontact_landing_k_ge = kV3GroundEffects[index];
       }
+      CHECK_MSG(!landed_before_contact,
+                "V3 declared landing before first contact");
     }
-    std::cout << "[SIL] V3 boundary first_precontact_saw_impact_k_ge="
-              << (std::isfinite(first_precontact_impact_k_ge)
-                      ? std::to_string(first_precontact_impact_k_ge)
+    std::cout << "[SIL] V3 boundary first_precontact_landing_k_ge="
+              << (std::isfinite(first_precontact_landing_k_ge)
+                      ? std::to_string(first_precontact_landing_k_ge)
                       : "none_through_0.35")
               << '\n';
   });
 
-  runReport("V4 noise OFF/ON upward gust then steady descent", [] {
+  runCase("V4: gust then steady descent lands only after contact", [] {
     std::cout << "[SIL] V4 noise comparison OFF(label=V4) then "
                  "ON(sd=0.04g)\n";
     std::cout << "[SIL] V4 setup hover=3.000s then vz=-1.2000m/s "
                  "down=-0.20g/150ms up=+0.40g/50ms then "
-                 "drag-balance=+0.1765g\n";
+                 "linear drag balance at -1.2000m/s\n";
     const RunResult result = runSil(makeV4Config());
     printFailsafeTrace("V4", result);
+    printProbeEvaluations("V4", result);
+    checkLandedAfterContact("V4", analyzeFailsafeTrace(result));
     const uint32_t quiet_start_tick =
         kHoverWarmupTicks + RC_TIMEOUT_MS + 202U;
     const uint32_t quiet_end_tick = quiet_start_tick + 400U;
@@ -1905,8 +2062,59 @@ int main() {
               << quiet_start.plant.z_m << "->" << quiet_400ms.plant.z_m
               << "m accel_min=" << quiet_min_accel_g
               << "g accel_max=" << quiet_max_accel_g << "g\n";
-    printFailsafeTrace(
-        "V4 noise=ON sd=0.04g", runSil(makeV4Config(true, 0.04)));
+    const RunResult noisy = runSil(makeV4Config(true, 0.04));
+    printFailsafeTrace("V4 noise=ON sd=0.04g", noisy);
+    printProbeEvaluations("V4 noise=ON sd=0.04g", noisy);
+    checkLandedAfterContact(
+        "V4 noise=ON sd=0.04g", analyzeFailsafeTrace(noisy));
+  });
+
+  runCase("V5: one ground probe then bounce does not confirm while airborne", [] {
+    const RunResult result = runSil(makeV5Config());
+    printFailsafeTrace("V5 bounce", result);
+    printProbeEvaluations("V5 bounce", result);
+    const FailsafeTrace trace = analyzeFailsafeTrace(result);
+
+    uint32_t bounce_start_tick = std::numeric_limits<uint32_t>::max();
+    uint32_t bounce_end_tick = std::numeric_limits<uint32_t>::max();
+    for (std::size_t index = 1; index < result.samples.size(); index++) {
+      const Sample &previous = result.samples[index - 1U];
+      const Sample &sample = result.samples[index];
+      if (sample.tick <= trace.contact_tick) continue;
+      if (bounce_start_tick == std::numeric_limits<uint32_t>::max() &&
+          previous.plant.z_m <= 0.0 && sample.plant.z_m > 0.0) {
+        bounce_start_tick = sample.tick;
+      }
+      if (bounce_start_tick != std::numeric_limits<uint32_t>::max() &&
+          bounce_end_tick == std::numeric_limits<uint32_t>::max() &&
+          previous.plant.z_m > 0.0 && sample.plant.z_m <= 0.0) {
+        bounce_end_tick = sample.tick;
+        break;
+      }
+    }
+
+    CHECK_MSG(
+        bounce_start_tick != std::numeric_limits<uint32_t>::max() &&
+            bounce_end_tick != std::numeric_limits<uint32_t>::max(),
+        "V5 did not produce a complete post-contact airborne interval");
+    bool landed_while_airborne = false;
+    for (const Sample &sample : result.samples) {
+      if (sample.tick >= bounce_start_tick &&
+          sample.tick < bounce_end_tick &&
+          sample.failsafe_phase == FS_CUT_LANDED) {
+        landed_while_airborne = true;
+      }
+    }
+    std::cout << "[SIL] V5 bounce airborne="
+              << tickSeconds(bounce_start_tick) << "->"
+              << tickSeconds(bounce_end_tick)
+              << " landed_while_airborne=" << landed_while_airborne
+              << " terminal=" << tickSeconds(trace.terminal_tick) << '\n';
+    CHECK_MSG(!landed_while_airborne,
+              "V5 confirmed landing during the airborne bounce");
+    CHECK_MSG(trace.terminal_tick >= bounce_end_tick,
+              "V5 terminal landing preceded bounce re-contact");
+    checkLandedAfterContact("V5", trace);
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count

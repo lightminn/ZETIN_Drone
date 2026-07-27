@@ -68,10 +68,13 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Mag_Z",
             "Hover_Est",
             "Hover_Valid",
+            "Failsafe_Probe_State",
+            "Failsafe_Probe_NoResponse",
+            "Failsafe_Probe_Response_G",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(40, len(TELEMETRY_FIELDS))
-        self.assertEqual(41, len(CSV_FIELDS))
+        self.assertEqual(43, len(TELEMETRY_FIELDS))
+        self.assertEqual(44, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -182,6 +185,19 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIs(type(sample["Hover_Est"]), float)
         self.assertEqual(sample["Hover_Valid"], 1)
         self.assertIs(type(sample["Hover_Valid"]), int)
+        self.assertIsNone(sample["Failsafe_Probe_State"])
+        self.assertIsNone(sample["Failsafe_Probe_NoResponse"])
+        self.assertIsNone(sample["Failsafe_Probe_Response_G"])
+
+    def test_43_field_packet_appends_failsafe_probe_diagnostics(self):
+        packet = ",".join(["1"] * 40 + ["3", "2", "0.0125"])
+        sample = telemetry_schema.parse_telemetry_packet(packet)
+        self.assertEqual(sample["Failsafe_Probe_State"], 3)
+        self.assertIs(type(sample["Failsafe_Probe_State"]), int)
+        self.assertEqual(sample["Failsafe_Probe_NoResponse"], 2)
+        self.assertIs(type(sample["Failsafe_Probe_NoResponse"]), int)
+        self.assertAlmostEqual(sample["Failsafe_Probe_Response_G"], 0.0125)
+        self.assertIs(type(sample["Failsafe_Probe_Response_G"]), float)
 
     def test_35_field_packet_leaves_new_fields_none(self):
         packet = ",".join(["1"] * 35)
@@ -190,8 +206,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIsNone(sample["Trim_Roll"])
         self.assertIsNone(sample["Trim_Pitch"])
 
-    def test_csv_has_41_columns(self):
-        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 41)
+    def test_csv_has_44_columns(self):
+        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 44)
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in (
@@ -203,6 +219,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "PID_Loop_Hz",
             "Failsafe_Phase",
             "Hover_Valid",
+            "Failsafe_Probe_State",
+            "Failsafe_Probe_NoResponse",
         ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], int)
         for name in (
@@ -216,6 +234,7 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Trim_Roll",
             "Trim_Pitch",
             "Hover_Est",
+            "Failsafe_Probe_Response_G",
         ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], float)
 

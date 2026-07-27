@@ -168,6 +168,71 @@ class NativeControlMathTest(unittest.TestCase):
                 compiled.stderr,
             )
 
+    def test_failsafe_probe_dip_must_fit_control_margin(self):
+        compiler = shutil.which("g++")
+        if compiler is None:
+            self.skipTest("g++ is unavailable; skipping compile-time guard test")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            m32_probe = tmp_path / "m32_probe"
+            probe = subprocess.run(
+                [
+                    compiler, "-std=c++17", "-m32", "-x", "c++", "-",
+                    "-o", str(m32_probe),
+                ],
+                input="static_assert(sizeof(long) == 4); int main() { return 0; }\n",
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+            if probe.returncode != 0:
+                self.skipTest(
+                    "32-bit g++ multilib toolchain is unavailable; "
+                    "compile-time guard test requires -m32\n"
+                    f"stdout:\n{probe.stdout}\nstderr:\n{probe.stderr}"
+                )
+
+            mutated_sketch = tmp_path / "dual_imu_cascade_pwm"
+            shutil.copytree(SKETCH_DIR, mutated_sketch)
+            sketch_path = mutated_sketch / "dual_imu_cascade_pwm.ino"
+            source = sketch_path.read_text(encoding="utf-8")
+            source, replacements = re.subn(
+                r"(const int\s+FS_PROBE_DIP_US\s*=\s*)40;",
+                r"\g<1>150;",
+                source,
+                count=1,
+            )
+            self.assertEqual(
+                replacements, 1, "failed to create invalid probe-dip fixture"
+            )
+            sketch_path.write_text(source, encoding="utf-8")
+
+            object_path = tmp_path / "invalid_probe_dip.o"
+            compiled = subprocess.run(
+                [
+                    compiler, "-std=c++17", "-O0", "-g", "-m32",
+                    "-I", str(NATIVE_TEST_DIR / "shims"),
+                    "-I", str(mutated_sketch),
+                    "-x", "c++", "-c", str(sketch_path),
+                    "-o", str(object_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+            self.assertNotEqual(
+                compiled.returncode,
+                0,
+                "FS_PROBE_DIP_US == CTRL_MARGIN unexpectedly compiled",
+            )
+            self.assertIn(
+                "FS_PROBE_DIP_US must be less than CTRL_MARGIN",
+                compiled.stderr,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

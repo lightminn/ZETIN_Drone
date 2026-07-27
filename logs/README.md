@@ -8,8 +8,8 @@
 flight_log_YYYY-MM-DD_HHMMSS.csv
 ```
 
-현행 CSV 파일은 PC 수신 시각 다음에 펌웨어 텔레메트리 40개 필드가 이어져
-총 41개 열을 가진다.
+현행 CSV 파일은 PC 수신 시각 다음에 펌웨어 텔레메트리 43개 필드가 이어져
+총 44개 열을 가진다.
 
 ```text
 Timestamp,
@@ -27,7 +27,9 @@ TgtRate_Roll, TgtRate_Pitch, TgtRate_Yaw,
 MagHeading, Mag_X, Mag_Y, Mag_Z,
 Yaw_Hold,
 Failsafe_Phase, Trim_Roll, Trim_Pitch,
-Hover_Est, Hover_Valid
+Hover_Est, Hover_Valid,
+Failsafe_Probe_State, Failsafe_Probe_NoResponse,
+Failsafe_Probe_Response_G
 ```
 
 공유 파서는 더 짧은 과거 패킷도 받아들인다: `Throttle`에서 끝나는 10필드,
@@ -35,7 +37,8 @@ Hover_Est, Hover_Valid
 `Armed`에서 끝나는 22필드, `TgtRate_Yaw`에서 끝나는 30필드, `MagHeading`에서
 끝나는 31필드, `Mag_Z`에서 끝나는 34필드, `Yaw_Hold`에서 끝나는 35필드.
 `Trim_Pitch`에서 끝나는 38필드 패킷도 호버 추정 텔레메트리 도입 이전
-레거시로 받아들인다.
+레거시로 받아들이며, `Hover_Valid`에서 끝나는 40필드 패킷도 능동 프로브
+진단 도입 이전 레거시로 받아들인다.
 이 과거 패킷에 없는 필드는 빈 셀로 기록되므로, 오래된 로그는 뒤쪽 열이
 비어 있다.
 `Timestamp`는 항상 PC에서 추가하며 UDP 데이터그램의 일부가 아니다.

@@ -24,11 +24,22 @@ static void runCase(const std::string &name, const std::function<void()> &body) 
     if (!(expr)) throw std::runtime_error(#expr);                            \
   } while (0)
 
-static const float kAlpha = 1.0f;
-static const float kSettleTol = 0.10f;
-static const float kImpact = 0.25f;
-static const uint32_t kMinDescend = 1000;
-static const uint32_t kConfirm = 400;
+static const LandProbeConfig kProbeConfig = {
+    1.0f,  // lpf_alpha
+    1000,  // min_descend_ms
+    400,   // period_ms
+    120,   // dip_ms
+    30,    // sample_delay_ms
+    0.06f, // response_g
+    2,     // confirm_n
+    40,    // dip_us
+};
+
+static bool probeStep(LandDetector &det, float accel_magnitude_g,
+                      uint32_t elapsed_ms, int base_throttle_us = 1280) {
+  return updateLandDetector(
+      det, accel_magnitude_g, elapsed_ms, base_throttle_us, kProbeConfig);
+}
 
 int main() {
   runCase("호버 후보 시간이 2초 누적된 뒤에만 유효해진다", [] {
@@ -90,129 +101,105 @@ int main() {
     CHECK(failsafeDescentThrottle(1020, 60) == 1000);
   });
 
-  runCase("회귀: 진입 직후 1g여도 착지로 판정하지 않는다", [] {
-    // 진입 순간 스로틀이 아직 호버라 |accel|=1g다. 여기서 착지로 보면
-    // 공중에서 모터가 꺼진다.
+  runCase("min_descend 전에는 필터만 갱신하고 프로브를 시작하지 않는다", [] {
     LandDetector det = {};
-    for (uint32_t t = 0; t < kMinDescend; t += 10) {
-      CHECK(!updateLandDetector(
-          det, 1.0f, t, kAlpha, kSettleTol, kImpact,
-          kMinDescend, kConfirm));
+    CHECK(!probeStep(det, 1.20f, 0));
+    CHECK(!probeStep(det, 0.80f, 500));
+    CHECK(det.filt_init);
+    CHECK(std::fabs(det.filt - 0.80f) < 1e-6f);
+    CHECK(det.probe_state == FS_PROBE_WAIT);
+    CHECK(!landDetectorProbeActive(det));
+  });
+
+  runCase("min_descend에서 딥을 시작하고 120ms 동안만 활성이다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 1.0f, 999));
+    CHECK(!probeStep(det, 1.0f, 1000));
+    CHECK(det.probe_state == FS_PROBE_DIP);
+    CHECK(det.probe_start_ms == 1000);
+    CHECK(landDetectorProbeActive(det));
+    CHECK(!probeStep(det, 1.0f, 1119));
+    CHECK(landDetectorProbeActive(det));
+    CHECK(!probeStep(det, 1.0f, 1120));
+    CHECK(det.probe_state == FS_PROBE_EVALUATE);
+    CHECK(!landDetectorProbeActive(det));
+    CHECK(det.no_response_count == 1);
+  });
+
+  runCase("딥 첫 30ms의 과도는 반응 표본에서 제외한다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 1.0f, 1000));
+    CHECK(!probeStep(det, 0.70f, 1029));
+    CHECK(!probeStep(det, 1.0f, 1030));
+    CHECK(!probeStep(det, 1.0f, 1120));
+    CHECK(std::fabs(det.last_response_g) < 1e-6f);
+    CHECK(det.no_response_count == 1);
+  });
+
+  runCase("딥 중 0.06g 초과 하락은 공중 반응으로 판정한다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 1.0f, 1000));
+    CHECK(!probeStep(det, 0.88f, 1030));
+    CHECK(!probeStep(det, 0.88f, 1120));
+    CHECK(det.last_response_g > 0.06f);
+    CHECK(det.no_response_count == 0);
+  });
+
+  runCase("연속 두 번 무반응이어야 착지를 확정한다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 1.0f, 1000));
+    CHECK(!probeStep(det, 1.0f, 1120));
+    CHECK(det.no_response_count == 1);
+    CHECK(!probeStep(det, 1.0f, 1121));
+    CHECK(det.probe_state == FS_PROBE_WAIT);
+    CHECK(!probeStep(det, 1.0f, 1400));
+    CHECK(probeStep(det, 1.0f, 1520));
+    CHECK(det.no_response_count == 2);
+  });
+
+  runCase("두 무반응 사이의 공중 반응은 연속 카운트를 지운다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 1.0f, 1000));
+    CHECK(!probeStep(det, 1.0f, 1120));
+    CHECK(det.no_response_count == 1);
+    CHECK(!probeStep(det, 1.0f, 1121));
+    CHECK(!probeStep(det, 1.0f, 1400));
+    CHECK(!probeStep(det, 0.80f, 1430));
+    CHECK(!probeStep(det, 0.80f, 1520));
+    CHECK(det.no_response_count == 0);
+    CHECK(!probeStep(det, 1.0f, 1521));
+    CHECK(!probeStep(det, 1.0f, 1800));
+    CHECK(!probeStep(det, 1.0f, 1920));
+    CHECK(det.no_response_count == 1);
+  });
+
+  runCase("판정은 절대 1g가 아니라 딥 직전 대비 차분이다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 0.90f, 1000));
+    CHECK(!probeStep(det, 0.90f, 1030));
+    CHECK(!probeStep(det, 0.90f, 1120));
+    CHECK(std::fabs(det.last_response_g) < 1e-6f);
+    CHECK(det.no_response_count == 1);
+  });
+
+  runCase("딥이 1000us 아래로 가면 프로브 불가로 남고 착지하지 않는다", [] {
+    LandDetector det = {};
+    for (uint32_t t = 0; t <= 5000; t += 10) {
+      CHECK(!probeStep(det, 1.0f, t, 1030));
     }
-  });
-
-  runCase("sub-1g를 못 본 채 1g가 계속되면 착지가 아니다", [] {
-    // min_descend 시간이 지나도 하강 증거가 없으면 인정하지 않는다.
-    LandDetector det = {};
-    for (uint32_t t = 0; t < 4000; t += 10) {
-      CHECK(!updateLandDetector(
-          det, 1.0f, t, kAlpha, kSettleTol, kImpact,
-          kMinDescend, kConfirm));
-    }
-    CHECK(!det.saw_sub_1g);
-  });
-
-  runCase("sub-1g와 충격 뒤 1g가 confirm 시간 유지되면 착지다", [] {
-    LandDetector det = {};
-    CHECK(!updateLandDetector(
-        det, 0.80f, 1200, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(det.saw_sub_1g);
-    CHECK(!updateLandDetector(
-        det, 1.30f, 1300, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(det.saw_impact);
-    CHECK(!updateLandDetector(
-        det, 1.00f, 1500, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(!updateLandDetector(
-        det, 1.00f, 1800, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(updateLandDetector(
-        det, 1.00f, 1900, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-  });
-
-  runCase("충격 없이 등속 하강의 1g로 돌아오면 착지가 아니다", [] {
-    LandDetector det = {};
-    CHECK(!updateLandDetector(
-        det, 0.80f, 200, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    for (uint32_t t = kMinDescend; t < 4000; t += 10) {
-      CHECK(!updateLandDetector(
-          det, 1.0f, t, kAlpha, kSettleTol, kImpact,
-          kMinDescend, kConfirm));
-    }
-    CHECK(det.saw_sub_1g);
-    CHECK(!det.saw_impact);
-    CHECK(!det.settling);
-  });
-
-  runCase("confirm 도중 다시 sub-1g면 확정이 취소된다", [] {
-    LandDetector det = {};
-    updateLandDetector(
-        det, 0.80f, 1200, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm);
-    updateLandDetector(
-        det, 1.30f, 1300, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm);
-    CHECK(!updateLandDetector(
-        det, 1.00f, 1500, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(!updateLandDetector(
-        det, 0.80f, 1600, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(!det.settling);
-    // 다시 처음부터 confirm을 채워야 한다
-    CHECK(!updateLandDetector(
-        det, 1.00f, 1700, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(!updateLandDetector(
-        det, 1.00f, 2000, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(updateLandDetector(
-        det, 1.00f, 2100, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-  });
-
-  runCase("충격 스파이크는 증거로 남기고 즉시 착지로 보지 않는다", [] {
-    LandDetector det = {};
-    updateLandDetector(
-        det, 0.80f, 1200, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm);
-    CHECK(!updateLandDetector(
-        det, 1.50f, 1500, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(det.saw_impact);
-    CHECK(!det.settling);
-  });
-
-  runCase("min_descend 이전의 sub-1g도 증거로 기억한다", [] {
-    LandDetector det = {};
-    CHECK(!updateLandDetector(
-        det, 0.80f, 500, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(det.saw_sub_1g);
-  });
-
-  runCase("min_descend 이전의 충격도 증거로 기억한다", [] {
-    LandDetector det = {};
-    CHECK(!updateLandDetector(
-        det, 1.30f, 500, kAlpha, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
-    CHECK(det.saw_impact);
+    CHECK(det.probe_state == FS_PROBE_UNAVAILABLE);
+    CHECK(!landDetectorProbeActive(det));
+    CHECK(det.no_response_count == 0);
   });
 
   runCase("LPF는 첫 샘플을 대입하고 이후 alpha로 갱신한다", [] {
     LandDetector det = {};
-    CHECK(!updateLandDetector(
-        det, 1.20f, 0, 0.25f, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
+    const LandProbeConfig config = {
+        0.25f, 1000, 400, 120, 30, 0.06f, 2, 40};
+    CHECK(!updateLandDetector(det, 1.20f, 0, 1280, config));
     CHECK(det.filt_init);
     CHECK(std::fabs(det.filt - 1.20f) < 1e-6f);
-    CHECK(!updateLandDetector(
-        det, 0.80f, 10, 0.25f, kSettleTol, kImpact,
-        kMinDescend, kConfirm));
+    CHECK(!updateLandDetector(det, 0.80f, 10, 1280, config));
     CHECK(std::fabs(det.filt - 1.10f) < 1e-6f);
   });
 
@@ -229,6 +216,6 @@ int main() {
     std::cerr << g_failures << " failsafe-land case(s) failed\n";
     return 1;
   }
-  std::cout << "13/13 failsafe-land cases passed\n";
+  std::cout << "16/16 failsafe-land cases passed\n";
   return 0;
 }

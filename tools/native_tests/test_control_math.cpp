@@ -846,7 +846,7 @@ int main() {
     CHECK_EQ(motorOut[0], 1000);
   });
 
-  runCase("자동착륙은 하강 과도와 접지 충격 뒤 안정 1g에서 LANDED로 간다", [] {
+  runCase("자동착륙은 400ms 간격의 지상 무반응 두 번 뒤 LANDED로 간다", [] {
     prepareFailsafeFlight(1360);
     uint32_t cut_tick = std::numeric_limits<uint32_t>::max();
     arduino_fake::pre_tick_hook = [&](uint32_t tick) {
@@ -854,23 +854,23 @@ int main() {
           && cut_tick == std::numeric_limits<uint32_t>::max()) {
         cut_tick = tick;
       }
-      float accel_g = 1.0f;
-      if (tick >= 50U && tick < 200U) accel_g = 0.70f;
-      if (tick >= 500U && tick < 550U) accel_g = 1.75f;
-      setFakeAccelMagnitude(accel_g, tick);
+      setFakeAccelMagnitude(1.0f, tick);
     };
 
-    runPidTicks(FS_MIN_DESCEND_MS + FS_LAND_CONFIRM_MS + 20U);
+    runPidTicks(
+        FS_MIN_DESCEND_MS + FS_PROBE_PERIOD_MS + FS_PROBE_DIP_MS + 20U);
     arduino_fake::pre_tick_hook = nullptr;
 
     CHECK_EQ((int)fs_phase, (int)FS_CUT_LANDED);
     CHECK(safety_lock);
     CHECK_EQ(motorOut[0], 1000);
-    CHECK(cut_tick >= FS_MIN_DESCEND_MS + FS_LAND_CONFIRM_MS);
-    CHECK(cut_tick <= FS_MIN_DESCEND_MS + FS_LAND_CONFIRM_MS + 2U);
+    CHECK(cut_tick >=
+          FS_MIN_DESCEND_MS + FS_PROBE_PERIOD_MS + FS_PROBE_DIP_MS);
+    CHECK(cut_tick <=
+          FS_MIN_DESCEND_MS + FS_PROBE_PERIOD_MS + FS_PROBE_DIP_MS + 2U);
   });
 
-  runCase("접지 충격 없는 하강은 FS_MAX_MS에서 TIMEOUT으로 간다", [] {
+  runCase("공중에서 매 딥이 반응하면 FS_MAX_MS에서 TIMEOUT으로 간다", [] {
     prepareFailsafeFlight(1360);
     uint32_t cut_tick = std::numeric_limits<uint32_t>::max();
     arduino_fake::pre_tick_hook = [&](uint32_t tick) {
@@ -879,7 +879,7 @@ int main() {
         cut_tick = tick;
       }
       const float accel_g =
-          (tick >= 50U && tick < 200U) ? 0.70f : 1.0f;
+          fs_probe_state == FS_PROBE_DIP ? 0.82f : 1.0f;
       setFakeAccelMagnitude(accel_g, tick);
     };
 
@@ -891,6 +891,43 @@ int main() {
     CHECK_EQ(motorOut[0], 1000);
     CHECK(cut_tick >= FS_MAX_MS);
     CHECK(cut_tick <= FS_MAX_MS + 2U);
+  });
+
+  runCase("프로브 딥은 고정 collective 창 안에서 base만 40us 낮춘다", [] {
+    constexpr int hover_throttle = 1360;
+    constexpr int descent_throttle =
+        hover_throttle - FS_DESCENT_DELTA_US;
+    prepareFailsafeFlight(hover_throttle);
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      setFakeAccelMagnitude(
+          fs_probe_state == FS_PROBE_DIP ? 0.82f : 1.0f, tick);
+    };
+
+    runPidTicks(FS_MIN_DESCEND_MS + 5U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK_EQ((int)fs_probe_state, (int)FS_PROBE_DIP);
+    CHECK_EQ(base_throttle, descent_throttle - FS_PROBE_DIP_US);
+    CHECK_EQ(min_throttle, max(1050, descent_throttle - CTRL_MARGIN));
+    CHECK_EQ(max_throttle, min(1900, descent_throttle + CTRL_MARGIN));
+    for (int motor : motorOut) {
+      CHECK_EQ(motor, descent_throttle - FS_PROBE_DIP_US);
+    }
+  });
+
+  runCase("1000us 아래 딥은 UNAVAILABLE로 공개하고 TIMEOUT에 맡긴다", [] {
+    prepareFailsafeFlight(1090);  // descent=1030, dip=990 -> 판별 불가
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      setFakeAccelMagnitude(1.0f, tick);
+    };
+
+    runPidTicks(FS_MAX_MS + 10U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK_EQ((int)fs_probe_state, (int)FS_PROBE_UNAVAILABLE);
+    CHECK_EQ((int)fs_probe_no_response, 0);
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_TIMEOUT);
+    CHECK(safety_lock);
   });
 
   runCase("자동착륙 중 IMU가 전멸하면 FS_CUT_ABORT로 끝난다", [] {

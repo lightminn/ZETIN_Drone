@@ -149,8 +149,7 @@ static const float IMU2_SIGN[3] = { IMU2_SIGN_X, IMU2_SIGN_Y, IMU2_SIGN_Z };
 
 // --- 안전/redundancy 임계값 (하드웨어 맞춰 튜닝 필요) ---
 const uint32_t RC_TIMEOUT_MS      = 500;
-// 아래 failsafe 상수는 전부 벤치 조정 대상이다. 근거 실측치는 정지 |accel|
-// 중앙값 1.007g, 무장 중 sd 0.03~0.05g, 프롭 진동 100~300Hz다.
+// 아래 failsafe 상수는 전부 벤치 조정 대상이다.
 constexpr int CTRL_MARGIN = 150;
 const int      FS_DESCENT_DELTA_US = 60;
 static_assert(FS_DESCENT_DELTA_US < CTRL_MARGIN,
@@ -161,10 +160,33 @@ static_assert(FS_DESCENT_DELTA_US < CTRL_MARGIN,
 // 이미 collective 하한에 걸려 실제 하강이 일어나지 않는다.
 const uint32_t FS_MIN_DESCEND_MS   = 1000;
 const float    FS_LAND_LPF_ALPHA   = 0.03f;   // 1kHz에서 약 5Hz
-const float    FS_LAND_SETTLE_TOL_G = 0.10f;  // ACC_DEV_SOFT와 동일
-const float    FS_LAND_IMPACT_G    = 0.25f;   // 1g 초과 스파이크 임계
-const uint32_t FS_LAND_CONFIRM_MS  = 400;
+// 능동 프로브 상수는 모두 Stage E 벤치 조정 대상이다. 호버 1340us는 아이들
+// 1000us 대비 340us이고, 40us 딥은 추력 11.8%=0.118g다. 120ms 동안 추가
+// 하강 거리는 약 0.008m다. 실측 LPF 잔차 노이즈는 0.047g지만 지배 성분이
+// 5Hz 아래라 400ms 안의 딥 직전 대비 차분에서는 거의 공통모드로 상쇄된다.
+const int      FS_PROBE_DIP_US          = 40;
+const uint32_t FS_PROBE_PERIOD_MS       = 400;
+const uint32_t FS_PROBE_DIP_MS          = 120;
+const uint32_t FS_PROBE_SAMPLE_DELAY_MS = 30;
+const float    FS_PROBE_RESPONSE_G      = 0.06f;
+const uint8_t  FS_PROBE_CONFIRM_N       = 2;
 const uint32_t FS_MAX_MS           = 5000;
+static_assert(FS_PROBE_DIP_US < CTRL_MARGIN,
+              "FS_PROBE_DIP_US must be less than CTRL_MARGIN");
+static_assert(FS_PROBE_SAMPLE_DELAY_MS < FS_PROBE_DIP_MS,
+              "probe sample delay must be shorter than the dip");
+static_assert(FS_PROBE_DIP_MS < FS_PROBE_PERIOD_MS,
+              "probe dip must finish before the next probe");
+const LandProbeConfig FS_LAND_PROBE_CONFIG = {
+    FS_LAND_LPF_ALPHA,
+    FS_MIN_DESCEND_MS,
+    FS_PROBE_PERIOD_MS,
+    FS_PROBE_DIP_MS,
+    FS_PROBE_SAMPLE_DELAY_MS,
+    FS_PROBE_RESPONSE_G,
+    FS_PROBE_CONFIRM_N,
+    FS_PROBE_DIP_US,
+};
 // 아래 호버 추정 상수는 모두 Stage E-0 벤치 조정 대상이다. 10°/±0.05g는
 // 자세·수직 정상상태만 받는 보수적 시작값이고, 3초 LPF는 요구 범위(2~5초)의
 // 중앙값이다. 1.5초 누적은 짧은 스로틀 통과를 호버로 확정하지 않으면서
@@ -343,6 +365,9 @@ DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 volatile bool  safety_lock  = true;
 // 런타임 쓰기는 pid_task만 담당한다. Core 0은 텔레메트리/명령 처리에서 읽기만 한다.
 volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
+volatile uint8_t fs_probe_state = FS_PROBE_WAIT;
+volatile uint8_t fs_probe_no_response = 0;
+volatile float fs_probe_response_g = 0.0f;
 volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
 volatile bool hover_valid = false;
 // 비행 중에는 pid_task만 쓰고, start는 safety_lock=true인 동안 초기화한 뒤
@@ -940,6 +965,9 @@ void pid_task(void *pv) {
         fs_hold_yaw = angleZ;
         fs_enter_ms = nowMs;
         landDet = {};
+        fs_probe_state = FS_PROBE_WAIT;
+        fs_probe_no_response = 0;
+        fs_probe_response_g = 0.0f;
         base_throttle = failsafeDescentThrottle(
             (int)lroundf(hover_est), FS_DESCENT_DELTA_US);
         Serial.println("[FAULT] RC TIMEOUT -> AUTO-LAND");   // 한 번만
@@ -953,16 +981,24 @@ void pid_task(void *pv) {
       targetAngleY = trim_pitch;
       targetAngleZ = fs_hold_yaw;
       targetYawRate = 0.0f;
-      base_throttle = failsafeDescentThrottle(
+      const int descentThrottle = failsafeDescentThrottle(
           (int)lroundf(hover_est), FS_DESCENT_DELTA_US);
-      min_throttle = max(1050, base_throttle - CTRL_MARGIN);
-      max_throttle = min(1900, base_throttle + CTRL_MARGIN);
 
       const uint32_t elapsed = nowMs - fs_enter_ms;
       const bool landed = updateLandDetector(
-          landDet, accelMag, elapsed, FS_LAND_LPF_ALPHA,
-          FS_LAND_SETTLE_TOL_G, FS_LAND_IMPACT_G,
-          FS_MIN_DESCEND_MS, FS_LAND_CONFIRM_MS);
+          landDet, accelMag, elapsed, descentThrottle,
+          FS_LAND_PROBE_CONFIG);
+      fs_probe_state = landDet.probe_state;
+      fs_probe_no_response = landDet.no_response_count;
+      fs_probe_response_g = landDet.last_response_g;
+
+      // collective 창은 정상 하강값에 고정한다. 40us 딥은 CTRL_MARGIN=150us
+      // 안에서 base만 낮추므로 자세 mixer의 기존 authority를 보존한다.
+      base_throttle =
+          descentThrottle -
+          (landDetectorProbeActive(landDet) ? FS_PROBE_DIP_US : 0);
+      min_throttle = max(1050, descentThrottle - CTRL_MARGIN);
+      max_throttle = min(1900, descentThrottle + CTRL_MARGIN);
       const FailsafePhase next = failsafeStep(landed, elapsed, FS_MAX_MS);
       if (next != FS_DESCENDING) {
         fs_phase = next;
@@ -1232,14 +1268,18 @@ static void handleGainCommand(const char *buf) {
 // 첫 14개 필드는 기존 PC 스크립트와 호환된다. 뒤 필드는 cascade 진단 확장:
 // fault_imu1,fault_imu2,fault_disagree,active_imus,scaled,fault_attitude,
 // calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z, Yaw_Hold,
-// Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid를 append-only로 보낸다.
+// Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid와 프로브 상태/연속
+// 무반응/최근 차분 반응을 append-only로 보낸다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
   const float hoverEstSnapshot = hover_est;
   const bool hoverValidSnapshot = hover_valid;
+  const uint8_t probeStateSnapshot = fs_probe_state;
+  const uint8_t probeNoResponseSnapshot = fs_probe_no_response;
+  const float probeResponseSnapshot = fs_probe_response_g;
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1253,7 +1293,9 @@ static void sendTelemetry() {
              tgtRate[0], tgtRate[1], tgtRate[2], magHeading,
              magTelemX, magTelemY, magTelemZ, (int)yaw_hold_now,
              (int)fs_phase, trim_roll, trim_pitch,
-             hoverEstSnapshot, (int)hoverValidSnapshot);
+             hoverEstSnapshot, (int)hoverValidSnapshot,
+             (int)probeStateSnapshot, (int)probeNoResponseSnapshot,
+             probeResponseSnapshot);
   udp.endPacket();
 }
 
@@ -1330,6 +1372,9 @@ void udp_task(void *pv) {
             hoverTracker = {};
             hover_est = 0.0f;
             hover_valid = false;
+            fs_probe_state = FS_PROBE_WAIT;
+            fs_probe_no_response = 0;
+            fs_probe_response_g = 0.0f;
             safety_lock = false;
             Serial.println(">>> START");
           }

@@ -11,6 +11,13 @@ FAILSAFE_PHASE_NAMES = {
     4: "CUT_ABORT",
 }
 
+FAILSAFE_PROBE_STATE_NAMES = {
+    0: "WAIT",
+    1: "DIP",
+    2: "EVALUATE",
+    3: "UNAVAILABLE",
+}
+
 
 def phase_number(value):
     """Return an integer phase, or ``None`` for absent/malformed values."""
@@ -47,6 +54,34 @@ def _format_trim(value):
     return f"{numeric:+.2f}°"
 
 
+def _format_probe_status(sample):
+    values = (
+        sample.get("Failsafe_Probe_State"),
+        sample.get("Failsafe_Probe_NoResponse"),
+        sample.get("Failsafe_Probe_Response_G"),
+    )
+    if all(value is None for value in values):
+        return ""
+
+    state = phase_number(values[0])
+    state_text = (
+        "legacy/unknown"
+        if state is None
+        else f"{FAILSAFE_PROBE_STATE_NAMES.get(state, 'UNKNOWN')} ({state})"
+    )
+    count = phase_number(values[1])
+    count_text = "unknown" if count is None else str(count)
+    try:
+        response = float(values[2])
+    except (TypeError, ValueError):
+        response = math.nan
+    response_text = "unknown" if not math.isfinite(response) else f"{response:.3f}g"
+    return (
+        f" | Probe {state_text}, no-response {count_text}, "
+        f"response {response_text}"
+    )
+
+
 def format_monitor_status(sample):
     """Return status text and whether the monitor must use alert styling."""
 
@@ -57,6 +92,7 @@ def format_monitor_status(sample):
         f"{prefix}Failsafe {format_failsafe_phase(phase)} | "
         f"Trim R {_format_trim(sample.get('Trim_Roll'))} / "
         f"P {_format_trim(sample.get('Trim_Pitch'))}"
+        f"{_format_probe_status(sample)}"
     )
     return text, alert
 
