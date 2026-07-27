@@ -543,6 +543,31 @@ git commit -m "feat(flight): move trim into the firmware"
     CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);   // 상태도 그대로
   });
 
+  runCase("회귀: 진입 로그는 하강 내내 딱 한 번만 나간다", [] {
+    // 가드가 없으면 rcTimedOut이 참인 동안 1kHz로 재실행돼 Serial.println이
+    // 115200 baud TX 버퍼를 포화시키고, pid_task가 블로킹되면 500ms 태스크
+    // 워치독이 비행 중 재부팅을 일으킨다. 이 태스크에서 가장 위험한 실패 모드다.
+    calibration_ok = true;
+    safety_lock = true;
+    sendUdpCommandOnce("start");
+    fs_phase = FS_NONE;
+    base_throttle = 1360;
+    lastRcMs = 0;
+    arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+
+    arduino_fake::serial_output.clear();
+    runPidTicks(50);
+
+    const std::string &log = arduino_fake::serial_output;
+    std::size_t hits = 0;
+    for (std::size_t at = log.find("AUTO-LAND");
+         at != std::string::npos;
+         at = log.find("AUTO-LAND", at + 1)) {
+      hits++;
+    }
+    CHECK_EQ(hits, static_cast<std::size_t>(1));
+  });
+
   runCase("자동착륙 종료 후에는 재시동 없이 날 수 없다", [] {
     fs_phase = FS_DESCENDING;
     safety_lock = false;
