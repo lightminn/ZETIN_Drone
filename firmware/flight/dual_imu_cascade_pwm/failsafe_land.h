@@ -13,34 +13,51 @@ enum FailsafePhase : uint8_t {
 
 // 착지 감지기의 누적 상태. pid_task가 소유하고 진입 시 {}로 초기화한다.
 struct LandDetector {
-  bool     saw_sub_1g = false;      // 실제로 하강 가속 중이었다는 증거
-  bool     settling = false;        // 1g 복귀가 진행 중인가
+  bool     filt_init = false;
+  float    filt = 1.0f;             // LPF된 |accel| (g)
+  bool     saw_sub_1g = false;      // 실제로 하강 가속했다는 증거
+  bool     saw_impact = false;      // 지면 반력 스파이크
+  bool     settling = false;
   uint32_t settle_start_ms = 0;
 };
 
 // 매 tick 호출. 착지가 확정되면 true를 돌려준다.
 //
-// 원리: 공중에서 스로틀이 호버보다 낮으면 아래로 가속하므로 |accel| < 1g다.
-// 지면이 받치면 스로틀과 무관하게 1g로 돌아온다. 진입 순간에는 스로틀이 아직
-// 호버라 이미 1g이므로, sub-1g를 한 번이라도 본 뒤에만 1g 복귀를 인정한다.
+// 원리: 하강 과도의 sub-1g와 지면 반력의 1g 초과 스파이크를 모두 본 뒤,
+// LPF된 |accel|이 1g 근처에서 안정될 때만 착지를 인정한다. 증거 수집은
+// min_descend 판정 게이트보다 항상 먼저 실행해 진입 직후 증거를 버리지 않는다.
 static inline bool updateLandDetector(
     LandDetector &det, float accel_magnitude_g, uint32_t elapsed_ms,
-    float accel_tol_g, uint32_t min_descend_ms, uint32_t confirm_ms) {
-  if (elapsed_ms < min_descend_ms) {
-    det.settling = false;
-    return false;
+    float lpf_alpha, float settle_tol_g, float impact_g,
+    uint32_t min_descend_ms, uint32_t confirm_ms) {
+  if (!det.filt_init) {
+    det.filt = accel_magnitude_g;
+    det.filt_init = true;
+  } else {
+    det.filt += lpf_alpha * (accel_magnitude_g - det.filt);
   }
-  if (accel_magnitude_g < 1.0f - accel_tol_g) {
+
+  if (det.filt < 1.0f - settle_tol_g) {
     det.saw_sub_1g = true;
     det.settling = false;
     return false;
   }
-  if (!det.saw_sub_1g) {
+  if (det.filt > 1.0f + impact_g) {
+    det.saw_impact = true;
     det.settling = false;
     return false;
   }
-  if (fabsf(accel_magnitude_g - 1.0f) > accel_tol_g) {
-    det.settling = false;      // 접지 충격 스파이크 등
+
+  if (elapsed_ms < min_descend_ms) {
+    det.settling = false;
+    return false;
+  }
+  if (!det.saw_sub_1g || !det.saw_impact) {
+    det.settling = false;
+    return false;
+  }
+  if (fabsf(det.filt - 1.0f) > settle_tol_g) {
+    det.settling = false;
     return false;
   }
   if (!det.settling) {

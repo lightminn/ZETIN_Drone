@@ -194,6 +194,51 @@ inv_imu_sensor_event_t eventWith(
   return event;
 }
 
+void setFakeAccelMagnitude(float accel_g, uint32_t tick) {
+  const int dither = (tick & 1U) ? 1 : -1;
+  const int16_t raw =
+      static_cast<int16_t>(std::lround(accel_g / ACCEL_SCALE) + dither);
+  IMU1.next_event = eventWith(0, 0, 0, 0, 0, raw);
+  IMU2.next_event = eventWith(0, 0, 0, 0, 0, -raw);
+}
+
+void prepareFailsafeFlight(int throttle_us) {
+  arduino_fake::reset();
+  fault_rc = false;
+  fault_imu1 = false;
+  fault_imu2 = false;
+  fault_disagree = false;
+  fault_attitude = false;
+  imu1_frozen_now = false;
+  imu2_frozen_now = false;
+  imu_disagree_now = false;
+  calibration_ok = true;
+  mag_calibrating = false;
+  safety_lock = true;
+  fs_phase = FS_NONE;
+  angleX = angleY = angleZ = 0.0f;
+  gyro_bias1[0] = gyro_bias1[1] = gyro_bias1[2] = 0.0f;
+  gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
+  setFakeAccelMagnitude(1.0f, 0);
+  sendUdpCommandOnce("start");
+  CHECK(!safety_lock);
+  base_throttle = throttle_us;
+  lastRcMs = 0;
+  arduino_fake::millis_value = RC_TIMEOUT_MS + 100;
+  arduino_fake::micros_value = arduino_fake::millis_value * 1000U;
+}
+
+std::size_t countLogOccurrences(const std::string &needle) {
+  const std::string &log = arduino_fake::serial_output;
+  std::size_t hits = 0;
+  for (std::size_t at = log.find(needle);
+       at != std::string::npos;
+       at = log.find(needle, at + needle.size())) {
+    hits++;
+  }
+  return hits;
+}
+
 }  // namespace
 
 int main() {
@@ -568,6 +613,22 @@ int main() {
     CHECK_EQ(base_throttle, 1360 - FS_DESCENT_DELTA_US);
   });
 
+  runCase("지상 무장 중 RC 타임아웃은 즉시 한 번만 컷한다", [] {
+    prepareFailsafeFlight(FS_GROUND_THROTTLE_US - 1);
+    arduino_fake::serial_output.clear();
+
+    runPidTicks(50);
+
+    CHECK(fault_rc);
+    CHECK(safety_lock);
+    CHECK_EQ((int)fs_phase, (int)FS_NONE);
+    CHECK_EQ(motorOut[0], 1000);
+    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> GROUND CUT"),
+             static_cast<std::size_t>(1));
+    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> AUTO-LAND"),
+             static_cast<std::size_t>(0));
+  });
+
   runCase("stop은 자동착륙 중에도 즉시 컷이다", [] {
     fs_phase = FS_DESCENDING;
     safety_lock = false;
@@ -669,6 +730,53 @@ int main() {
     runPidTicks(2);
     CHECK(safety_lock);                        // 백스톱으로 잠겼다
     CHECK_EQ(motorOut[0], 1000);
+  });
+
+  runCase("자동착륙은 하강 과도와 접지 충격 뒤 안정 1g에서 LANDED로 간다", [] {
+    prepareFailsafeFlight(1360);
+    uint32_t cut_tick = std::numeric_limits<uint32_t>::max();
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      if (fs_phase == FS_CUT_LANDED
+          && cut_tick == std::numeric_limits<uint32_t>::max()) {
+        cut_tick = tick;
+      }
+      float accel_g = 1.0f;
+      if (tick >= 50U && tick < 200U) accel_g = 0.70f;
+      if (tick >= 500U && tick < 550U) accel_g = 1.75f;
+      setFakeAccelMagnitude(accel_g, tick);
+    };
+
+    runPidTicks(FS_MIN_DESCEND_MS + FS_LAND_CONFIRM_MS + 20U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_LANDED);
+    CHECK(safety_lock);
+    CHECK_EQ(motorOut[0], 1000);
+    CHECK(cut_tick >= FS_MIN_DESCEND_MS + FS_LAND_CONFIRM_MS);
+    CHECK(cut_tick <= FS_MIN_DESCEND_MS + FS_LAND_CONFIRM_MS + 2U);
+  });
+
+  runCase("접지 충격 없는 하강은 FS_MAX_MS에서 TIMEOUT으로 간다", [] {
+    prepareFailsafeFlight(1360);
+    uint32_t cut_tick = std::numeric_limits<uint32_t>::max();
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      if (fs_phase == FS_CUT_TIMEOUT
+          && cut_tick == std::numeric_limits<uint32_t>::max()) {
+        cut_tick = tick;
+      }
+      const float accel_g =
+          (tick >= 50U && tick < 200U) ? 0.70f : 1.0f;
+      setFakeAccelMagnitude(accel_g, tick);
+    };
+
+    runPidTicks(FS_MAX_MS + 10U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_TIMEOUT);
+    CHECK(safety_lock);
+    CHECK_EQ(motorOut[0], 1000);
+    CHECK(cut_tick >= FS_MAX_MS);
+    CHECK(cut_tick <= FS_MAX_MS + 2U);
   });
 
   runCase("자동착륙 중 IMU가 전멸하면 FS_CUT_ABORT로 끝난다", [] {
