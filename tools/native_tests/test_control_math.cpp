@@ -637,12 +637,44 @@ int main() {
     CHECK_EQ(base_throttle, 1000);
   });
 
-  runCase("start가 fs_phase를 FS_NONE으로 되돌린다", [] {
-    fs_phase = FS_CUT_TIMEOUT;
+  runCase("회귀: stale failsafe phase로 무장돼도 첫 tick 뒤 RC 감시가 복구된다", [] {
+    arduino_fake::reset();
+    fault_rc = false;
+    fault_imu1 = false;
+    fault_imu2 = false;
+    fault_disagree = false;
+    fault_attitude = false;
+    imu1_frozen_now = false;
+    imu2_frozen_now = false;
+    imu_disagree_now = false;
     calibration_ok = true;
+    mag_calibrating = false;
     safety_lock = true;
+    fs_phase = FS_CUT_ABORT;
+    angleX = angleY = angleZ = 0.0f;
+    gyro_bias1[0] = gyro_bias1[1] = gyro_bias1[2] = 0.0f;
+    gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
+    setFakeAccelMagnitude(1.0f, 0);
+
     sendUdpCommandOnce("start");
-    CHECK_EQ((int)fs_phase, (int)FS_NONE);
+    CHECK(!safety_lock);
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_ABORT);
+
+    base_throttle = 1360;
+    bool phase_cleared_after_first_tick = false;
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      if (tick == 1U) {
+        phase_cleared_after_first_tick = (fs_phase == FS_NONE);
+      }
+      setFakeAccelMagnitude(1.0f, tick);
+    };
+    runPidTicks(RC_TIMEOUT_MS + 20U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK(phase_cleared_after_first_tick);
+    CHECK(fault_rc);
+    CHECK(!safety_lock);
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
   });
 
   runCase("회귀: 하강 목표는 0이 아니라 트림값이다", [] {
@@ -696,6 +728,49 @@ int main() {
     CHECK_EQ(base_throttle, 1360 - FS_DESCENT_DELTA_US);
   });
 
+  runCase("회귀: 하강 중 th 명령은 collective 창과 모터를 올리지 못한다", [] {
+    constexpr int entry_throttle = 1360;
+    prepareFailsafeFlight(entry_throttle);
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      if (tick == 1U) sendUdpCommandOnce("th 1800");
+    };
+
+    runPidTicks(3);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    const int descent_throttle =
+        entry_throttle - FS_DESCENT_DELTA_US;
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK_EQ(base_throttle, descent_throttle);
+    CHECK_EQ(min_throttle, max(1050, descent_throttle - CTRL_MARGIN));
+    CHECK_EQ(max_throttle, min(1900, descent_throttle + CTRL_MARGIN));
+    for (int motor : motorOut) CHECK(motor < entry_throttle);
+  });
+
+  runCase("회귀: 하강 중 4인자 rc는 yaw 스냅샷과 rate를 바꾸지 못한다", [] {
+    constexpr float entry_yaw_deg = 17.0f;
+    prepareFailsafeFlight(1360);
+    mag_enabled = false;
+    yaw_hold_override = false;
+    angleZ = entry_yaw_deg;
+    bool injected_yaw_reached_parser = false;
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      if (tick == 1U) {
+        sendRc("rc 1 0 0 90");
+        injected_yaw_reached_parser = fabsf(targetAngleZ - 90.0f) < 1e-4f;
+      }
+      setFakeAccelMagnitude(1.0f, tick);
+    };
+
+    runPidTicks(6);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK(injected_yaw_reached_parser);
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK_NEAR(targetAngleZ, entry_yaw_deg, 1e-4f);
+    CHECK_NEAR(tgtRate[2], 0.0f, 1e-3f);
+  });
+
   runCase("회귀: 진입 로그는 하강 내내 딱 한 번만 나간다", [] {
     // 가드가 없으면 rcTimedOut이 참인 동안 1kHz로 재실행돼 Serial.println이
     // 115200 baud TX 버퍼를 포화시키고, pid_task가 블로킹되면 500ms 태스크
@@ -722,12 +797,13 @@ int main() {
   });
 
   runCase("자동착륙 종료 후에는 재시동 없이 날 수 없다", [] {
-    fs_phase = FS_DESCENDING;
-    safety_lock = false;
-    base_throttle = 1360;
-    lastRcMs = 0;
-    arduino_fake::millis_value = RC_TIMEOUT_MS + 100 + FS_MAX_MS;
-    runPidTicks(2);
+    prepareFailsafeFlight(1360);
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      setFakeAccelMagnitude(1.0f, tick);
+    };
+    runPidTicks(FS_MAX_MS + 10U);
+    arduino_fake::pre_tick_hook = nullptr;
+
     CHECK(safety_lock);                        // 백스톱으로 잠겼다
     CHECK_EQ(motorOut[0], 1000);
   });

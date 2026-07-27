@@ -151,10 +151,14 @@ static const float IMU2_SIGN[3] = { IMU2_SIGN_X, IMU2_SIGN_Y, IMU2_SIGN_Z };
 const uint32_t RC_TIMEOUT_MS      = 500;
 // 아래 failsafe 상수는 전부 벤치 조정 대상이다. 근거 실측치는 정지 |accel|
 // 중앙값 1.007g, 무장 중 sd 0.03~0.05g, 프롭 진동 100~300Hz다.
-// FS_DESCENT_DELTA_US는 반드시 CTRL_MARGIN(150) 미만이어야 한다 — 넘으면
-// 하강 스로틀이 min_throttle 아래로 가서 믹서 collective 하한에 걸려
-// 실제 하강이 일어나지 않는다.
+constexpr int CTRL_MARGIN = 150;
 const int      FS_DESCENT_DELTA_US = 60;
+static_assert(FS_DESCENT_DELTA_US < CTRL_MARGIN,
+              "FS_DESCENT_DELTA_US must be less than CTRL_MARGIN");
+// 컴파일 타임 가드는 delta < CTRL_MARGIN만 검사한다. 실제 하한은
+// delta < min(CTRL_MARGIN, entry_throttle - 1050)이며 entry_throttle은
+// 런타임 값이라 static_assert로 잡을 수 없다. 예: entry=1150이면 delta=120도
+// 이미 collective 하한에 걸려 실제 하강이 일어나지 않는다.
 const uint32_t FS_MIN_DESCEND_MS   = 1000;
 const float    FS_LAND_LPF_ALPHA   = 0.03f;   // 1kHz에서 약 5Hz
 const float    FS_LAND_SETTLE_TOL_G = 0.10f;  // ACC_DEV_SOFT와 동일
@@ -324,6 +328,7 @@ ICM42670WithLPF IMU2(SPI, SPI_CS2);
 DFRobot_BMM350_I2C bmm(&Wire, 0x14);
 
 volatile bool  safety_lock  = true;
+// 런타임 쓰기는 pid_task만 담당한다. Core 0은 텔레메트리/명령 처리에서 읽기만 한다.
 volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
 // 기체 트림(도). 추정기 0°와 진짜 수평의 차이를 보정한다. 비행별 상태가 아니라
@@ -650,6 +655,7 @@ void pid_task(void *pv) {
   LandDetector landDet = {};
   uint32_t fs_enter_ms = 0;
   int fs_entry_throttle = 1000;
+  float fs_hold_yaw = 0.0f;
 
   inv_imu_sensor_event_t e1 = {}, e2 = {};
 
@@ -829,6 +835,19 @@ void pid_task(void *pv) {
       fault_attitude = true;
       safety_lock = true;
     }
+    // 잠금 해제 첫 tick의 D kick과 이전 목표 rate 잔류를 제거한다.
+    // 이 블록은 RC timeout 진입 가드보다 먼저 실행해야 한다. 뒤에 두면 같은
+    // tick에서 새로 진입한 FS_DESCENDING까지 FS_NONE으로 덮어쓰게 된다.
+    if (wasLocked && !safety_lock) {
+      // start가 남긴 이전 비행의 terminal phase와 start/abort 경합 결과를
+      // Core 1에서 해제해 fs_phase의 런타임 writer를 pid_task 하나로 유지한다.
+      fs_phase = FS_NONE;
+      prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
+      lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
+      targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
+      outerCnt = 0;
+      wasLocked = false;
+    }
     // RC 타임아웃은 지상 스로틀이면 즉시 컷, 그 이상이면 자동착륙으로 간다.
     // 진입 블록 전체를 fs_phase 가드 안에 둔다 — 가드가 없으면 하강 내내
     // rcTimedOut이 참이라 이 블록이 1kHz로 재실행되고, Serial.println이 TX
@@ -842,6 +861,7 @@ void pid_task(void *pv) {
       } else {
         fs_phase = FS_DESCENDING;
         fs_entry_throttle = base_throttle;
+        fs_hold_yaw = angleZ;
         fs_enter_ms = nowMs;
         landDet = {};
         base_throttle = failsafeDescentThrottle(fs_entry_throttle,
@@ -855,9 +875,12 @@ void pid_task(void *pv) {
     if (fs_phase == FS_DESCENDING) {
       targetAngleX = trim_roll;
       targetAngleY = trim_pitch;
+      targetAngleZ = fs_hold_yaw;
       targetYawRate = 0.0f;
       base_throttle = failsafeDescentThrottle(fs_entry_throttle,
                                               FS_DESCENT_DELTA_US);
+      min_throttle = max(1050, base_throttle - CTRL_MARGIN);
+      max_throttle = min(1900, base_throttle + CTRL_MARGIN);
 
       const float accelMag = sqrtf(accX*accX + accY*accY + accZ*accZ);
       const uint32_t elapsed = nowMs - fs_enter_ms;
@@ -888,15 +911,6 @@ void pid_task(void *pv) {
       tgtRate[0] = 0.0f; tgtRate[1] = 0.0f; tgtRate[2] = 0.0f;
       stopMotors();
       continue;
-    }
-
-    // 잠금 해제 첫 tick의 D kick과 이전 목표 rate 잔류를 제거한다.
-    if (wasLocked) {
-      prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
-      lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
-      targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
-      outerCnt = 0;
-      wasLocked = false;
     }
 
     // ---------- Outer loop (250Hz): 각도 -> 목표 각속도 ----------
@@ -1166,7 +1180,6 @@ static void sendTelemetry() {
 }
 
 void udp_task(void *pv) {
-  const int CTRL_MARGIN = 150;
   uint32_t lastSend = 0;
 #if WIFI_LATENCY_DEBUG
   uint32_t prevTopUs = micros();
@@ -1236,7 +1249,6 @@ void udp_task(void *pv) {
             targetAngleZ = 0.0f;
             angleZ = 0.0f;
             mag_reference_pending = true;
-            fs_phase = FS_NONE;
             safety_lock = false;
             Serial.println(">>> START");
           }
