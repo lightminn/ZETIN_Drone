@@ -286,6 +286,34 @@ std::size_t countLogOccurrences(const std::string &needle) {
   return hits;
 }
 
+void checkInFlightOverTiltCut(
+    const char *axis, float injected_roll_deg, float injected_pitch_deg) {
+  prepareFailsafeFlight(1360);
+  lastRcMs = millis();
+  runPidTicks(1);
+  CHECK(!safety_lock);
+  for (int motor : motorOut) CHECK(motor > 1000);
+
+  angleX = injected_roll_deg;
+  angleY = injected_pitch_deg;
+  lastRcMs = millis();
+  arduino_fake::serial_output.clear();
+  runPidTicks(1);
+
+  std::cout << "[CONTROL] in-flight over-tilt axis=" << axis
+            << " actual_fault=" << static_cast<int>(fault_attitude)
+            << " actual_lock=" << static_cast<int>(safety_lock)
+            << " actual_motors=" << motorOut[0] << "," << motorOut[1]
+            << "," << motorOut[2] << "," << motorOut[3]
+            << " expected_fault=1 expected_lock=1"
+            << " expected_motors=1000,1000,1000,1000\n";
+  CHECK_EQ(fault_attitude, true);
+  CHECK_EQ(safety_lock, true);
+  for (int motor : motorOut) CHECK_EQ(motor, 1000);
+  CHECK_EQ(countLogOccurrences("[FAULT] OVER-TILT"),
+           static_cast<std::size_t>(1));
+}
+
 }  // namespace
 
 int main() {
@@ -762,6 +790,14 @@ int main() {
     CHECK(!safety_disarm_requested);
     fault_imu1 = false;
     fault_imu2 = false;
+  });
+
+  runCase("회귀: 비행 중 roll 과도기울기는 즉시 모터를 컷한다", [] {
+    checkInFlightOverTiltCut("roll", SAFETY_ANGLE + 10.0f, 0.0f);
+  });
+
+  runCase("회귀: 비행 중 pitch 과도기울기는 즉시 모터를 컷한다", [] {
+    checkInFlightOverTiltCut("pitch", 0.0f, SAFETY_ANGLE + 10.0f);
   });
 
   runCase("resume은 FS_DESCENDING이 아니면 거부된다", [] {
