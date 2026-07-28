@@ -43,6 +43,15 @@ def format_failsafe_phase(value):
     return f"{FAILSAFE_PHASE_NAMES.get(phase, 'UNKNOWN')} ({phase})"
 
 
+def format_failsafe_probe_state(value):
+    """Return a human-readable probe-state label while retaining the wire value."""
+
+    state = phase_number(value)
+    if state is None:
+        return "legacy/unknown"
+    return f"{FAILSAFE_PROBE_STATE_NAMES.get(state, 'UNKNOWN')} ({state})"
+
+
 def _format_trim(value):
     if value is None:
         return "unknown"
@@ -55,6 +64,21 @@ def _format_trim(value):
     return f"{numeric:+.2f}°"
 
 
+def _format_hover_status(sample):
+    values = (sample.get("Hover_Est"), sample.get("Hover_Valid"))
+    if all(value is None for value in values):
+        return ""
+
+    try:
+        hover_est = float(values[0])
+    except (TypeError, ValueError):
+        hover_est = math.nan
+    hover_text = "-" if not math.isfinite(hover_est) else f"{hover_est:.1f}µs"
+    hover_valid = phase_number(values[1])
+    valid_text = "-" if hover_valid is None else str(hover_valid)
+    return f" | Hover {hover_text}, valid {valid_text}"
+
+
 def _format_probe_status(sample):
     values = (
         sample.get("Failsafe_Probe_State"),
@@ -65,21 +89,19 @@ def _format_probe_status(sample):
         return ""
 
     state = phase_number(values[0])
-    state_text = (
-        "legacy/unknown"
-        if state is None
-        else f"{FAILSAFE_PROBE_STATE_NAMES.get(state, 'UNKNOWN')} ({state})"
-    )
+    state_text = format_failsafe_probe_state(state)
     count = phase_number(values[1])
-    count_text = "unknown" if count is None else str(count)
+    count_text = "-" if count is None else str(count)
     try:
         response = float(values[2])
     except (TypeError, ValueError):
         response = math.nan
-    response_text = "unknown" if not math.isfinite(response) else f"{response:.3f}g"
+    response_text = "-" if not math.isfinite(response) else f"{response:.4f}g"
+    prefix = "⚠ Probe" if state == 4 else "Probe"
+    suffix = " ⚠" if state == 4 else ""
     return (
-        f" | Probe {state_text}, no-response {count_text}, "
-        f"response {response_text}"
+        f" | {prefix} {state_text}{suffix}, "
+        f"no-response {count_text}, response {response_text}"
     )
 
 
@@ -87,12 +109,14 @@ def format_monitor_status(sample):
     """Return status text and whether the monitor must use alert styling."""
 
     phase = phase_number(sample.get("Failsafe_Phase"))
-    alert = phase is not None and phase != 0
+    probe_state = phase_number(sample.get("Failsafe_Probe_State"))
+    alert = (phase is not None and phase != 0) or probe_state == 4
     prefix = "AUTO-LAND ACTIVE — " if alert else ""
     text = (
         f"{prefix}Failsafe {format_failsafe_phase(phase)} | "
         f"Trim R {_format_trim(sample.get('Trim_Roll'))} / "
         f"P {_format_trim(sample.get('Trim_Pitch'))}"
+        f"{_format_hover_status(sample)}"
         f"{_format_probe_status(sample)}"
     )
     return text, alert

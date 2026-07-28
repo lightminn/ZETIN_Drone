@@ -65,6 +65,17 @@ packet_count = 0
 bad_packet_count = 0
 latest_sample = None
 
+MONITOR_STATUS_FIELDS = (
+    "Failsafe_Phase",
+    "Trim_Roll",
+    "Trim_Pitch",
+    "Hover_Est",
+    "Hover_Valid",
+    "Failsafe_Probe_State",
+    "Failsafe_Probe_NoResponse",
+    "Failsafe_Probe_Response_G",
+)
+
 
 def optional_number(value):
     return math.nan if value is None else value
@@ -202,10 +213,13 @@ def update_plot(_frame):
         active_text = "legacy/unknown" if active is None else str(active)
         faults = active_fault_names(latest_sample)
         fault_text = ", ".join(faults) if faults else "none"
+        status_sample = {
+            name: latest_sample.get(name) for name in MONITOR_STATUS_FIELDS
+        }
         render_monitor_title(
             ax4,
             f"System status — active IMUs: {active_text}, faults: {fault_text}",
-            latest_sample,
+            status_sample,
         )
 
     fig.tight_layout(rect=(0, 0, 1, 0.97))

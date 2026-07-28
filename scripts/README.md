@@ -9,6 +9,7 @@ python scripts/tune_pid.py
 python scripts/receive_telemetry.py
 python scripts/monitor_telemetry.py
 python scripts/analyze_flight_log.py [optional-log.csv]
+python scripts/analyze_probe_response.py <csv> [<csv> ...] [--label ground|air]
 python scripts/receive_dual_imu_debug.py
 python scripts/test_dualsense_input.py
 ```
@@ -23,6 +24,14 @@ python scripts/test_dualsense_input.py
 `Yaw_Hold`에서 끝나는 35필드, `Trim_Pitch`에서 끝나는 38필드 패킷도
 레거시로 받아들인다. `Hover_Valid`에서 끝나는 40필드도 프로브 진단 도입 전
 패킷으로 수락한다. CSV에는 PC 수신 시각까지 포함해 44개 열을 쓴다.
+
+`analyze_probe_response.py`는 Stage E-4a용으로 프로브 판정 이벤트와
+`Hover_Est` 일관성을 확인하고, 지면/공중 응답 분포 및 1.5배 여유를 판정한다.
+두 로그를 비교할 때는
+`python scripts/analyze_probe_response.py ground.csv air.csv --label ground --label air`
+처럼 CSV 순서대로 `--label`을 반복한다. 같은 라벨의 CSV만 여러 개 분석할
+때는 `--label`을 한 번만 주면 모든 입력에 적용된다. `--plot`을 지정할 때만
+matplotlib을 불러오므로 터미널 요약에는 matplotlib이 필요 없다.
 
 `control_dualsense.py`는 yaw 스틱을 상태 없는 `rcr` 각속도 명령으로 보내며,
 `YAW_RATE_MAX_DPS = 90.0`에 따라 최대 편향을 ±90dps로 제한한다. 펌웨어의

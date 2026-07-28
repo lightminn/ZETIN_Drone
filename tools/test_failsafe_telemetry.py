@@ -202,21 +202,24 @@ class MonitorFailsafeTelemetryTests(unittest.TestCase):
                 "Failsafe_Phase": 1,
                 "Trim_Roll": 0.0,
                 "Trim_Pitch": 0.0,
+                "Hover_Est": 1340.25,
+                "Hover_Valid": 1,
                 "Failsafe_Probe_State": 3,
                 "Failsafe_Probe_NoResponse": 0,
-                "Failsafe_Probe_Response_G": 0.0,
+                "Failsafe_Probe_Response_G": 0.01234,
             }
         )
 
         self.assertTrue(alert)
+        self.assertIn("Hover 1340.2µs, valid 1", text)
         self.assertIn("Probe UNAVAILABLE (3)", text)
         self.assertIn("no-response 0", text)
-        self.assertIn("response 0.000g", text)
+        self.assertIn("response 0.0123g", text)
 
-    def test_probe_blocked_is_named_without_changing_the_field_contract(self):
+    def test_probe_blocked_is_named_and_marked_as_an_alert(self):
         text, alert = self.formatter()(
             {
-                "Failsafe_Phase": 1,
+                "Failsafe_Phase": 0,
                 "Trim_Roll": 0.0,
                 "Trim_Pitch": 0.0,
                 "Failsafe_Probe_State": 4,
@@ -227,7 +230,18 @@ class MonitorFailsafeTelemetryTests(unittest.TestCase):
 
         self.assertTrue(alert)
         self.assertIn("Probe BLOCKED (4)", text)
+        self.assertIn("⚠", text)
         self.assertIn("no-response 1", text)
+
+    def test_probe_state_formatter_names_blocked_and_handles_none(self):
+        formatter = getattr(
+            failsafe_telemetry,
+            "format_failsafe_probe_state",
+            None,
+        )
+        self.assertIsNotNone(formatter)
+        self.assertEqual("BLOCKED (4)", formatter(4))
+        self.assertEqual("legacy/unknown", formatter(None))
 
     def test_renderer_applies_alert_box_to_nonzero_phase(self):
         figure, axis = plt.subplots()
@@ -260,6 +274,25 @@ class MonitorFailsafeTelemetryTests(unittest.TestCase):
         self.assertFalse(alert)
         self.assertIn("Failsafe legacy/unknown", text)
         self.assertIn("Trim R unknown / P unknown", text)
+        self.assertNotIn("Hover", text)
+
+    def test_legacy_none_probe_values_do_not_crash_or_add_empty_status(self):
+        text, alert = self.formatter()(
+            {
+                "Failsafe_Phase": None,
+                "Trim_Roll": None,
+                "Trim_Pitch": None,
+                "Hover_Est": None,
+                "Hover_Valid": None,
+                "Failsafe_Probe_State": None,
+                "Failsafe_Probe_NoResponse": None,
+                "Failsafe_Probe_Response_G": None,
+            }
+        )
+
+        self.assertFalse(alert)
+        self.assertNotIn("Hover", text)
+        self.assertNotIn("Probe", text)
 
 
 if __name__ == "__main__":
