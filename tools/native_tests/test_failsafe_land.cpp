@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -31,6 +32,7 @@ static const LandProbeConfig kProbeConfig = {
     120,   // dip_ms
     30,    // sample_delay_ms
     0.06f, // response_g
+    0.10f, // ground_accel_tol_g
     2,     // confirm_n
     40,    // dip_us
 };
@@ -99,6 +101,22 @@ int main() {
 
   runCase("하강 스로틀은 1000 미만으로 내려가지 않는다", [] {
     CHECK(failsafeDescentThrottle(1020, 60) == 1000);
+  });
+
+  runCase("호버 비례 프로브 딥은 반올림하고 런타임 상하한을 공개한다", [] {
+    bool clamped = true;
+    CHECK(failsafeProbeDipUs(1340.0f, 0.118f, 20, 150, clamped) == 40);
+    CHECK(!clamped);
+    CHECK(failsafeProbeDipUs(1442.0f, 0.118f, 20, 150, clamped) == 52);
+    CHECK(!clamped);
+    CHECK(failsafeProbeDipUs(1100.0f, 0.118f, 20, 150, clamped) == 20);
+    CHECK(clamped);
+    CHECK(failsafeProbeDipUs(2500.0f, 0.118f, 20, 150, clamped) == 149);
+    CHECK(clamped);
+    CHECK(failsafeProbeDipUs(
+              std::numeric_limits<float>::quiet_NaN(),
+              0.118f, 20, 150, clamped) == 20);
+    CHECK(clamped);
   });
 
   runCase("min_descend 전에는 필터만 갱신하고 프로브를 시작하지 않는다", [] {
@@ -182,6 +200,23 @@ int main() {
     CHECK(det.no_response_count == 1);
   });
 
+  runCase("1g에서 먼 연속 무반응은 착지의 필요조건을 충족하지 않는다", [] {
+    LandDetector det = {};
+    CHECK(!probeStep(det, 0.80f, 1000));
+    CHECK(!probeStep(det, 0.80f, 1120));
+    CHECK(det.no_response_count == 1);
+    CHECK(!probeStep(det, 0.80f, 1121));
+    CHECK(!probeStep(det, 0.80f, 1400));
+    CHECK(!probeStep(det, 0.80f, 1520));
+    CHECK(det.no_response_count == 2);
+
+    // 1g 복귀만으로 착지를 선언하는 폐기된 충분조건이 아니다. 프로브 연속
+    // 무반응이 여전히 주 판별이고, 1g 근처는 착지 확정의 필요조건일 뿐이다.
+    CHECK(!probeStep(det, 1.0f, 1521));
+    CHECK(!probeStep(det, 1.0f, 1800));
+    CHECK(probeStep(det, 1.0f, 1920));
+  });
+
   runCase("딥이 1000us 아래로 가면 프로브 불가로 남고 착지하지 않는다", [] {
     LandDetector det = {};
     for (uint32_t t = 0; t <= 5000; t += 10) {
@@ -195,7 +230,7 @@ int main() {
   runCase("LPF는 첫 샘플을 대입하고 이후 alpha로 갱신한다", [] {
     LandDetector det = {};
     const LandProbeConfig config = {
-        0.25f, 1000, 400, 120, 30, 0.06f, 2, 40};
+        0.25f, 1000, 400, 120, 30, 0.06f, 0.10f, 2, 40};
     CHECK(!updateLandDetector(det, 1.20f, 0, 1280, config));
     CHECK(det.filt_init);
     CHECK(std::fabs(det.filt - 1.20f) < 1e-6f);
@@ -216,6 +251,6 @@ int main() {
     std::cerr << g_failures << " failsafe-land case(s) failed\n";
     return 1;
   }
-  std::cout << "16/16 failsafe-land cases passed\n";
+  std::cout << "18/18 failsafe-land cases passed\n";
   return 0;
 }

@@ -714,9 +714,9 @@ int main() {
              static_cast<std::size_t>(0));
   });
 
-  runCase("호버 대비 ground margin 아래 RC 타임아웃은 즉시 컷한다", [] {
+  runCase("보수적 절대 하한 1150us 이하는 지상으로 보고 즉시 컷한다", [] {
     prepareFailsafeFlight(1360);
-    base_throttle = 1360 - FS_GROUND_MARGIN_US - 1;
+    base_throttle = 1150;
     arduino_fake::serial_output.clear();
 
     runPidTicks(50);
@@ -726,6 +726,24 @@ int main() {
     CHECK_EQ((int)fs_phase, (int)FS_NONE);
     CHECK_EQ(motorOut[0], 1000);
     CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> GROUND CUT"),
+             static_cast<std::size_t>(1));
+  });
+
+  runCase("R2: 오염된 높은 hover_est는 공중 1340us를 즉시 컷하지 않는다", [] {
+    prepareFailsafeFlight(1340);
+    primeHoverEstimate(1464.0f);
+    base_throttle = 1340;
+    arduino_fake::serial_output.clear();
+
+    runPidTicks(1);
+
+    CHECK(fault_rc);
+    CHECK(!safety_lock);
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK_EQ(base_throttle, 1464 - FS_DESCENT_DELTA_US);
+    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> GROUND CUT"),
+             static_cast<std::size_t>(0));
+    CHECK_EQ(countLogOccurrences("[FAULT] RC TIMEOUT -> AUTO-LAND"),
              static_cast<std::size_t>(1));
   });
 
@@ -771,6 +789,37 @@ int main() {
     CHECK(safety_lock);
     CHECK(!safety_arm_requested);
     CHECK(!safety_disarm_requested);
+  });
+
+  runCase("R3: pending arm 중복 start는 이미 무장 예약으로 처리한다", [] {
+    arduino_fake::reset();
+    safety_lock = true;
+    safety_arm_requested = false;
+    safety_disarm_requested = false;
+    calibration_ok = true;
+    mag_calibrating = false;
+    angleX = angleY = 0.0f;
+    imu1_frozen_now = imu2_frozen_now = false;
+    imu_disagree_now = false;
+
+    sendUdpCommandOnce("start");
+    CHECK(safety_lock);
+    CHECK(safety_arm_requested);
+
+    fault_rc = true;
+    base_throttle = 1177;
+    primeHoverEstimate(1420.0f);
+    arduino_fake::serial_output.clear();
+    sendUdpCommandOnce("start");
+
+    CHECK(safety_lock);
+    CHECK(safety_arm_requested);
+    CHECK(fault_rc);
+    CHECK_EQ(base_throttle, 1177);
+    CHECK(hoverTracker.valid);
+    CHECK_NEAR(hover_est, 1420.0f, 1e-4f);
+    CHECK_EQ(countLogOccurrences(">>> START ignored (already armed)"),
+             static_cast<std::size_t>(1));
   });
 
   runCase("pid_task 고장 감지는 요청 없이 safety_lock을 직접 세운다", [] {
@@ -869,6 +918,61 @@ int main() {
     CHECK(!fault_rc);
     CHECK(!safety_lock);
     CHECK(countLogOccurrences(">>> RESUME") == 1U);
+  });
+
+  runCase("R4: 최초 진입 3x FS_MAX 뒤 resume만 거부하고 하강은 유지한다", [] {
+    prepareFailsafeFlight(1360);
+    arduino_fake::serial_output.clear();
+
+    uint8_t phase_at_previous_hook = fs_phase;
+    uint32_t episode_start_tick = std::numeric_limits<uint32_t>::max();
+    uint32_t fresh_rc_gap_ticks = 0;
+    int resume_attempts = 0;
+    int accepted_resumes = 0;
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      setFakeAccelMagnitude(
+          fs_probe_state == FS_PROBE_DIP ? 0.70f : 1.0f, tick);
+
+      if (fs_phase == FS_DESCENDING &&
+          phase_at_previous_hook != FS_DESCENDING) {
+        episode_start_tick = tick;
+      }
+      if (fs_phase == FS_NONE &&
+          phase_at_previous_hook == FS_DESCENDING) {
+        accepted_resumes++;
+        fresh_rc_gap_ticks = 20U;
+      }
+
+      if (fs_phase == FS_DESCENDING &&
+          episode_start_tick != std::numeric_limits<uint32_t>::max() &&
+          tick - episode_start_tick == FS_MAX_MS - 10U) {
+        lastRcMs = millis();
+        sendUdpCommandOnce("resume");
+        resume_attempts++;
+        if (countLogOccurrences("RESUME REFUSED cumulative") > 0U) {
+          // 거부 자체가 자동착륙을 끝내지 않았는지 같은 tick에서 관찰한다.
+          arduino_fake::tick_limit = tick;
+        }
+      } else if (fs_phase == FS_NONE && accepted_resumes > 0) {
+        if (fresh_rc_gap_ticks > 0U) {
+          lastRcMs = millis();
+          fresh_rc_gap_ticks--;
+        } else {
+          lastRcMs = millis() - RC_TIMEOUT_MS - 1U;
+        }
+      }
+      phase_at_previous_hook = fs_phase;
+    };
+
+    runPidTicks(3U * FS_MAX_MS + 200U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK_EQ(resume_attempts, 3);
+    CHECK_EQ(accepted_resumes, 2);
+    CHECK_EQ(countLogOccurrences("RESUME REFUSED cumulative"),
+             static_cast<std::size_t>(1));
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK(!safety_lock);
   });
 
   runCase("pending resume 뒤 stop은 resume을 취소하고 ABORT로 끝난다", [] {
@@ -1114,10 +1218,11 @@ int main() {
     CHECK(cut_tick <= FS_MAX_MS + 2U);
   });
 
-  runCase("프로브 딥은 고정 collective 창 안에서 base만 40us 낮춘다", [] {
-    constexpr int hover_throttle = 1360;
+  runCase("R1: 프로브 딥은 1.3x 호버 여유의 11.8%인 52us다", [] {
+    constexpr int hover_throttle = 1442;
     constexpr int descent_throttle =
         hover_throttle - FS_DESCENT_DELTA_US;
+    constexpr int expected_probe_dip_us = 52;
     prepareFailsafeFlight(hover_throttle);
     arduino_fake::pre_tick_hook = [](uint32_t tick) {
       setFakeAccelMagnitude(
@@ -1128,16 +1233,39 @@ int main() {
     arduino_fake::pre_tick_hook = nullptr;
 
     CHECK_EQ((int)fs_probe_state, (int)FS_PROBE_DIP);
-    CHECK_EQ(base_throttle, descent_throttle - FS_PROBE_DIP_US);
+    CHECK_EQ(base_throttle, descent_throttle - expected_probe_dip_us);
     CHECK_EQ(min_throttle, max(1050, descent_throttle - CTRL_MARGIN));
     CHECK_EQ(max_throttle, min(1900, descent_throttle + CTRL_MARGIN));
     for (int motor : motorOut) {
-      CHECK_EQ(motor, descent_throttle - FS_PROBE_DIP_US);
+      CHECK_EQ(motor, descent_throttle - expected_probe_dip_us);
     }
   });
 
+  runCase("R1: 방어적 낮은 hover_est의 딥 clamp는 로그에 드러난다", [] {
+    prepareFailsafeFlight(1200);
+    primeHoverEstimate(1100.0f);
+    base_throttle = 1200;
+    arduino_fake::serial_output.clear();
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      setFakeAccelMagnitude(
+          fs_probe_state == FS_PROBE_DIP ? 0.70f : 1.0f, tick);
+    };
+
+    runPidTicks(FS_MIN_DESCEND_MS + 5U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK_EQ((int)fs_probe_state, (int)FS_PROBE_DIP);
+    CHECK_EQ(base_throttle, 1020);
+    CHECK_EQ(countLogOccurrences("AUTO-LAND PROBE DIP CLAMPED"),
+             static_cast<std::size_t>(1));
+  });
+
   runCase("1000us 아래 딥은 UNAVAILABLE로 공개하고 TIMEOUT에 맡긴다", [] {
-    prepareFailsafeFlight(1090);  // descent=1030, dip=990 -> 판별 불가
+    prepareFailsafeFlight(1200);
+    // 실제 collective는 절대 지상컷 하한보다 높지만 방어적으로 오염된 낮은
+    // 추정치가 들어온 경우다: descent=1010, clamp된 dip=20 -> 990us.
+    primeHoverEstimate(1070.0f);
+    base_throttle = 1200;
     arduino_fake::pre_tick_hook = [](uint32_t tick) {
       setFakeAccelMagnitude(1.0f, tick);
     };

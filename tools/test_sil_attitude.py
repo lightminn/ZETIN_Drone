@@ -11,6 +11,7 @@ NATIVE_TEST_DIR = REPO_ROOT / "tools" / "native_tests"
 SKETCH_DIR = (
     REPO_ROOT / "firmware" / "flight" / "dual_imu_cascade_pwm"
 )
+EXECUTION_TIMEOUT_S = 180
 
 
 class SilAttitudeTest(unittest.TestCase):
@@ -79,11 +80,12 @@ class SilAttitudeTest(unittest.TestCase):
 
             try:
                 completed = subprocess.run(
-                    [str(executable)], capture_output=True, text=True, check=False, timeout=20,
+                    [str(executable)], capture_output=True, text=True, check=False,
+                    timeout=EXECUTION_TIMEOUT_S,
                 )
             except subprocess.TimeoutExpired as error:
                 self.fail(
-                    "native attitude SIL timed out after 20 seconds\n"
+                    f"native attitude SIL timed out after {EXECUTION_TIMEOUT_S} seconds\n"
                     f"stdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}"
                 )
             # 일부 샌드박스는 32비트 ELF syscall을 SIGSYS로 막는다. 이때만
@@ -98,12 +100,13 @@ class SilAttitudeTest(unittest.TestCase):
                 try:
                     completed = subprocess.run(
                         [qemu_i386, str(executable)],
-                        capture_output=True, text=True, check=False, timeout=20,
+                        capture_output=True, text=True, check=False,
+                        timeout=EXECUTION_TIMEOUT_S,
                     )
                 except subprocess.TimeoutExpired as error:
                     self.fail(
                         "native attitude SIL under qemu-i386-static timed out "
-                        "after 20 seconds\n"
+                        f"after {EXECUTION_TIMEOUT_S} seconds\n"
                         f"stdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}"
                     )
             if completed.returncode != 0:
@@ -111,6 +114,9 @@ class SilAttitudeTest(unittest.TestCase):
                     "native attitude SIL failed\n"
                     f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
                 )
+            for line in completed.stdout.splitlines():
+                if line.startswith("[R1]"):
+                    print(line)
 
 
 if __name__ == "__main__":

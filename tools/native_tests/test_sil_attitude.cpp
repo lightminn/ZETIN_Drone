@@ -1968,6 +1968,72 @@ int main() {
               << "dps -- 플랜트 yaw 부호 미해결, 벤치 Stage D에서 확정\n";
   });
 
+  runCase("R1: mass 1.3x noise 0.08g phase sweep has no airborne landing", [] {
+    constexpr double kMassScale = 1.30;
+    constexpr double kNoiseSdG = 0.08;
+    constexpr uint32_t kNoisePeriodTicks = 10000U;
+    constexpr uint32_t kPhaseStepTicks = 100U;
+    constexpr int kExpectedDipUs = 52;
+    int airborne_false_landings = 0;
+    int wrong_dip_runs = 0;
+
+    for (uint32_t phase_ticks = 0;
+         phase_ticks < kNoisePeriodTicks;
+         phase_ticks += kPhaseStepTicks) {
+      RunConfig config;
+      config.initial.z_m = 3.0;
+      config.vertical_enabled = true;
+      config.plant_parameters.mass_kg =
+          kPlantParameters.mass_kg * kMassScale;
+      config.plant_parameters.k_ground = 80.0;
+      config.plant_parameters.c_ground =
+          2.0 * std::sqrt(config.plant_parameters.k_ground *
+                          config.plant_parameters.mass_kg);
+      config.plant_parameters.k_ge = 0.0;
+      config.base_throttle_us = 1000 + static_cast<int>(std::lround(
+          config.plant_parameters.mass_kg * kGravityMs2 /
+          (4.0 * config.plant_parameters.thrust_per_us_n)));
+      config.rc_disconnect_tick = 5000U + phase_ticks;
+      config.ticks =
+          config.rc_disconnect_tick + RC_TIMEOUT_MS + FS_MAX_MS + 1500U;
+      config.accel_noise_enabled = true;
+      config.accel_noise_sd_g = kNoiseSdG;
+
+      const RunResult result = runSil(config);
+      const FailsafeTrace trace = analyzeFailsafeTrace(result);
+      if (trace.terminal_phase == FS_CUT_LANDED &&
+          trace.terminal_tick < trace.contact_tick) {
+        airborne_false_landings++;
+      }
+      int max_observed_dip_us = 0;
+      const int descent_throttle =
+          config.base_throttle_us - FS_DESCENT_DELTA_US;
+      for (const Sample &sample : result.samples) {
+        if (sample.failsafe_probe_state == FS_PROBE_DIP) {
+          max_observed_dip_us = std::max(
+              max_observed_dip_us,
+              descent_throttle - sample.base_throttle_us);
+        }
+      }
+      if (max_observed_dip_us != kExpectedDipUs) {
+        wrong_dip_runs++;
+      }
+    }
+
+    constexpr int kPhaseCount =
+        static_cast<int>(kNoisePeriodTicks / kPhaseStepTicks);
+    std::cout << "[R1] mass_scale=" << kMassScale
+              << " noise_sd_g=" << kNoiseSdG
+              << " phases=" << kPhaseCount
+              << " airborne_false_landings=" << airborne_false_landings
+              << " rate_pct="
+              << 100.0 * airborne_false_landings / kPhaseCount
+              << " wrong_dip_runs=" << wrong_dip_runs
+              << " expected=0/100 (0%), dip=52us in every run\n";
+    CHECK_EQ(airborne_false_landings, 0);
+    CHECK_EQ(wrong_dip_runs, 0);
+  });
+
   RunResult v1_no_noise;
   RunResult v1_noise_004;
   runCase("V1: noise OFF/ON normal descent lands after contact", [&] {

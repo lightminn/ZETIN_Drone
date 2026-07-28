@@ -56,17 +56,20 @@ ar|at|ay <value>      # roll / pitch / yaw
   일치, `magcal` 미진행 조건을 모두 통과한 뒤에만 시동하며, latch된 fault를
   해제하고 스로틀 창을 기본값(base 1100, min 1050, max 1250)으로 리셋한다.
   이때 yaw 추정(`angleZ`)을 0으로 초기화하고 mag 기준 heading도 다시 잡는다.
-  이미 시동된 상태에서 도착한 중복 `start`는 무시되므로, 지연 도착한 재전송이
-  비행 중 fault latch나 스로틀 창을 되돌리지 않는다. `stop`은 즉시 시동을
-  해제한다.
+  이미 시동됐거나 Core 1의 arm 적용을 기다리는 상태에서 도착한 중복 `start`는
+  무시되므로, 지연 도착한 재전송이 fault latch나 스로틀 창을 되돌리지 않는다.
+  `stop`은 즉시 시동을 해제한다.
 - `resume`은 자동착륙 하강 중(`Failsafe_Phase=1`)에만 조종권 복귀를
   요청한다. RC 패킷이 최근 500ms 안에 수신됐고, 과도 기울기가 아니고, 사용
   가능한 IMU가 하나 이상이며, `Hover_Valid=1`일 때만 수락한다. 수락하면
   `Failsafe_Phase=0`, `Fault_RC=0`, `base_throttle=round(Hover_Est)`로
   복원하고 스로틀 창도 ±150µs로 다시 잡는다. 조건이 하나라도 맞지 않으면
-  시리얼에 `RESUME REFUSED <phase|rc|tilt|imu|hover>`를 남기고 하강을
-  계속한다. 링크가 돌아온 것만으로 자동 복귀하지 않으며 명시적 `resume`이
-  반드시 필요하다.
+  시리얼에 `RESUME REFUSED <phase|rc|tilt|imu|hover|cumulative>`를 남기고
+  하강을 계속한다. 한 비행의 최초 자동착륙 진입부터
+  `FS_RESUME_MAX_MS = 3 × FS_MAX_MS`(초기 15초)가 지나면 `cumulative`로
+  거부한다. 이 시각은 앞선 `resume`이 지우지 않으며, 거부 자체는 현재
+  자동착륙을 강제 종료하지 않는다. 링크가 돌아온 것만으로 자동 복귀하지
+  않으며 명시적 `resume`이 반드시 필요하다.
 - **`resume`은 고도를 되찾지 못한다.** `Hover_Est` 복원은 추가 하강 가속도를
   0 근처로 줄일 뿐, 이미 쌓인 하강속도는 없애지 않는다. 링크가 돌아오면 즉시
   `resume`하고, 곧바로 스로틀을 올려 고도를 회복해야 한다. 늦게 보낼수록
@@ -74,9 +77,10 @@ ar|at|ay <value>      # roll / pitch / yaw
 - RC 스트림이 `RC_TIMEOUT_MS`(500ms) 동안 끊기면 `Fault_RC`를 세운다.
   - 아직 `Hover_Valid=0`이면 호버한 적이 없어 공중에 있을 수 없다고 보고
     **즉시 컷**한다. `Failsafe_Phase`는 0에 머문다.
-  - `Hover_Valid=1`이어도
-    `base_throttle < Hover_Est - FS_GROUND_MARGIN_US`(초기 120µs)이면
-    지상 스로틀로 보고 즉시 컷한다.
+  - `Hover_Valid=1`이어도 `base_throttle ≤ FS_GROUND_CUT_MAX_US`(1150µs)일
+    때만 지상 스로틀로 보고 즉시 컷한다. 지상 즉시컷 경계에는 `Hover_Est`를
+    쓰지 않으므로, 등속 상승을 잘못 학습한 높은 추정치가 공중 즉시컷을 만들지
+    못한다.
   - 그 외에는 **자동착륙**에 진입한다(`Failsafe_Phase=1`). 자세 목표는 적용
     중인 트림, yaw 각도는 진입 시점 heading 스냅샷, yaw 각속도 목표는 0이며,
     `Hover_Est - FS_DESCENT_DELTA_US`(초기 60µs)를 하강 스로틀로 쓴다.
@@ -86,16 +90,21 @@ ar|at|ay <value>      # roll / pitch / yaw
 - 호버 추정기는 무장·`FS_NONE` 상태에서 roll/pitch가 각각 ±10° 안이고,
   `|accel|`이 1g±0.05g이며, 스로틀이 1150µs를 넘는 샘플만 3초 시정수 LPF로
   추적한다. 해당 샘플 시간이 누적 1.5초가 되면 `Hover_Valid=1`이다. 이
-  임계·시간·margin 값은 모두 Stage E-0 벤치 조정 대상이다.
+  임계·시간 값은 모두 Stage E-0 벤치 조정 대상이다.
 - 착지 감지는 **능동 스로틀 프로브**로 한다. `FS_MIN_DESCEND_MS`(1초) 뒤부터
-  400ms마다 정상 하강 collective를 40µs 낮춰 120ms 유지한다. 딥 직전과
-  첫 30ms를 제외한 딥 중 5Hz LPF `|accel|` 최솟값의 차분이 0.06g를 넘으면
-  공중 반응으로 보고 연속 무반응 카운트를 지운다. 연속 두 번 무반응일 때만
-  `Phase=2`로 컷한다. 등속 하강과 지면 정지는 수동 가속도 관측만으로 모두
-  1g라 구분되지 않으므로, 추력 변화에 대한 인과 반응을 만든다.
-  `descent_throttle - 40µs < 1000µs`면 유효한 딥을 만들 수 없어 프로브 상태를
-  `UNAVAILABLE`로 남기고, 초기 `FS_MAX_MS = 5000`의 `Phase=3` 백스톱 컷에
-  맡긴다.
+  400ms마다 정상 하강 collective를
+  `round((Hover_Est − 1000) × FS_PROBE_DIP_FRAC)`만큼 낮춰 120ms 유지한다.
+  `FS_PROBE_DIP_FRAC=0.118`이며 결과는 20µs 이상,
+  `CTRL_MARGIN`(150µs) 미만으로 런타임 clamp된다. 명목
+  `Hover_Est=1340µs`에서는 기존과 같은 40µs이고, clamp가 걸리면 시리얼에
+  `AUTO-LAND PROBE DIP CLAMPED`가 남는다. 딥 직전과 첫 30ms를 제외한 딥 중
+  5Hz LPF `|accel|` 최솟값의 차분이 0.06g를 넘으면 공중 반응으로 보고 연속
+  무반응 카운트를 지운다. 연속 두 번 무반응이고 LPF `|accel|`이
+  1g±`FS_LAND_ACCEL_TOL_G`(0.10g) 안일 때만 `Phase=2`로 컷한다.
+  1g 근처는 착지의 필요조건일 뿐 충분조건이 아니며, 주 판별은 계속 능동
+  프로브의 연속 무반응이다. 적용 딥 뒤 collective가 1000µs 미만이면 유효한
+  프로브를 만들 수 없어 상태를 `UNAVAILABLE`로 남기고, 초기
+  `FS_MAX_MS = 5000`의 `Phase=3` 백스톱 컷에 맡긴다.
   `FS_MAX_MS`는 착지 감지기를 벤치 검증한 뒤에만 10000으로 올린다.
 - IMU 전멸·과도 기울기·명시적 `stop`은 계속 즉시 컷이다. 하강 중 이들이
   걸리면 `Phase=4`(중단컷)로 끝난다.

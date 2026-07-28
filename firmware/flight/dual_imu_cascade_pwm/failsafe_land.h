@@ -69,9 +69,34 @@ struct LandProbeConfig {
   uint32_t dip_ms;
   uint32_t sample_delay_ms;
   float response_g;
+  float ground_accel_tol_g;
   uint8_t confirm_n;
   int dip_us;
 };
+
+// hover_est에서 1000us를 뺀 유효 collective에 비례해 딥을 만든다. 측정
+// 가능한 하한과 제어 authority 상한은 런타임 값이므로 적용값과 clamp 여부를
+// 함께 반환한다. upper_exclusive_us는 반드시 min_us보다 커야 한다.
+static inline int failsafeProbeDipUs(
+    float hover_estimate_us, float dip_frac, int min_us,
+    int upper_exclusive_us, bool &clamped) {
+  if (!isfinite(hover_estimate_us) || !isfinite(dip_frac) ||
+      dip_frac <= 0.0f || upper_exclusive_us <= min_us) {
+    clamped = true;
+    return min_us;
+  }
+
+  const int requested_us = (int)lroundf(
+      (hover_estimate_us - 1000.0f) * dip_frac);
+  const int applied_us =
+      requested_us < min_us
+          ? min_us
+          : (requested_us >= upper_exclusive_us
+                 ? upper_exclusive_us - 1
+                 : requested_us);
+  clamped = applied_us != requested_us;
+  return applied_us;
+}
 
 // resume 거부 사유. .ino 안에 두면 arduino-cli가 자동 생성한 함수
 // 프로토타입이 enum 선언보다 앞에 삽입돼 컴파일이 깨진다(헤더는 그 전처리
@@ -84,6 +109,7 @@ enum ResumeRefusalReason : uint8_t {
   RESUME_REFUSED_TILT,
   RESUME_REFUSED_IMU,
   RESUME_REFUSED_HOVER,
+  RESUME_REFUSED_CUMULATIVE,
 };
 
 static inline const char *resumeRefusalName(ResumeRefusalReason reason) {
@@ -93,6 +119,7 @@ static inline const char *resumeRefusalName(ResumeRefusalReason reason) {
     case RESUME_REFUSED_TILT: return "tilt";
     case RESUME_REFUSED_IMU: return "imu";
     case RESUME_REFUSED_HOVER: return "hover";
+    case RESUME_REFUSED_CUMULATIVE: return "cumulative";
     default: return "unknown";
   }
 }
@@ -178,7 +205,13 @@ static inline bool updateLandDetector(
   } else if (det.no_response_count < UINT8_MAX) {
     det.no_response_count++;
   }
-  return det.no_response_count >= config.confirm_n;
+  // 과거의 폐기된 방식은 1g 복귀를 착지의 충분조건으로 썼다. 여기서는 능동
+  // 프로브 연속 무반응이 여전히 주 판별이며, 지면에 정지하면 반드시 1g라는
+  // 사실만 이용해 1g 근처를 착지 확정의 필요조건으로 추가한다. 1g만으로는
+  // 절대로 착지를 선언하지 않는다.
+  const bool near_stationary_1g =
+      fabsf(det.filt - 1.0f) <= config.ground_accel_tol_g;
+  return det.no_response_count >= config.confirm_n && near_stationary_1g;
 }
 
 static inline int failsafeDescentThrottle(int entry_throttle,

@@ -161,18 +161,22 @@ static_assert(FS_DESCENT_DELTA_US < CTRL_MARGIN,
 const uint32_t FS_MIN_DESCEND_MS   = 1000;
 const float    FS_LAND_LPF_ALPHA   = 0.03f;   // 1kHz에서 약 5Hz
 // 능동 프로브 상수는 모두 Stage E 벤치 조정 대상이다. 호버 1340us는 아이들
-// 1000us 대비 340us이고, 40us 딥은 추력 11.8%=0.118g다. 120ms 동안 추가
-// 하강 거리는 약 0.008m다. 실측 LPF 잔차 노이즈는 0.047g지만 지배 성분이
-// 5Hz 아래라 400ms 안의 딥 직전 대비 차분에서는 거의 공통모드로 상쇄된다.
-const int      FS_PROBE_DIP_US          = 40;
+// 1000us 대비 340us이고, 그 11.8%인 40us 딥은 명목 질량의 기존 동작을
+// 보존한다. 질량이 달라져도 같은 추력 비율을 유지하도록 hover_est 기준으로
+// 매 자동착륙 진입 때 계산한다. 런타임 결과는 측정 가능한 20us 이상,
+// CTRL_MARGIN 미만으로 clamp하고 clamp 여부를 진입 로그로 공개한다.
+const float    FS_PROBE_DIP_FRAC        = 0.118f;
+const int      FS_PROBE_DIP_MIN_US      = 20;
 const uint32_t FS_PROBE_PERIOD_MS       = 400;
 const uint32_t FS_PROBE_DIP_MS          = 120;
 const uint32_t FS_PROBE_SAMPLE_DELAY_MS = 30;
 const float    FS_PROBE_RESPONSE_G      = 0.06f;
+const float    FS_LAND_ACCEL_TOL_G      = 0.10f;
 const uint8_t  FS_PROBE_CONFIRM_N       = 2;
 const uint32_t FS_MAX_MS           = 5000;
-static_assert(FS_PROBE_DIP_US < CTRL_MARGIN,
-              "FS_PROBE_DIP_US must be less than CTRL_MARGIN");
+const uint32_t FS_RESUME_MAX_MS    = 3U * FS_MAX_MS;
+static_assert(FS_PROBE_DIP_MIN_US < CTRL_MARGIN,
+              "FS_PROBE_DIP_MIN_US must be less than CTRL_MARGIN");
 static_assert(FS_PROBE_SAMPLE_DELAY_MS < FS_PROBE_DIP_MS,
               "probe sample delay must be shorter than the dip");
 static_assert(FS_PROBE_DIP_MS < FS_PROBE_PERIOD_MS,
@@ -184,8 +188,9 @@ const LandProbeConfig FS_LAND_PROBE_CONFIG = {
     FS_PROBE_DIP_MS,
     FS_PROBE_SAMPLE_DELAY_MS,
     FS_PROBE_RESPONSE_G,
+    FS_LAND_ACCEL_TOL_G,
     FS_PROBE_CONFIRM_N,
-    FS_PROBE_DIP_US,
+    FS_PROBE_DIP_MIN_US,
 };
 // 아래 호버 추정 상수는 모두 Stage E-0 벤치 조정 대상이다. 10°/±0.05g는
 // 자세·수직 정상상태만 받는 보수적 시작값이고, 3초 LPF는 요구 범위(2~5초)의
@@ -196,9 +201,11 @@ const float    HOVER_ACCEL_TOL_G      = 0.05f;
 const int      HOVER_MIN_THROTTLE_US  = 1150;
 const float    HOVER_LPF_TAU_S        = 3.0f;
 const uint32_t HOVER_VALID_MS         = 1500;
-// 기존 1200us 컷은 가정 호버 1340us에서 margin 140us였다. 두 번의 60us
-// 하강 delta에 해당하는 120us로 보수적으로 시작하고 실측 hover_est로 조정한다.
-const int      FS_GROUND_MARGIN_US    = 120;
+// 실측 호버는 약 1340us다. 무장 직후 spool-up 로그(041032)는 1100~1190us
+// 구간이 전체 무장 시간의 9.4%였으므로, 지상 즉시컷은 보수적으로 1150us
+// 이하에서만 허용한다. 이보다 높으면 hover_est가 오염됐더라도 자동착륙을
+// 택한다. 최악이 지상 5초 하강이 되게 해 공중 즉시컷보다 안전한 방향이다.
+const int      FS_GROUND_CUT_MAX_US  = 1150;
 const uint32_t PID_WDT_TIMEOUT_MS = 500;     // pid_task 정지 시 강제 재부팅 (1kHz 루프 대비 큰 여유)
 const int32_t  FROZEN_DELTA_RAW   = 1;       // 6축 raw 변화량 합이 이 이하면 정지 의심 (LSB)
 const uint32_t IMU_FROZEN_MS      = 300;     // 그 상태가 이만큼 지속되면 freeze 확정
@@ -374,6 +381,10 @@ volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
 volatile uint8_t fs_probe_state = FS_PROBE_WAIT;
 volatile uint8_t fs_probe_no_response = 0;
 volatile float fs_probe_response_g = 0.0f;
+// 한 비행에서 최초 자동착륙에 들어간 시각. resume은 지우지 않으며 새 start가
+// 실제로 Core 1에서 arm 전이될 때만 초기화한다.
+volatile uint32_t fs_first_enter_ms = 0;
+volatile bool fs_first_enter_valid = false;
 volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
 volatile bool hover_valid = false;
 // 비행 중에는 pid_task만 쓰고, start는 safety_lock=true인 동안 초기화한 뒤
@@ -484,6 +495,10 @@ static inline bool takeFailsafeResumeRequest() {
 
 static inline ResumeRefusalReason resumeRefusalReason(uint32_t nowMs) {
   if (fs_phase != FS_DESCENDING) return RESUME_REFUSED_PHASE;
+  if (fs_first_enter_valid &&
+      (uint32_t)(nowMs - fs_first_enter_ms) >= FS_RESUME_MAX_MS) {
+    return RESUME_REFUSED_CUMULATIVE;
+  }
   if (rcTimedOut(nowMs, lastRcMs)) return RESUME_REFUSED_RC;
   if (fabsf(angleX) > SAFETY_ANGLE || fabsf(angleY) > SAFETY_ANGLE) {
     return RESUME_REFUSED_TILT;
@@ -796,6 +811,8 @@ void pid_task(void *pv) {
   uint32_t loopMarkerMs = millis();
   bool wasLocked = true;
   LandDetector landDet = {};
+  LandProbeConfig landProbeConfig = FS_LAND_PROBE_CONFIG;
+  int fs_probe_dip_us = FS_PROBE_DIP_MIN_US;
   uint32_t fs_enter_ms = 0;
   float fs_hold_yaw = 0.0f;
 
@@ -1008,6 +1025,8 @@ void pid_task(void *pv) {
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
       outerCnt = 0;
+      fs_first_enter_ms = 0;
+      fs_first_enter_valid = false;
       wasLocked = false;
     }
 
@@ -1025,8 +1044,9 @@ void pid_task(void *pv) {
     hover_est = hoverTracker.estimate_us;
     hover_valid = hoverTracker.valid;
 
-    // RC 타임아웃은 유효 호버 추정치가 없거나 호버 대비 지상 스로틀이면
-    // 즉시 컷하고, 그 외에는 추정 호버를 기준으로 자동착륙한다.
+    // RC 타임아웃은 유효 호버 추정치가 없거나 보수적 절대 지상 스로틀이면
+    // 즉시 컷하고, 그 외에는 추정 호버를 기준으로 자동착륙한다. hover_est는
+    // 하강 목표에만 쓰며, 오염된 높은 값이 공중 즉시컷 경계를 올리지 못한다.
     // 진입 블록 전체를 fs_phase 가드 안에 둔다 — 가드가 없으면 하강 내내
     // rcTimedOut이 참이라 이 블록이 1kHz로 재실행되고, Serial.println이 TX
     // 버퍼를 포화시켜 pid_task를 블로킹하면 500ms 태스크 워치독이 비행 중
@@ -1036,15 +1056,29 @@ void pid_task(void *pv) {
       if (!hover_valid) {
         safety_lock = true;
         Serial.println("[FAULT] RC TIMEOUT -> CUT (NO HOVER EST)");  // 한 번만
-      } else if ((float)base_throttle <
-                 hover_est - (float)FS_GROUND_MARGIN_US) {
+      } else if (base_throttle <= FS_GROUND_CUT_MAX_US) {
         safety_lock = true;
         Serial.println("[FAULT] RC TIMEOUT -> GROUND CUT");  // 한 번만
       } else {
         fs_phase = FS_DESCENDING;
         fs_hold_yaw = angleZ;
         fs_enter_ms = nowMs;
+        if (!fs_first_enter_valid) {
+          fs_first_enter_ms = nowMs;
+          fs_first_enter_valid = true;
+        }
         landDet = {};
+        landProbeConfig = FS_LAND_PROBE_CONFIG;
+        bool dipClamped = false;
+        fs_probe_dip_us = failsafeProbeDipUs(
+            hover_est, FS_PROBE_DIP_FRAC, FS_PROBE_DIP_MIN_US,
+            CTRL_MARGIN, dipClamped);
+        landProbeConfig.dip_us = fs_probe_dip_us;
+        if (dipClamped) {
+          Serial.printf(
+              "[WARN] AUTO-LAND PROBE DIP CLAMPED hover=%.1f applied=%d\n",
+              hover_est, fs_probe_dip_us);
+        }
         fs_probe_state = FS_PROBE_WAIT;
         fs_probe_no_response = 0;
         fs_probe_response_g = 0.0f;
@@ -1067,16 +1101,16 @@ void pid_task(void *pv) {
       const uint32_t elapsed = nowMs - fs_enter_ms;
       const bool landed = updateLandDetector(
           landDet, accelMag, elapsed, descentThrottle,
-          FS_LAND_PROBE_CONFIG);
+          landProbeConfig);
       fs_probe_state = landDet.probe_state;
       fs_probe_no_response = landDet.no_response_count;
       fs_probe_response_g = landDet.last_response_g;
 
-      // collective 창은 정상 하강값에 고정한다. 40us 딥은 CTRL_MARGIN=150us
-      // 안에서 base만 낮추므로 자세 mixer의 기존 authority를 보존한다.
+      // collective 창은 정상 하강값에 고정한다. 비례 딥은 런타임 clamp로
+      // CTRL_MARGIN 미만이며 base만 낮춰 자세 mixer의 authority를 보존한다.
       base_throttle =
           descentThrottle -
-          (landDetectorProbeActive(landDet) ? FS_PROBE_DIP_US : 0);
+          (landDetectorProbeActive(landDet) ? fs_probe_dip_us : 0);
       min_throttle = max(1050, descentThrottle - CTRL_MARGIN);
       max_throttle = min(1900, descentThrottle + CTRL_MARGIN);
       const FailsafePhase next = failsafeStep(landed, elapsed, FS_MAX_MS);
@@ -1420,7 +1454,7 @@ void udp_task(void *pv) {
         else if (strcmp(buf, "start") == 0) {
           bool overTilt = fabsf(angleX) > SAFETY_ANGLE || fabsf(angleY) > SAFETY_ANGLE;
           bool noUsableImu = imu1_frozen_now && imu2_frozen_now;
-          if (!safety_lock) {
+          if (!safety_lock || safety_arm_requested) {
             // 이미 시동 상태. 지상국은 start를 여러 번 재전송하므로, 지연
             // 도착한 중복 start가 비행 중 fault latch를 지우고 스로틀 창을
             // 리셋하는 것을 막는다.

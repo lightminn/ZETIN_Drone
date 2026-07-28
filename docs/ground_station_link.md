@@ -9,8 +9,8 @@
 
 `dual_imu_cascade_pwm`는 `rc` 패킷이 `RC_TIMEOUT_MS`(500ms) 넘게 끊기면
 `fault_rc`를 세운다. `Hover_Valid=0`이거나 진입 스로틀이
-`Hover_Est - FS_GROUND_MARGIN_US`보다 낮으면 공중에 있을 수 없다고 보고
-**즉시 컷**한다(`Phase`는 0 유지). 그 외에는 `Failsafe_Phase=1`
+절대 지상컷 하한 `FS_GROUND_CUT_MAX_US=1150` 이하이면 공중에 있을 수 없다고
+보고 **즉시 컷**한다(`Phase`는 0 유지). 그 외에는 `Failsafe_Phase=1`
 자동착륙에 진입한다. 자동착륙은 적용 중인 roll·pitch 트림과 진입 시점
 heading을 유지하고 `Hover_Est - 60µs`로 하강한다. 따라서 링크가 상승 중
 끊겨도 높은 진입 스로틀을 하강 기준으로 재사용하지 않는다. 접지 스파이크로
