@@ -159,18 +159,27 @@ static_assert(FS_DESCENT_DELTA_US < CTRL_MARGIN,
 // 런타임 값이라 static_assert로 잡을 수 없다. 예: entry=1150이면 delta=120도
 // 이미 collective 하한에 걸려 실제 하강이 일어나지 않는다.
 const uint32_t FS_MIN_DESCEND_MS   = 1000;
-const float    FS_LAND_LPF_ALPHA   = 0.03f;   // 1kHz에서 약 5Hz
+constexpr float FS_LAND_LPF_ALPHA = 0.03f;   // 1kHz에서 약 5Hz
 // 능동 프로브 상수는 모두 Stage E 벤치 조정 대상이다. 호버 1340us는 아이들
 // 1000us 대비 340us이고, 그 11.8%인 40us 딥은 명목 질량의 기존 동작을
 // 보존한다. 질량이 달라져도 같은 추력 비율을 유지하도록 hover_est 기준으로
 // 매 자동착륙 진입 때 계산한다. 런타임 결과는 측정 가능한 20us 이상,
 // CTRL_MARGIN 미만으로 clamp하고 clamp 여부를 진입 로그로 공개한다.
-const float    FS_PROBE_DIP_FRAC        = 0.118f;
+constexpr float FS_PROBE_DIP_FRAC      = 0.118f;
 const int      FS_PROBE_DIP_MIN_US      = 20;
 const uint32_t FS_PROBE_PERIOD_MS       = 400;
 const uint32_t FS_PROBE_DIP_MS          = 120;
 const uint32_t FS_PROBE_SAMPLE_DELAY_MS = 30;
-const float    FS_PROBE_RESPONSE_G      = 0.06f;
+constexpr float FS_PROBE_RESPONSE_G    = 0.06f;
+// 계단 응답은 response=FS_PROBE_DIP_FRAC*(1-exp(-FS_PROBE_DIP_MS*
+// FS_LAND_LPF_ALPHA/1ms))로 LPF와 결합된다. V2 SIL 실측은 alpha=0.03에서
+// 0.1146g, 0.01에서 0.0789g, 0.005에서 0.0464g였다. 따라서 alpha를 낮추면
+// 노이즈뿐 아니라 프로브 감도도 같이 낮아진다. 딥은 최소 3τ(95% 응답) 동안
+// 지속하고, 그때 관측 가능한 응답은 판정 임계의 1.5배보다 커야 한다.
+static_assert(FS_PROBE_DIP_MS * FS_LAND_LPF_ALPHA >= 3.0f,
+              "probe dip must span at least three LPF time constants");
+static_assert(FS_PROBE_DIP_FRAC * 0.95f > 1.5f * FS_PROBE_RESPONSE_G,
+              "observable probe response must exceed the decision margin");
 const float    FS_LAND_ACCEL_TOL_G      = 0.10f;
 const uint8_t  FS_PROBE_CONFIRM_N       = 2;
 const uint32_t FS_MAX_MS           = 5000;
@@ -181,6 +190,17 @@ static_assert(FS_PROBE_SAMPLE_DELAY_MS < FS_PROBE_DIP_MS,
               "probe sample delay must be shorter than the dip");
 static_assert(FS_PROBE_DIP_MS < FS_PROBE_PERIOD_MS,
               "probe dip must finish before the next probe");
+// 실제로 필요한 것은 "접지 후 confirm_n회 연속 무반응이 백스톱 전에 끝날 것"인데
+// 접지 시각은 런타임 값이라 컴파일 타임에 못 쓴다. 대신 필요조건만 건다:
+// 접지 전에 버려지는 공중 프로브를 최소 1회 허용하고도 confirm_n회가 더
+// 들어가야 한다 = 총 confirm_n+1회. 이건 필요조건일 뿐 충분조건이 아니다 —
+// 접지가 늦으면 여전히 타임아웃이 날 수 있고, 그쪽은 SIL V1/V2/V4가 잡는다.
+// (confirm_n-1로 쓰면 period=2000에서 3120<5000으로 통과하지만 SIL은 3건
+//  타임아웃이었다. 그 오차를 변조 검사로 발견해 고친 식이다.)
+static_assert(FS_MIN_DESCEND_MS
+                  + FS_PROBE_PERIOD_MS * FS_PROBE_CONFIRM_N
+                  + FS_PROBE_DIP_MS < FS_MAX_MS,
+              "landing must be confirmable before the backstop cut");
 const LandProbeConfig FS_LAND_PROBE_CONFIG = {
     FS_LAND_LPF_ALPHA,
     FS_MIN_DESCEND_MS,
@@ -199,6 +219,13 @@ const LandProbeConfig FS_LAND_PROBE_CONFIG = {
 const float    HOVER_LEVEL_MAX_DEG    = 10.0f;
 const float    HOVER_ACCEL_TOL_G      = 0.05f;
 const int      HOVER_MIN_THROTTLE_US  = 1150;
+// hover_est 하한이 이 값보다 낮으면 하강값에서 딥을 뺀 스로틀이 1000us
+// 아래가 되어 프로브가 UNAVAILABLE에 고정되고, 자동착륙은 눈먼 5초
+// 타임아웃 컷으로 퇴화한다.
+static_assert(
+    HOVER_MIN_THROTTLE_US
+        >= 1000 + FS_DESCENT_DELTA_US + FS_PROBE_DIP_MIN_US,
+    "hover estimate floor must keep the probe dip above idle");
 const float    HOVER_LPF_TAU_S        = 3.0f;
 const uint32_t HOVER_VALID_MS         = 1500;
 // 실측 호버는 약 1340us다. 무장 직후 spool-up 로그(041032)는 1100~1190us
@@ -561,6 +588,20 @@ static inline bool readMagSnapshot(MagSnapshot &snapshot) {
   return valid;
 }
 
+static inline void requestMagReferenceUpdate() {
+  portENTER_CRITICAL(&magSnapshotMux);
+  mag_reference_pending = true;
+  portEXIT_CRITICAL(&magSnapshotMux);
+}
+
+static inline bool takeMagReferenceRequest() {
+  portENTER_CRITICAL(&magSnapshotMux);
+  const bool requested = mag_reference_pending;
+  mag_reference_pending = false;
+  portEXIT_CRITICAL(&magSnapshotMux);
+  return requested;
+}
+
 static bool initMagnetometer() {
   if (mag_ready) return true;
 
@@ -583,7 +624,7 @@ static bool initMagnetometer() {
 
 static void startMagCalibration() {
   mag_enabled = false;
-  mag_reference_pending = true;
+  requestMagReferenceUpdate();
   mag_calibrating = true;
   magCalMin[0] = FLT_MAX;
   magCalMin[1] = FLT_MAX;
@@ -1001,11 +1042,11 @@ void pid_task(void *pv) {
             mag.x, mag.y, mag.z, angleX, angleY);
         if (isfinite(heading)) {
           magHeading = heading;
-          if (mag_reference_pending) {
+          const bool update_reference = takeMagReferenceRequest();
+          if (update_reference) {
             // Relative heading: enabling mag or resetting angleZ must not
             // command a turn toward magnetic north.
             magYawReferenceOffset = wrapDeg(angleZ - heading);
-            mag_reference_pending = false;
           }
           float referencedHeading =
               wrapDeg(heading + magYawReferenceOffset);
@@ -1274,6 +1315,10 @@ static bool parseIntStrict(const char *text, long &out) {
 
 static bool setRcTargets(float x, float y, float z, bool hasYaw) {
   if (!isfinite(x) || !isfinite(y) || (hasYaw && !isfinite(z))) return false;
+  if (fs_phase == FS_DESCENDING) {
+    lastRcMs = millis();
+    return true;
+  }
   // 트림을 더한 뒤 클램프해야 총합이 ±30°로 제한된다.
   targetAngleX = constrain(x + trim_roll,  -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
   targetAngleY = constrain(y + trim_pitch, -MAX_TARGET_ANGLE_RP, MAX_TARGET_ANGLE_RP);
@@ -1365,6 +1410,7 @@ static void handleRcrCommand(char *buf) {
   rcSeqValid = true;
 
   if (!setRcTargets(x, y, 0.0f, false)) return;   // roll/pitch만, yaw 각도는 건드리지 않는다
+  if (fs_phase == FS_DESCENDING) return;
   targetYawRate = constrain(rate, -MAX_TARGET_RATE_YAW, MAX_TARGET_RATE_YAW);
 }
 
@@ -1507,7 +1553,7 @@ void udp_task(void *pv) {
             targetAngleY = 0.0f;
             targetAngleZ = 0.0f;
             angleZ = 0.0f;
-            mag_reference_pending = true;
+            requestMagReferenceUpdate();
             fs_probe_state = FS_PROBE_WAIT;
             fs_probe_no_response = 0;
             fs_probe_response_g = 0.0f;
@@ -1592,7 +1638,7 @@ void udp_task(void *pv) {
           if (parseIntStrict(buf + 3, enabled) && (enabled == 0 || enabled == 1)) {
             if (enabled == 0) {
               mag_enabled = false;
-              mag_reference_pending = true;
+              requestMagReferenceUpdate();
               Serial.println(">>> Mag OFF");
             } else if (mag_calibrating) {
               Serial.println(">>> Mag refused (magcal active)");
@@ -1600,7 +1646,7 @@ void udp_task(void *pv) {
               // First-time init does blocking I2C/delay(100); only when disarmed.
               Serial.println(">>> Mag refused (armed, not initialized)");
             } else if (initMagnetometer()) {
-              mag_reference_pending = true;
+              requestMagReferenceUpdate();
               mag_enabled = true;
               Serial.println(">>> Mag ON");
             }

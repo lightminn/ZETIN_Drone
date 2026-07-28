@@ -1,3 +1,4 @@
+import re
 import shutil
 import signal
 import subprocess
@@ -9,6 +10,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NATIVE_TEST_DIR = REPO_ROOT / "tools" / "native_tests"
 SKETCH_DIR = REPO_ROOT / "firmware" / "flight" / "dual_imu_cascade_pwm"
+SKETCH_PATH = SKETCH_DIR / "dual_imu_cascade_pwm.ino"
+
+
+def _firmware_float_constant(name):
+    source = SKETCH_PATH.read_text(encoding="utf-8")
+    match = re.search(
+        rf"\b(?:const|constexpr)\s+float\s+{re.escape(name)}\s*=\s*"
+        r"([0-9]+(?:\.[0-9]+)?f)\s*;",
+        source,
+    )
+    if match is None:
+        raise AssertionError(f"firmware float constant not found: {name}")
+    return match.group(1)
 
 
 class FailsafeLandTest(unittest.TestCase):
@@ -54,6 +68,18 @@ class FailsafeLandTest(unittest.TestCase):
                 compiler, "-std=c++17", "-O0", "-g", "-Wall", "-m32",
                 "-I", str(NATIVE_TEST_DIR / "shims"),
                 "-I", str(SKETCH_DIR),
+                (
+                    "-DFIRMWARE_FS_LAND_LPF_ALPHA="
+                    f"{_firmware_float_constant('FS_LAND_LPF_ALPHA')}"
+                ),
+                (
+                    "-DFIRMWARE_FS_PROBE_DIP_FRAC="
+                    f"{_firmware_float_constant('FS_PROBE_DIP_FRAC')}"
+                ),
+                (
+                    "-DFIRMWARE_FS_PROBE_RESPONSE_G="
+                    f"{_firmware_float_constant('FS_PROBE_RESPONSE_G')}"
+                ),
                 "-x", "c++",
                 str(NATIVE_TEST_DIR / "test_failsafe_land.cpp"),
                 "-o", str(executable),

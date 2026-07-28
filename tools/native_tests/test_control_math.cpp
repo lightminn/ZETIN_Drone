@@ -484,6 +484,49 @@ int main() {
     CHECK_EQ(lastRcMs, 100U);
   });
 
+  runCase("RC: 하강 중에는 회계와 watchdog만 갱신하고 목표각은 보존한다", [] {
+    resetRcState();
+    fs_phase = FS_DESCENDING;
+    sendRc("rc 10 1.5 -2.5 3.5");
+    CHECK_EQ(lastRcSeq, 10U);
+    CHECK_EQ(rcTotalPkts, 1U);
+    CHECK_EQ(rcDroppedPkts, 0U);
+    CHECK_NEAR(targetAngleX, 9.0f, 1e-6f);
+    CHECK_NEAR(targetAngleY, 8.0f, 1e-6f);
+    CHECK_NEAR(targetAngleZ, 7.0f, 1e-6f);
+    CHECK_EQ(lastRcMs, 100U);
+    fs_phase = FS_NONE;
+  });
+
+  runCase("rcr: 하강 중에는 회계와 watchdog만 갱신하고 목표값은 보존한다", [] {
+    resetRcState();
+    lastRcSeq = 5U;
+    rcSeqValid = true;
+    rcTotalPkts = 7U;
+    rcDroppedPkts = 2U;
+    targetYawRate = 37.0f;
+    fs_phase = FS_DESCENDING;
+
+    sendRcr("rcr 8 1.5 -2.5 135");
+
+    const uint32_t observed_last_seq = lastRcSeq;
+    const uint32_t observed_total = rcTotalPkts;
+    const uint32_t observed_dropped = rcDroppedPkts;
+    const uint32_t observed_last_ms = lastRcMs;
+    const float observed_target_x = targetAngleX;
+    const float observed_target_y = targetAngleY;
+    const float observed_yaw_rate = targetYawRate;
+    fs_phase = FS_NONE;
+
+    CHECK_EQ(observed_last_seq, 8U);
+    CHECK_EQ(observed_total, 8U);
+    CHECK_EQ(observed_dropped, 4U);
+    CHECK_EQ(observed_last_ms, 100U);
+    CHECK_NEAR(observed_target_x, 9.0f, 1e-6f);
+    CHECK_NEAR(observed_target_y, 8.0f, 1e-6f);
+    CHECK_NEAR(observed_yaw_rate, 37.0f, 1e-6f);
+  });
+
   runCase("RC: duplicate sequence is counted and discarded", [] {
     resetRcState();
     sendRc("rc 10 1 2 3");
@@ -1235,11 +1278,17 @@ int main() {
     mag_enabled = false;
     yaw_hold_override = false;
     angleZ = entry_yaw_deg;
-    bool injected_yaw_reached_parser = false;
+    lastRcSeq = 0;
+    rcSeqValid = false;
+    rcTotalPkts = 0;
+    rcDroppedPkts = 0;
+    bool rc_accounted_by_parser = false;
     arduino_fake::pre_tick_hook = [&](uint32_t tick) {
       if (tick == 1U) {
         sendRc("rc 1 0 0 90");
-        injected_yaw_reached_parser = fabsf(targetAngleZ - 90.0f) < 1e-4f;
+        rc_accounted_by_parser =
+            lastRcSeq == 1U && rcTotalPkts == 1U &&
+            rcDroppedPkts == 0U && lastRcMs == millis();
       }
       setFakeAccelMagnitude(1.0f, tick);
     };
@@ -1247,7 +1296,7 @@ int main() {
     runPidTicks(6);
     arduino_fake::pre_tick_hook = nullptr;
 
-    CHECK(injected_yaw_reached_parser);
+    CHECK(rc_accounted_by_parser);
     CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
     CHECK_NEAR(targetAngleZ, entry_yaw_deg, 1e-4f);
     CHECK_NEAR(tgtRate[2], 0.0f, 1e-3f);
@@ -1703,6 +1752,20 @@ int main() {
     yaw_hold_override = true;
     enterLockedState(wasLocked);
     CHECK(yaw_hold_override);
+  });
+
+  runCase("mag 기준 요청은 소비 직후 다시 게시돼도 다음 소비까지 보존된다", [] {
+    mag_reference_pending = true;
+    const bool first_request = takeMagReferenceRequest();
+    CHECK(first_request);
+    CHECK(!mag_reference_pending);
+
+    // Core 0 요청이 Core 1의 이전 소비 뒤에 끼어든 경우를 순서대로 재현한다.
+    requestMagReferenceUpdate();
+    CHECK(mag_reference_pending);
+    const bool second_request = takeMagReferenceRequest();
+    CHECK(second_request);
+    CHECK(!mag_reference_pending);
   });
 
   runCase("mag command enables lazily and disables without changing yaw", [] {

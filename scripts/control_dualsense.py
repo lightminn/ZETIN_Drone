@@ -357,17 +357,18 @@ def advance_resume_attempt(sample, now=None):
 def arm():
     global is_armed, is_streaming, last_arm_time
     global current_throttle, throttle_f
-    is_armed         = True
-    is_streaming     = True
-    last_arm_time    = time.monotonic()
-    with telem_lock:
-        current_throttle = 1100
-        throttle_f       = 1100.0
-    # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
-    # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
-    reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
-    reliable_send("start")
-    print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON)")
+    with safety_cmd_lock:
+        last_arm_time    = time.monotonic()
+        is_armed         = True
+        is_streaming     = True
+        with telem_lock:
+            current_throttle = 1100
+            throttle_f       = 1100.0
+        # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
+        # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
+        reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
+        reliable_send("start")
+        print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON)")
 
 
 def deadzone(v: float, dz: float = 0.05) -> float:

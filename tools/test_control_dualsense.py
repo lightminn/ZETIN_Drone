@@ -906,6 +906,66 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertTrue(self.module.is_armed)
         self.assertTrue(self.module.is_streaming)
 
+    def test_arm_serializes_start_against_concurrent_disarm(self):
+        commands = []
+        start_send_started = threading.Event()
+        release_start_send = threading.Event()
+        stop_sent = threading.Event()
+
+        def controlled_reliable_send(command):
+            commands.append(command)
+            if command == "start":
+                start_send_started.set()
+                release_start_send.wait(timeout=2.0)
+            elif command == "stop":
+                stop_sent.set()
+
+        self.module.reliable_send = controlled_reliable_send
+        self.module.is_armed = False
+        self.module.is_streaming = False
+
+        arm_thread = threading.Thread(target=self.module.arm)
+        arm_thread.start()
+        self.assertTrue(start_send_started.wait(timeout=1.0))
+
+        disarm_thread = threading.Thread(
+            target=self.module.disarm,
+            args=("test",),
+        )
+        disarm_thread.start()
+        stop_raced_start = stop_sent.wait(timeout=0.2)
+        release_start_send.set()
+        arm_thread.join(timeout=2.0)
+        disarm_thread.join(timeout=2.0)
+
+        self.assertFalse(stop_raced_start)
+        self.assertFalse(arm_thread.is_alive())
+        self.assertFalse(disarm_thread.is_alive())
+        self.assertEqual(commands, ["mag 1", "start", "stop"])
+        self.assertFalse(self.module.is_armed)
+        self.assertFalse(self.module.is_streaming)
+
+    def test_arm_updates_grace_time_before_publishing_armed(self):
+        armed_state_seen_by_clock = []
+        self.module.reliable_send = lambda _command: None
+        self.module.is_armed = False
+        self.module.is_streaming = False
+
+        def observe_armed_state():
+            armed_state_seen_by_clock.append(self.module.is_armed)
+            return 123.0
+
+        with mock.patch.object(
+            self.module.time,
+            "monotonic",
+            side_effect=observe_armed_state,
+        ):
+            self.module.arm()
+
+        self.assertEqual(armed_state_seen_by_clock, [False])
+        self.assertEqual(self.module.last_arm_time, 123.0)
+        self.assertTrue(self.module.is_armed)
+
     def test_first_complete_telemetry_trim_is_adopted_once(self):
         self.module.trim_roll = 0.0
         self.module.trim_pitch = 0.0

@@ -8,6 +8,16 @@
 
 #include "failsafe_land.h"
 
+#ifndef FIRMWARE_FS_LAND_LPF_ALPHA
+#error "FIRMWARE_FS_LAND_LPF_ALPHA must come from the firmware sketch"
+#endif
+#ifndef FIRMWARE_FS_PROBE_DIP_FRAC
+#error "FIRMWARE_FS_PROBE_DIP_FRAC must come from the firmware sketch"
+#endif
+#ifndef FIRMWARE_FS_PROBE_RESPONSE_G
+#error "FIRMWARE_FS_PROBE_RESPONSE_G must come from the firmware sketch"
+#endif
+
 static int g_failures = 0;
 
 static void runCase(const std::string &name, const std::function<void()> &body) {
@@ -238,6 +248,43 @@ int main() {
     CHECK(std::fabs(det.filt - 1.10f) < 1e-6f);
   });
 
+  runCase("펌웨어 LPF 설정은 공중 프로브 응답 여유를 보존한다", [] {
+    const auto run_first_probe = [](const LandProbeConfig &config) {
+      LandDetector det = {};
+      const uint32_t end_ms = config.min_descend_ms + config.dip_ms;
+      for (uint32_t elapsed_ms = 0; elapsed_ms <= end_ms; elapsed_ms++) {
+        const float accel_magnitude_g =
+            landDetectorProbeActive(det)
+                ? 1.0f - FIRMWARE_FS_PROBE_DIP_FRAC
+                : 1.0f;
+        CHECK(!updateLandDetector(
+            det, accel_magnitude_g, elapsed_ms, 1280, config));
+      }
+      CHECK(det.probe_state == FS_PROBE_EVALUATE);
+      return det;
+    };
+
+    LandProbeConfig config = {
+        FIRMWARE_FS_LAND_LPF_ALPHA,
+        1000,
+        400,
+        120,
+        30,
+        FIRMWARE_FS_PROBE_RESPONSE_G,
+        0.10f,
+        2,
+        40,
+    };
+    const LandDetector firmware_det = run_first_probe(config);
+    CHECK(firmware_det.last_response_g > 1.5f * config.response_g);
+    CHECK(firmware_det.no_response_count == 0);
+
+    config.lpf_alpha = 0.005f;
+    const LandDetector low_alpha_det = run_first_probe(config);
+    CHECK(low_alpha_det.last_response_g < config.response_g);
+    CHECK(low_alpha_det.no_response_count == 1);
+  });
+
   runCase("failsafeStep: 착지가 timeout보다 우선한다", [] {
     CHECK(failsafeStep(true, 9999, 5000) == FS_CUT_LANDED);
   });
@@ -251,6 +298,6 @@ int main() {
     std::cerr << g_failures << " failsafe-land case(s) failed\n";
     return 1;
   }
-  std::cout << "18/18 failsafe-land cases passed\n";
+  std::cout << "19/19 failsafe-land cases passed\n";
   return 0;
 }
