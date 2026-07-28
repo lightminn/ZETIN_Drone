@@ -110,9 +110,14 @@ ar|at|ay <value>      # roll / pitch / yaw
   무반응 카운트를 지운다. 연속 두 번 무반응이고 LPF `|accel|`이
   1g±`FS_LAND_ACCEL_TOL_G`(0.10g) 안일 때만 `Phase=2`로 컷한다.
   1g 근처는 착지의 필요조건일 뿐 충분조건이 아니며, 주 판별은 계속 능동
-  프로브의 연속 무반응이다. 적용 딥 뒤 collective가 1000µs 미만이면 유효한
-  프로브를 만들 수 없어 상태를 `UNAVAILABLE`로 남기고, 초기
-  `FS_MAX_MS = 5000`의 `Phase=3` 백스톱 컷에 맡긴다.
+  프로브의 연속 무반응이다. 딥 tick에는 collective 하한만 요청 딥만큼
+  넓혀 자세 차동이 딥을 자르지 않게 한다. 그래도 표본 구간의 어느 tick에서든
+  믹서 적용 collective가 요청 딥의 80% 미만이면 프로브 전체를
+  `BLOCKED`(4)로 폐기하고 연속 무반응 카운트를 올리거나 지우지 않는다.
+  이 경고의 시리얼 출력은 하강당 한 번으로 제한한다. 모든 프로브가 막히면
+  조기 착지 확정 대신 `FS_MAX_MS = 5000`의 `Phase=3` 백스톱 컷에 맡긴다.
+  적용 딥 뒤 collective가 1000µs 미만이면 유효한 프로브를 만들 수 없어
+  상태를 `UNAVAILABLE`로 남기고 같은 백스톱 컷에 맡긴다.
   `FS_MAX_MS`는 착지 감지기를 벤치 검증한 뒤에만 10000으로 올린다.
 - IMU 전멸·과도 기울기·명시적 `stop`은 계속 즉시 컷이다. 하강 중 이들이
   걸리면 `Phase=4`(중단컷)로 끝난다.
@@ -211,7 +216,7 @@ Failsafe_Probe_Response_G
 | 37~38 | `Trim_Roll`, `Trim_Pitch` | float | 드론이 적용 중인 roll·pitch 트림(도) |
 | 39 | `Hover_Est` | float | 유효한 호버 후보에서 LPF로 추정한 collective 스로틀(µs) |
 | 40 | `Hover_Valid` | int | 0=미확정, 1=호버 후보 시간이 유효 기준을 충족 |
-| 41 | `Failsafe_Probe_State` | int | 0=WAIT, 1=DIP, 2=EVALUATE, 3=UNAVAILABLE(1000µs 아래 딥 가드) |
+| 41 | `Failsafe_Probe_State` | int | 0=WAIT, 1=DIP, 2=EVALUATE, 3=UNAVAILABLE(1000µs 아래 딥 가드), 4=BLOCKED(표본 구간 중 요청 딥의 80% 미만 전달) |
 | 42 | `Failsafe_Probe_NoResponse` | int | 연속 무반응 프로브 수. 공중 반응이면 0으로 초기화 |
 | 43 | `Failsafe_Probe_Response_G` | float | 최근 프로브의 `딥 직전 LPF − 딥 중 LPF 최솟값`(g) |
 

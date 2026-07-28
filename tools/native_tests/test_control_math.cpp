@@ -358,6 +358,45 @@ int main() {
     MotorMix mix = mixAndDesaturate(0, 0, 0, 1175, 1050, 1300);
     checkMotors(mix, 1175, 1175, 1175, 1175);
     CHECK(!mix.scaled);
+    CHECK_NEAR(mix.collective_us, 1175.0f, 1e-6f);
+  });
+
+  runCase("mix: applied collective reports a lower-bound shift exactly", [] {
+    MotorMix mix = mixAndDesaturate(-50, 50, 50, 1240, 1090, 1430);
+
+    // descent=1280us, dip=40us, attitude diff minimum=-150us. The probe-only
+    // widened lower bound preserves the full dip. Without that extra 40us of
+    // lower window this same reachable attitude state delivered 0us while
+    // scaled remained false.
+    checkMotors(mix, 1090, 1290, 1290, 1290);
+    CHECK_NEAR(mix.collective_us, 1240.0f, 1e-6f);
+    CHECK_NEAR(1280.0f - mix.collective_us, 40.0f, 1e-6f);
+    CHECK(!mix.scaled);
+  });
+
+  runCase("mix: margin을 넘은 자세 차동은 전달률 미달로 프로브를 폐기한다", [] {
+    // 각 축의 50us 적분 한계에 같은 부호의 10us P 항이 더해진 경우를
+    // 모델링한다. widened window에서도 minDiff=-180us라 40us 중 10us만
+    // 전달되지만 attitude span은 맞아서 scaled는 계속 false다.
+    MotorMix mix = mixAndDesaturate(-60, 60, 60, 1240, 1090, 1430);
+    const float delivered_us = 1280.0f - mix.collective_us;
+    CHECK_NEAR(mix.collective_us, 1270.0f, 1e-6f);
+    CHECK_NEAR(delivered_us, 10.0f, 1e-6f);
+    CHECK(!mix.scaled);
+    CHECK(delivered_us < FS_PROBE_MIN_DELIVERY_FRAC * 40.0f);
+
+    LandProbeConfig config = FS_LAND_PROBE_CONFIG;
+    config.dip_us = 40;
+    LandDetector det = {};
+    CHECK(!updateLandDetector(det, 1.0f, 1000, 1280, config));
+    CHECK(!updateLandDetector(det, 1.0f, 1030, 1280, config));
+    recordLandDetectorProbeDelivery(
+        det, 1030,
+        delivered_us >= FS_PROBE_MIN_DELIVERY_FRAC * config.dip_us,
+        config);
+    CHECK(!updateLandDetector(det, 1.0f, 1120, 1280, config));
+    CHECK_EQ((int)det.probe_state, (int)FS_PROBE_BLOCKED);
+    CHECK_EQ((int)det.no_response_count, 0);
   });
 
   runCase("mix: pure roll follows FL/RR/FR/RL signs", [] {
@@ -1390,6 +1429,114 @@ int main() {
     CHECK(cut_tick <= FS_MAX_MS + 2U);
   });
 
+  runCase("회귀: 적분기 한계 자세에서도 프로브 딥 40us가 온전히 전달된다", [] {
+    constexpr int hover_throttle = 1340;
+    constexpr int descent_throttle =
+        hover_throttle - FS_DESCENT_DELTA_US;
+    constexpr int probe_dip_us = 40;
+
+    prepareFailsafeFlight(hover_throttle);
+    const float saved_kp_roll = Kp_Rate_Roll;
+    const float saved_ki_roll = Ki_Rate_Roll;
+    const float saved_kd_roll = Kd_Rate_Roll;
+    const float saved_kp_pitch = Kp_Rate_Pitch;
+    const float saved_ki_pitch = Ki_Rate_Pitch;
+    const float saved_kd_pitch = Kd_Rate_Pitch;
+    const float saved_kp_yaw = Kp_Rate_Yaw;
+    const float saved_ki_yaw = Ki_Rate_Yaw;
+    const float saved_kd_yaw = Kd_Rate_Yaw;
+    Kp_Rate_Roll = Ki_Rate_Roll = Kd_Rate_Roll = 0.0f;
+    Kp_Rate_Pitch = Ki_Rate_Pitch = Kd_Rate_Pitch = 0.0f;
+    Kp_Rate_Yaw = Ki_Rate_Yaw = Kd_Rate_Yaw = 0.0f;
+    iTermRoll = -I_TERM_MAX_US;
+    iTermPitch = I_TERM_MAX_US;
+    iTermYaw = I_TERM_MAX_US;
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      setFakeAccelMagnitude(
+          fs_probe_state == FS_PROBE_DIP ? 0.82f : 1.0f, tick);
+    };
+
+    runPidTicks(FS_MIN_DESCEND_MS + 5U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    const uint8_t observed_probe_state = fs_probe_state;
+    const int observed_base = base_throttle;
+    const int observed_min = min_throttle;
+    const int observed_max = max_throttle;
+    const bool observed_scaled = mixer_scaled;
+    const int observed_motors[4] = {
+        motorOut[0], motorOut[1], motorOut[2], motorOut[3]};
+    Kp_Rate_Roll = saved_kp_roll;
+    Ki_Rate_Roll = saved_ki_roll;
+    Kd_Rate_Roll = saved_kd_roll;
+    Kp_Rate_Pitch = saved_kp_pitch;
+    Ki_Rate_Pitch = saved_ki_pitch;
+    Kd_Rate_Pitch = saved_kd_pitch;
+    Kp_Rate_Yaw = saved_kp_yaw;
+    Ki_Rate_Yaw = saved_ki_yaw;
+    Kd_Rate_Yaw = saved_kd_yaw;
+
+    // diff minimum is exactly -150us. Without widening the probe-only lower
+    // window by 40us, the mixer silently shifted collective back to 1280us,
+    // delivered no dip, and still reported scaled=false.
+    CHECK_EQ((int)observed_probe_state, (int)FS_PROBE_DIP);
+    CHECK_EQ(observed_base, descent_throttle - probe_dip_us);
+    CHECK_EQ(
+        observed_min,
+        max(1050, descent_throttle - CTRL_MARGIN - probe_dip_us));
+    CHECK_EQ(observed_max, min(1900, descent_throttle + CTRL_MARGIN));
+    CHECK(!observed_scaled);
+    CHECK_EQ(observed_motors[0], 1090);
+    CHECK_EQ(observed_motors[1], 1290);
+    CHECK_EQ(observed_motors[2], 1290);
+    CHECK_EQ(observed_motors[3], 1290);
+  });
+
+  runCase("모든 프로브가 믹서에 막히면 LANDED가 아니라 백스톱 컷한다", [] {
+    prepareFailsafeFlight(1340);
+    const float saved_kp_roll = Kp_Rate_Roll;
+    const float saved_ki_roll = Ki_Rate_Roll;
+    const float saved_kd_roll = Kd_Rate_Roll;
+    const float saved_kp_pitch = Kp_Rate_Pitch;
+    const float saved_ki_pitch = Ki_Rate_Pitch;
+    const float saved_kd_pitch = Kd_Rate_Pitch;
+    const float saved_kp_yaw = Kp_Rate_Yaw;
+    const float saved_ki_yaw = Ki_Rate_Yaw;
+    const float saved_kd_yaw = Kd_Rate_Yaw;
+    Kp_Rate_Roll = Ki_Rate_Roll = Kd_Rate_Roll = 0.0f;
+    Kp_Rate_Pitch = Ki_Rate_Pitch = Kd_Rate_Pitch = 0.0f;
+    Kp_Rate_Yaw = Ki_Rate_Yaw = Kd_Rate_Yaw = 0.0f;
+    arduino_fake::serial_output.clear();
+    arduino_fake::pre_tick_hook = [](uint32_t tick) {
+      // 합성 PID 출력 ±60us는 I 한계 ±50us + 같은 방향 P 10us에 해당한다.
+      iTermRoll = -60.0f;
+      iTermPitch = 60.0f;
+      iTermYaw = 60.0f;
+      setFakeAccelMagnitude(1.0f, tick);
+    };
+
+    runPidTicks(FS_MAX_MS + 10U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    const uint8_t observed_phase = fs_phase;
+    const uint8_t observed_no_response = fs_probe_no_response;
+    const std::size_t blocked_logs =
+        countLogOccurrences("AUTO-LAND PROBE BLOCKED");
+    Kp_Rate_Roll = saved_kp_roll;
+    Ki_Rate_Roll = saved_ki_roll;
+    Kd_Rate_Roll = saved_kd_roll;
+    Kp_Rate_Pitch = saved_kp_pitch;
+    Ki_Rate_Pitch = saved_ki_pitch;
+    Kd_Rate_Pitch = saved_kd_pitch;
+    Kp_Rate_Yaw = saved_kp_yaw;
+    Ki_Rate_Yaw = saved_ki_yaw;
+    Kd_Rate_Yaw = saved_kd_yaw;
+
+    CHECK_EQ((int)observed_phase, (int)FS_CUT_TIMEOUT);
+    CHECK_EQ((int)observed_no_response, 0);
+    CHECK_EQ(blocked_logs, static_cast<std::size_t>(1));
+  });
+
   runCase("R1: 프로브 딥은 1.3x 호버 여유의 11.8%인 52us다", [] {
     constexpr int hover_throttle = 1442;
     constexpr int descent_throttle =
@@ -1406,7 +1553,9 @@ int main() {
 
     CHECK_EQ((int)fs_probe_state, (int)FS_PROBE_DIP);
     CHECK_EQ(base_throttle, descent_throttle - expected_probe_dip_us);
-    CHECK_EQ(min_throttle, max(1050, descent_throttle - CTRL_MARGIN));
+    CHECK_EQ(
+        min_throttle,
+        max(1050, descent_throttle - CTRL_MARGIN - expected_probe_dip_us));
     CHECK_EQ(max_throttle, min(1900, descent_throttle + CTRL_MARGIN));
     for (int motor : motorOut) {
       CHECK_EQ(motor, descent_throttle - expected_probe_dip_us);

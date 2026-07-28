@@ -53,6 +53,21 @@ static bool probeStep(LandDetector &det, float accel_magnitude_g,
       det, accel_magnitude_g, elapsed_ms, base_throttle_us, kProbeConfig);
 }
 
+static bool finishProbe(LandDetector &det, uint32_t start_ms,
+                        float sampled_accel_g, bool delivery_valid) {
+  CHECK(!probeStep(det, 1.0f, start_ms));
+  CHECK(det.probe_state == FS_PROBE_DIP);
+  CHECK(!probeStep(det, sampled_accel_g, start_ms + 30U));
+  recordLandDetectorProbeDelivery(
+      det, start_ms + 30U, delivery_valid, kProbeConfig);
+  return probeStep(det, sampled_accel_g, start_ms + 120U);
+}
+
+static void leaveProbeResultState(LandDetector &det, uint32_t elapsed_ms) {
+  CHECK(!probeStep(det, 1.0f, elapsed_ms));
+  CHECK(det.probe_state == FS_PROBE_WAIT);
+}
+
 int main() {
   runCase("호버 후보 시간이 2초 누적된 뒤에만 유효해진다", [] {
     HoverThrottleEstimator estimator = {};
@@ -201,6 +216,51 @@ int main() {
     CHECK(det.no_response_count == 1);
   });
 
+  runCase("전달되지 않은 프로브는 무반응 카운트를 올리거나 내리지 않는다", [] {
+    LandDetector det = {};
+    det.no_response_count = 1;
+
+    CHECK(!finishProbe(det, 1000, 1.0f, false));
+    CHECK(det.probe_state == FS_PROBE_BLOCKED);
+    CHECK(det.no_response_count == 1);
+  });
+
+  runCase("막힌 프로브 다음 정상 프로브는 다시 정상적으로 계수된다", [] {
+    LandDetector det = {};
+    CHECK(!finishProbe(det, 1000, 1.0f, false));
+    CHECK(det.probe_state == FS_PROBE_BLOCKED);
+    CHECK(det.no_response_count == 0);
+    leaveProbeResultState(det, 1121);
+
+    CHECK(!finishProbe(det, 1400, 1.0f, true));
+    CHECK(det.probe_state == FS_PROBE_EVALUATE);
+    CHECK(det.no_response_count == 1);
+  });
+
+  runCase("막힌 프로브만 반복되면 착지를 확정하지 않는다", [] {
+    LandDetector det = {};
+    for (uint32_t start_ms : {1000U, 1400U, 1800U, 2200U}) {
+      CHECK(!finishProbe(det, start_ms, 1.0f, false));
+      CHECK(det.probe_state == FS_PROBE_BLOCKED);
+      CHECK(det.no_response_count == 0);
+      leaveProbeResultState(det, start_ms + 121U);
+    }
+  });
+
+  runCase("공중 반응이 지운 카운트는 뒤의 막힌 프로브가 바꾸지 않는다", [] {
+    LandDetector det = {};
+    det.no_response_count = 1;
+
+    CHECK(!finishProbe(det, 1000, 0.80f, true));
+    CHECK(det.probe_state == FS_PROBE_EVALUATE);
+    CHECK(det.no_response_count == 0);
+    leaveProbeResultState(det, 1121);
+
+    CHECK(!finishProbe(det, 1400, 1.0f, false));
+    CHECK(det.probe_state == FS_PROBE_BLOCKED);
+    CHECK(det.no_response_count == 0);
+  });
+
   runCase("판정은 절대 1g가 아니라 딥 직전 대비 차분이다", [] {
     LandDetector det = {};
     CHECK(!probeStep(det, 0.90f, 1000));
@@ -298,6 +358,6 @@ int main() {
     std::cerr << g_failures << " failsafe-land case(s) failed\n";
     return 1;
   }
-  std::cout << "19/19 failsafe-land cases passed\n";
+  std::cout << "23/23 failsafe-land cases passed\n";
   return 0;
 }

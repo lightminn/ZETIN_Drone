@@ -16,6 +16,7 @@ FAILSAFE_PROBE_STATE_NAMES = {
     1: "DIP",
     2: "EVALUATE",
     3: "UNAVAILABLE",
+    4: "BLOCKED",
 }
 
 

@@ -18,6 +18,7 @@ enum FailsafeProbeState : uint8_t {
   FS_PROBE_DIP         = 1,
   FS_PROBE_EVALUATE    = 2,
   FS_PROBE_UNAVAILABLE = 3,
+  FS_PROBE_BLOCKED     = 4,
 };
 
 // 호버 후보인 시간만 누적한다. 부적합 구간은 누적과 LPF를 멈추지만 이미
@@ -134,10 +135,24 @@ struct LandDetector {
   float    dip_min_g = 1.0f;
   float    last_response_g = 0.0f;  // pre_dip_g - dip_min_g
   uint8_t  no_response_count = 0;
+  bool     probe_delivery_valid = true;
 };
 
 static inline bool landDetectorProbeActive(const LandDetector &det) {
   return det.probe_state == FS_PROBE_DIP;
+}
+
+// mixAndDesaturate 뒤에 호출해 실제 collective 전달 여부를 검출기에 돌려준다.
+// 표본 채집 구간의 한 tick이라도 미달이면 부분 딥의 최솟값은 신뢰하지 않는다.
+static inline void recordLandDetectorProbeDelivery(
+    LandDetector &det, uint32_t elapsed_ms, bool delivery_valid,
+    const LandProbeConfig &config) {
+  if (det.probe_state != FS_PROBE_DIP) return;
+  const uint32_t dip_elapsed_ms = elapsed_ms - det.probe_start_ms;
+  if (dip_elapsed_ms >= config.sample_delay_ms &&
+      dip_elapsed_ms < config.dip_ms && !delivery_valid) {
+    det.probe_delivery_valid = false;
+  }
 }
 
 // 매 tick 호출. 검출기가 대기→딥→판정을 전부 소유하고 착지 확정 시 true다.
@@ -166,7 +181,8 @@ static inline bool updateLandDetector(
 
   // 판정과 다음 대기 전환을 별도 tick으로 유지한다. 20Hz 텔레메트리는
   // 지속되는 DIP/UNAVAILABLE 상태와 누적 카운터/마지막 응답을 주 진단으로 쓴다.
-  if (det.probe_state == FS_PROBE_EVALUATE) {
+  if (det.probe_state == FS_PROBE_EVALUATE ||
+      det.probe_state == FS_PROBE_BLOCKED) {
     det.probe_state = FS_PROBE_WAIT;
     return false;
   }
@@ -186,6 +202,7 @@ static inline bool updateLandDetector(
     det.probe_start_ms = elapsed_ms;
     det.pre_dip_g = det.filt;
     det.dip_min_g = det.filt;
+    det.probe_delivery_valid = true;
     return false;
   }
 
@@ -199,6 +216,12 @@ static inline bool updateLandDetector(
   }
 
   det.last_response_g = det.pre_dip_g - det.dip_min_g;
+  if (!det.probe_delivery_valid) {
+    det.probe_state = FS_PROBE_BLOCKED;
+    // 일어나지 않은 프로브는 카운트를 올리거나 지우지 않는다. 전부 막히면
+    // 착지 확정 대신 FS_MAX_MS 백스톱이 자르는 것이 공중 조기컷보다 안전하다.
+    return false;
+  }
   det.probe_state = FS_PROBE_EVALUATE;
   if (det.last_response_g > config.response_g) {
     det.no_response_count = 0;

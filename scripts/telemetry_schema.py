@@ -12,7 +12,9 @@ reports whether yaw heading hold is active. Fields 36-38 append the failsafe
 phase and the roll/pitch trim applied by the firmware. Fields 39-40 append the
 estimated hover throttle and its validity flag. Fields 41-43 append the
 failsafe active-probe state, consecutive no-response count, and most recent
-differential response in g.
+differential response in g. Probe-state values are 0=WAIT, 1=DIP,
+2=EVALUATE, 3=UNAVAILABLE, and 4=BLOCKED (the mixer did not deliver at least
+80% of the requested dip during the sampling interval).
 """
 
 import math

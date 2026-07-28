@@ -171,6 +171,9 @@ const uint32_t FS_PROBE_PERIOD_MS       = 400;
 const uint32_t FS_PROBE_DIP_MS          = 120;
 const uint32_t FS_PROBE_SAMPLE_DELAY_MS = 30;
 constexpr float FS_PROBE_RESPONSE_G    = 0.06f;
+// 응답은 전달 딥에 비례한다. 기존 1.5배 명목 응답 보장에서 80%를 요구하면
+// 임계 대비 1.2배가 남지만, 50% 전달은 임계 아래라 판정 근거가 사라진다.
+constexpr float FS_PROBE_MIN_DELIVERY_FRAC = 0.80f;
 // 계단 응답은 response=FS_PROBE_DIP_FRAC*(1-exp(-FS_PROBE_DIP_MS*
 // FS_LAND_LPF_ALPHA/1ms))로 LPF와 결합된다. V2 SIL 실측은 alpha=0.03에서
 // 0.1146g, 0.01에서 0.0789g, 0.005에서 0.0464g였다. 따라서 alpha를 낮추면
@@ -180,6 +183,10 @@ static_assert(FS_PROBE_DIP_MS * FS_LAND_LPF_ALPHA >= 3.0f,
               "probe dip must span at least three LPF time constants");
 static_assert(FS_PROBE_DIP_FRAC * 0.95f > 1.5f * FS_PROBE_RESPONSE_G,
               "observable probe response must exceed the decision margin");
+static_assert(
+    FS_PROBE_MIN_DELIVERY_FRAC * FS_PROBE_DIP_FRAC * 0.95f
+        > 1.2f * FS_PROBE_RESPONSE_G,
+    "minimum delivered probe must preserve the response margin");
 const float    FS_LAND_ACCEL_TOL_G      = 0.10f;
 const uint8_t  FS_PROBE_CONFIRM_N       = 2;
 const uint32_t FS_MAX_MS           = 5000;
@@ -269,6 +276,7 @@ public:
 struct MotorMix {
   int motor[4];
   bool scaled;
+  float collective_us;
 };
 
 // IMU별 freeze 감시 (raw 레지스터 값이 멈췄는지)
@@ -724,6 +732,7 @@ static MotorMix mixAndDesaturate(float roll, float pitch, float yaw,
   const float collectiveLo = minMotor - minDiff;
   const float collectiveHi = maxMotor - maxDiff;
   const float collective = min(max((float)throttle, collectiveLo), collectiveHi);
+  out.collective_us = collective;
 
   for (int i = 0; i < 4; i++) {
     out.motor[i] = constrain((int)lroundf(collective + diff[i]), minMotor, maxMotor);
@@ -877,6 +886,7 @@ void pid_task(void *pv) {
   int fs_probe_dip_us = FS_PROBE_DIP_MIN_US;
   uint32_t fs_enter_ms = 0;
   float fs_hold_yaw = 0.0f;
+  bool fs_probe_blocked_logged = false;
 
   inv_imu_sensor_event_t e1 = {}, e2 = {};
 
@@ -889,6 +899,9 @@ void pid_task(void *pv) {
       wake = afterWake;
     }
     uint32_t nowMs = millis();
+    bool checkProbeDelivery = false;
+    int probeReferenceThrottle = 0;
+    uint32_t probeElapsedMs = 0;
     applyPendingSafetyRequest();
     loopCount++;
     uint32_t loopElapsedMs = nowMs - loopMarkerMs;
@@ -1144,6 +1157,7 @@ void pid_task(void *pv) {
         fs_probe_state = FS_PROBE_WAIT;
         fs_probe_no_response = 0;
         fs_probe_response_g = 0.0f;
+        fs_probe_blocked_logged = false;
         base_throttle = failsafeDescentThrottle(
             (int)lroundf(hover_est), FS_DESCENT_DELTA_US);
         Serial.println("[FAULT] RC TIMEOUT -> AUTO-LAND");   // 한 번만
@@ -1167,13 +1181,25 @@ void pid_task(void *pv) {
       fs_probe_state = landDet.probe_state;
       fs_probe_no_response = landDet.no_response_count;
       fs_probe_response_g = landDet.last_response_g;
+      if (landDet.probe_state == FS_PROBE_BLOCKED &&
+          !fs_probe_blocked_logged) {
+        fs_probe_blocked_logged = true;
+        Serial.println("[WARN] AUTO-LAND PROBE BLOCKED");  // 하강당 최대 1회
+      }
 
-      // collective 창은 정상 하강값에 고정한다. 비례 딥은 런타임 clamp로
-      // CTRL_MARGIN 미만이며 base만 낮춰 자세 mixer의 authority를 보존한다.
+      const bool probeActive = landDetectorProbeActive(landDet);
+      checkProbeDelivery = probeActive;
+      probeReferenceThrottle = descentThrottle;
+      probeElapsedMs = elapsed;
       base_throttle =
           descentThrottle -
-          (landDetectorProbeActive(landDet) ? fs_probe_dip_us : 0);
-      min_throttle = max(1050, descentThrottle - CTRL_MARGIN);
+          (probeActive ? fs_probe_dip_us : 0);
+      // 딥 tick에만 collective 하한을 요청 딥만큼 넓힌다. 자세 차동이 기존
+      // 하한을 밀어 올려 딥을 자르면 검출기가 공중을 지면으로 오판할 수 있다.
+      // 상한은 그대로 두고 1050us 절대 하한도 기존 clamp로 보존한다.
+      min_throttle = max(
+          1050,
+          descentThrottle - CTRL_MARGIN - (probeActive ? fs_probe_dip_us : 0));
       max_throttle = min(1900, descentThrottle + CTRL_MARGIN);
       const FailsafePhase next = failsafeStep(landed, elapsed, FS_MAX_MS);
       if (next != FS_DESCENDING) {
@@ -1242,6 +1268,14 @@ void pid_task(void *pv) {
     MotorMix mix = mixAndDesaturate(pidRoll, pidPitch, pidYaw,
                                     throttle, min_throttle, max_throttle);
     mixer_scaled = mix.scaled;
+    if (checkProbeDelivery) {
+      const float deliveredUs =
+          (float)probeReferenceThrottle - mix.collective_us;
+      const bool deliveryValid =
+          deliveredUs >= FS_PROBE_MIN_DELIVERY_FRAC * fs_probe_dip_us;
+      recordLandDetectorProbeDelivery(
+          landDet, probeElapsedMs, deliveryValid, landProbeConfig);
+    }
 
     // scale은 자세 명령이 실제로 잘린 경우다. collective 이동만 일어난 경우에는
     // 자세 authority가 보존되므로 적분을 계속한다.
