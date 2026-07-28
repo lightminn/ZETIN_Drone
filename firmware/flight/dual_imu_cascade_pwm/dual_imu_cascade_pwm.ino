@@ -1591,9 +1591,13 @@ void udp_task(void *pv) {
               strtok_r(nullptr, " \t", &save) == nullptr) {
             float r, p;
             if (parseFloatStrict(arg0, r) && parseFloatStrict(arg1, p)) {
-              trim_roll  = constrain(r, -TRIM_MAX_DEG, TRIM_MAX_DEG);
-              trim_pitch = constrain(p, -TRIM_MAX_DEG, TRIM_MAX_DEG);
-              Serial.printf(">>> Trim R:%.2f P:%.2f\n", trim_roll, trim_pitch);
+              if (fs_phase == FS_DESCENDING) {
+                Serial.println(">>> Trim refused (auto-land descending)");
+              } else {
+                trim_roll  = constrain(r, -TRIM_MAX_DEG, TRIM_MAX_DEG);
+                trim_pitch = constrain(p, -TRIM_MAX_DEG, TRIM_MAX_DEG);
+                Serial.printf(">>> Trim R:%.2f P:%.2f\n", trim_roll, trim_pitch);
+              }
             }
           }
         }

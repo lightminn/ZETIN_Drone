@@ -634,8 +634,25 @@ int main() {
   runCase("trim: 무장 중에도 수락된다", [] {
     trim_roll = 0.0f;
     safety_lock = false;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("trim 3 0");
     CHECK_NEAR(trim_roll, 3.0f, 1e-4f);
+    safety_lock = true;
+  });
+
+  runCase("trim: 자동착륙 하강 중에는 거부되고 기존값을 보존한다", [] {
+    trim_roll = 1.5f;
+    trim_pitch = -2.0f;
+    safety_lock = false;
+    fs_phase = FS_DESCENDING;
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("trim 10 -10");
+
+    CHECK_NEAR(trim_roll, 1.5f, 1e-4f);
+    CHECK_NEAR(trim_pitch, -2.0f, 1e-4f);
+    CHECK(countLogOccurrences("Trim refused (auto-land descending)") == 1U);
+    fs_phase = FS_NONE;
     safety_lock = true;
   });
 
