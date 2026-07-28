@@ -386,6 +386,8 @@ volatile float fs_probe_response_g = 0.0f;
 volatile uint32_t fs_first_enter_ms = 0;
 volatile bool fs_first_enter_valid = false;
 volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
+// hover_valid는 만료시키지 않는다. false는 RC 끊김 시 즉시 컷을 뜻하므로
+// 공중에서 freshness 만료로 false가 되면 추락한다. 낡은 추정치가 덜 위험하다.
 volatile bool hover_valid = false;
 // 비행 중에는 pid_task만 쓰고, start는 safety_lock=true인 동안 초기화한 뒤
 // 마지막에 Core 1에 arm 전이를 요청한다.
@@ -464,6 +466,12 @@ static inline void requestSafetyArm() {
   portENTER_CRITICAL(&safetyRequestMux);
   if (!safety_disarm_requested) safety_arm_requested = true;
   portEXIT_CRITICAL(&safetyRequestMux);
+}
+
+static inline bool configChangeAllowed(const char *setting) {
+  if (fs_phase != FS_DESCENDING) return true;
+  Serial.printf(">>> %s refused (auto-land descending)\n", setting);
+  return false;
 }
 
 static inline void applyPendingSafetyRequest() {
@@ -1351,6 +1359,7 @@ static void handleGainCommand(const char *buf) {
   if (strlen(buf) < 3) return;
   float value;
   if (!parseFloatStrict(buf + 2, value) || value < 0.0f || value > 100.0f) return;
+  if (!configChangeAllowed("PID gain")) return;
 
   // Cascade 전용 공통 명령
   if      (strncmp(buf, "rp", 2) == 0) { Kp_Rate_Roll = value; Kp_Rate_Pitch = value; }
@@ -1454,7 +1463,10 @@ void udp_task(void *pv) {
         else if (strcmp(buf, "start") == 0) {
           bool overTilt = fabsf(angleX) > SAFETY_ANGLE || fabsf(angleY) > SAFETY_ANGLE;
           bool noUsableImu = imu1_frozen_now && imu2_frozen_now;
-          if (!safety_lock || safety_arm_requested) {
+          if (fs_phase == FS_DESCENDING) {
+            Serial.println(">>> START REFUSED (auto-land descending)");
+          }
+          else if (!safety_lock || safety_arm_requested) {
             // 이미 시동 상태. 지상국은 start를 여러 번 재전송하므로, 지연
             // 도착한 중복 start가 비행 중 fault latch를 지우고 스로틀 창을
             // 리셋하는 것을 막는다.
@@ -1554,11 +1566,13 @@ void udp_task(void *pv) {
             float x, y, z;
             if (parseFloatStrict(arg[0], x) && parseFloatStrict(arg[1], y) &&
                 parseFloatStrict(arg[2], z)) {
-              mag_comp_x = x;
-              mag_comp_y = y;
-              mag_comp_z = z;
-              Serial.printf(">>> mag comp = %.4f %.4f %.4f uT/us\n",
-                            (double)mag_comp_x, (double)mag_comp_y, (double)mag_comp_z);
+              if (configChangeAllowed("Mag comp")) {
+                mag_comp_x = x;
+                mag_comp_y = y;
+                mag_comp_z = z;
+                Serial.printf(">>> mag comp = %.4f %.4f %.4f uT/us\n",
+                              (double)mag_comp_x, (double)mag_comp_y, (double)mag_comp_z);
+              }
             }
           }
         }
@@ -1591,9 +1605,7 @@ void udp_task(void *pv) {
               strtok_r(nullptr, " \t", &save) == nullptr) {
             float r, p;
             if (parseFloatStrict(arg0, r) && parseFloatStrict(arg1, p)) {
-              if (fs_phase == FS_DESCENDING) {
-                Serial.println(">>> Trim refused (auto-land descending)");
-              } else {
+              if (configChangeAllowed("Trim")) {
                 trim_roll  = constrain(r, -TRIM_MAX_DEG, TRIM_MAX_DEG);
                 trim_pitch = constrain(p, -TRIM_MAX_DEG, TRIM_MAX_DEG);
                 Serial.printf(">>> Trim R:%.2f P:%.2f\n", trim_roll, trim_pitch);

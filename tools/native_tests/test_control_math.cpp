@@ -162,6 +162,7 @@ void seedGains() {
 
 void checkGainCommand(const char *prefix, const std::vector<std::size_t> &changed) {
   seedGains();
+  fs_phase = FS_NONE;
   std::vector<float> before;
   for (const auto &slot : gain_slots) {
     before.push_back(static_cast<float>(*slot.value));
@@ -273,6 +274,30 @@ void prepareResumeCommandState() {
   arduino_fake::micros_value = 1000000;
   lastRcMs = arduino_fake::millis_value;
   arduino_fake::serial_output.clear();
+}
+
+void prepareStartCommandState(uint8_t phase) {
+  arduino_fake::reset();
+  safety_lock = true;
+  safety_disarm_requested = false;
+  safety_arm_requested = false;
+  failsafe_resume_requested = false;
+  fs_phase = phase;
+  fault_rc = false;
+  fault_imu1 = false;
+  fault_imu2 = false;
+  fault_disagree = false;
+  fault_attitude = false;
+  imu1_frozen_now = false;
+  imu2_frozen_now = false;
+  imu_disagree_now = false;
+  active_imus = 2;
+  calibration_ok = true;
+  mag_calibrating = false;
+  angleX = angleY = angleZ = 0.0f;
+  gyro_bias1[0] = gyro_bias1[1] = gyro_bias1[2] = 0.0f;
+  gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
+  setFakeAccelMagnitude(1.0f, 0);
 }
 
 std::size_t countLogOccurrences(const std::string &needle) {
@@ -594,6 +619,7 @@ int main() {
     lastRcSeq = 77U;
     rcSeqValid = true;
     calibration_ok = true;
+    fs_phase = FS_NONE;
     angleX = angleY = 0.0f;
     imu1_frozen_now = imu2_frozen_now = false;
     imu_disagree_now = false;
@@ -679,6 +705,7 @@ int main() {
     trim_roll = 4.0f; trim_pitch = -3.0f;
     calibration_ok = true;
     safety_lock = true;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
     CHECK_NEAR(trim_roll, 4.0f, 1e-4f);
     sendUdpCommandOnce("stop");
@@ -691,6 +718,7 @@ int main() {
   runCase("RC 타임아웃이 즉시 컷이 아니라 자동착륙으로 간다", [] {
     calibration_ok = true;
     safety_lock = true;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
     runPidTicks(1);
     CHECK(!safety_lock);
@@ -711,6 +739,7 @@ int main() {
   runCase("호버 이력 없는 RC 타임아웃은 즉시 한 번만 컷한다", [] {
     calibration_ok = true;
     safety_lock = true;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
     runPidTicks(1);
     CHECK(!safety_lock);
@@ -795,6 +824,7 @@ int main() {
     safety_lock = true;
     safety_arm_requested = false;
     safety_disarm_requested = false;
+    fs_phase = FS_NONE;
     calibration_ok = false;
     mag_calibrating = false;
     angleX = angleY = 0.0f;
@@ -808,11 +838,50 @@ int main() {
     CHECK(!safety_disarm_requested);
   });
 
+  runCase("start는 stop 적용 뒤 남은 하강 phase에서 재무장을 거부한다", [] {
+    prepareStartCommandState(FS_DESCENDING);
+    fault_rc = true;
+    base_throttle = 1000;
+    primeHoverEstimate(1360.0f);
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("start");
+
+    CHECK_EQ(safety_arm_requested, false);
+    CHECK_EQ(safety_lock, true);
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK_EQ(fault_rc, true);
+    CHECK_EQ(base_throttle, 1000);
+    CHECK(hoverTracker.valid);
+    CHECK_NEAR(hover_est, 1360.0f, 1e-4f);
+    CHECK_EQ(countLogOccurrences("START REFUSED (auto-land descending)"),
+             static_cast<std::size_t>(1));
+  });
+
+  for (uint8_t terminal_phase :
+       {FS_CUT_LANDED, FS_CUT_TIMEOUT, FS_CUT_ABORT}) {
+    runCase("start는 종료 phase " + std::to_string((int)terminal_phase) +
+                "에서 재시동을 허용한다",
+            [terminal_phase] {
+      prepareStartCommandState(terminal_phase);
+
+      sendUdpCommandOnce("start");
+
+      CHECK_EQ(safety_arm_requested, true);
+      runPidTicks(1);
+      CHECK_EQ(safety_lock, false);
+      CHECK_EQ((int)fs_phase, (int)FS_NONE);
+      CHECK_EQ(base_throttle, 1100);
+      for (int motor : motorOut) CHECK(motor > 1000);
+    });
+  }
+
   runCase("R3: pending arm 중복 start는 이미 무장 예약으로 처리한다", [] {
     arduino_fake::reset();
     safety_lock = true;
     safety_arm_requested = false;
     safety_disarm_requested = false;
+    fs_phase = FS_NONE;
     calibration_ok = true;
     mag_calibrating = false;
     angleX = angleY = 0.0f;
@@ -1060,6 +1129,7 @@ int main() {
     trim_roll = 2.0f; trim_pitch = -1.5f;
     calibration_ok = true;
     safety_lock = true;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
     fs_phase = FS_NONE;
     base_throttle = 1360;
@@ -1080,6 +1150,7 @@ int main() {
     trim_roll = 0.0f; trim_pitch = 0.0f;
     calibration_ok = true;
     safety_lock = true;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
     fs_phase = FS_NONE;
     base_throttle = 1360;
@@ -1156,6 +1227,7 @@ int main() {
     // 워치독이 비행 중 재부팅을 일으킨다. 이 태스크에서 가장 위험한 실패 모드다.
     calibration_ok = true;
     safety_lock = true;
+    fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
     fs_phase = FS_NONE;
     base_throttle = 1360;
@@ -1408,6 +1480,49 @@ int main() {
             [gain_case] { checkGainCommand(gain_case.prefix, gain_case.changed); });
   }
 
+  runCase("gain: 대표 명령은 자동착륙 하강 중 거부되고 기존값을 보존한다", [] {
+    for (const char *prefix : {"pa", "dr", "ay"}) {
+      seedGains();
+      std::vector<float> before;
+      for (const auto &slot : gain_slots) {
+        before.push_back(static_cast<float>(*slot.value));
+      }
+      fs_phase = FS_DESCENDING;
+      arduino_fake::serial_output.clear();
+
+      sendUdpCommandOnce(std::string(prefix) + " 77.25");
+
+      for (std::size_t index = 0; index < std::size(gain_slots); index++) {
+        CHECK_NEAR(*gain_slots[index].value, before[index], 1e-6f);
+      }
+      CHECK_EQ(countLogOccurrences(
+                   "PID gain refused (auto-land descending)"),
+               static_cast<std::size_t>(1));
+    }
+    fs_phase = FS_NONE;
+  });
+
+  runCase("gains 조회는 자동착륙 하강 중에도 응답하고 값을 바꾸지 않는다", [] {
+    arduino_fake::reset();
+    wifi_udp_fake::reset();
+    seedGains();
+    std::vector<float> before;
+    for (const auto &slot : gain_slots) {
+      before.push_back(static_cast<float>(*slot.value));
+    }
+    fs_phase = FS_DESCENDING;
+
+    sendUdpCommandOnce("gains");
+
+    CHECK(wifi_udp_fake::telemetry_output.rfind("GAINS,", 0) == 0);
+    for (std::size_t index = 0; index < std::size(gain_slots); index++) {
+      CHECK_NEAR(*gain_slots[index].value, before[index], 1e-6f);
+    }
+    CHECK_EQ(countLogOccurrences("refused (auto-land descending)"),
+             static_cast<std::size_t>(0));
+    fs_phase = FS_NONE;
+  });
+
   runCase("gain: negative values are rejected", [] {
     seedGains();
     const float before = Kp_Rate_Pitch;
@@ -1597,6 +1712,35 @@ int main() {
     CHECK(!mag_enabled);
   });
 
+  runCase("magc는 자동착륙 하강 중 거부되고 기존 계수를 보존한다", [] {
+    mag_comp_x = 0.10f;
+    mag_comp_y = -0.20f;
+    mag_comp_z = 0.30f;
+    fs_phase = FS_DESCENDING;
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("magc 1 2 3");
+
+    CHECK_NEAR(mag_comp_x, 0.10f, 1e-6f);
+    CHECK_NEAR(mag_comp_y, -0.20f, 1e-6f);
+    CHECK_NEAR(mag_comp_z, 0.30f, 1e-6f);
+    CHECK_EQ(countLogOccurrences(
+                 "Mag comp refused (auto-land descending)"),
+             static_cast<std::size_t>(1));
+    fs_phase = FS_NONE;
+  });
+
+  runCase("magc는 FS_NONE에서 정상 적용된다", [] {
+    mag_comp_x = mag_comp_y = mag_comp_z = 0.0f;
+    fs_phase = FS_NONE;
+
+    sendUdpCommandOnce("magc 0.125 -0.25 0.5");
+
+    CHECK_NEAR(mag_comp_x, 0.125f, 1e-6f);
+    CHECK_NEAR(mag_comp_y, -0.25f, 1e-6f);
+    CHECK_NEAR(mag_comp_z, 0.5f, 1e-6f);
+  });
+
   runCase("magcal collects extrema and prints hard-iron offsets", [] {
     safety_lock = true;
     mag_enabled = false;
@@ -1654,6 +1798,7 @@ int main() {
     imu2_frozen_now = false;
     imu_disagree_now = false;
     mag_calibrating = true;
+    fs_phase = FS_NONE;
 
     sendUdpCommandOnce("start");
 
