@@ -68,6 +68,21 @@ class _LoopEvent:
             raise _LoopComplete
 
 
+class _BlockingThrottle(float):
+    """Pause a controller tick after it has loaded the old throttle value."""
+
+    def __new__(cls, value, stale_read_started, resume_completed):
+        instance = super().__new__(cls, value)
+        instance.stale_read_started = stale_read_started
+        instance.resume_completed = resume_completed
+        return instance
+
+    def __lt__(self, other):
+        self.stale_read_started.set()
+        self.resume_completed.wait(timeout=0.5)
+        return super().__lt__(other)
+
+
 class _Joystick:
     def __init__(
         self,
@@ -405,6 +420,56 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertAlmostEqual(self.module.throttle_f, 1378.6)
         self.assertIn("성공", output.getvalue())
         self.assertIn("즉시 스로틀을 올리", output.getvalue())
+
+    def test_resume_success_sync_is_not_overwritten_by_a_controller_tick(self):
+        direct_commands = []
+        stale_read_started = threading.Event()
+        resume_completed = threading.Event()
+        controller_errors = []
+        self.module.send_cmd = direct_commands.append
+        self.module.is_armed = True
+        self.module.is_streaming = True
+        self.module.current_throttle = 1000
+        self.module.throttle_f = _BlockingThrottle(
+            1000.0,
+            stale_read_started,
+            resume_completed,
+        )
+        self.module.resume_state = "wait_phase"
+        self.module.resume_result_total_baseline = 41
+        self.module.resume_result_dropped_baseline = 3
+
+        def run_controller_tick():
+            try:
+                self._run_controller(iterations=1)
+            except BaseException as error:
+                controller_errors.append(error)
+
+        controller = threading.Thread(target=run_controller_tick)
+        controller.start()
+        try:
+            self.assertTrue(
+                stale_read_started.wait(timeout=1.0),
+                "controller did not reach the throttle read-modify-write",
+            )
+            self.module.advance_resume_attempt(
+                _telemetry_sample(
+                    Failsafe_Phase=0,
+                    Hover_Est=1340.0,
+                    RC_Total_Pkts=42,
+                    RC_Dropped_Pkts=3,
+                ),
+                now=10.2,
+            )
+        finally:
+            resume_completed.set()
+            controller.join(timeout=2.0)
+
+        self.assertFalse(controller.is_alive())
+        self.assertEqual(controller_errors, [])
+        self.assertEqual(self.module.current_throttle, 1340)
+        self.assertEqual(self.module.throttle_f, 1340.0)
+        self.assertNotIn("th 1000", direct_commands)
 
     def test_stale_phase_zero_packet_cannot_confirm_resume_success(self):
         commands = []

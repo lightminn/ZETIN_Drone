@@ -375,6 +375,7 @@ volatile bool  safety_lock  = true;
 volatile bool  safety_disarm_requested = false;
 volatile bool  safety_arm_requested = false;
 volatile bool  failsafe_resume_requested = false;
+volatile bool  hover_reset_requested = false;
 portMUX_TYPE safetyRequestMux = portMUX_INITIALIZER_UNLOCKED;
 // 런타임 쓰기는 pid_task만 담당한다. Core 0은 텔레메트리/명령 처리에서 읽기만 한다.
 volatile uint8_t fs_phase = FS_NONE;   // 텔레메트리 Failsafe_Phase
@@ -389,8 +390,8 @@ volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
 // hover_valid는 만료시키지 않는다. false는 RC 끊김 시 즉시 컷을 뜻하므로
 // 공중에서 freshness 만료로 false가 되면 추락한다. 낡은 추정치가 덜 위험하다.
 volatile bool hover_valid = false;
-// 비행 중에는 pid_task만 쓰고, start는 safety_lock=true인 동안 초기화한 뒤
-// 마지막에 Core 1에 arm 전이를 요청한다.
+// hoverTracker와 그 공개 mirror는 pid_task만 쓴다. Core 0의 start는
+// safetyRequestMux를 통해 reset을 요청하고 직접 구조체를 초기화하지 않는다.
 HoverThrottleEstimator hoverTracker = {};
 volatile float targetAngleX = 0.0f, targetAngleY = 0.0f, targetAngleZ = 0.0f;
 // 기체 트림(도). 추정기 0°와 진짜 수평의 차이를 보정한다. 비행별 상태가 아니라
@@ -459,12 +460,16 @@ static inline void requestSafetyDisarm() {
   safety_disarm_requested = true;
   safety_arm_requested = false;
   failsafe_resume_requested = false;
+  hover_reset_requested = false;
   portEXIT_CRITICAL(&safetyRequestMux);
 }
 
 static inline void requestSafetyArm() {
   portENTER_CRITICAL(&safetyRequestMux);
-  if (!safety_disarm_requested) safety_arm_requested = true;
+  if (!safety_disarm_requested) {
+    hover_reset_requested = true;
+    safety_arm_requested = true;
+  }
   portEXIT_CRITICAL(&safetyRequestMux);
 }
 
@@ -480,7 +485,15 @@ static inline void applyPendingSafetyRequest() {
     safety_lock = true;
     safety_disarm_requested = false;
     safety_arm_requested = false;
+    hover_reset_requested = false;
   } else if (safety_arm_requested) {
+    if (hover_reset_requested) {
+      // Core 1이 reset을 끝낸 뒤에만 safety_lock=false를 공개한다.
+      hover_valid = false;
+      hover_est = 0.0f;
+      hoverTracker = {};
+    }
+    hover_reset_requested = false;
     safety_lock = false;
     safety_arm_requested = false;
   }
@@ -1479,7 +1492,8 @@ void udp_task(void *pv) {
                           (int)noUsableImu, (int)imu_disagree_now,
                           (int)mag_calibrating);
           } else {
-            // safety_lock=true인 동안 나머지 비행 상태는 Core 0에서 초기화한다.
+            // safety_lock=true인 동안 Core 0 소유 비행 상태를 초기화한다.
+            // hover tracker는 requestSafetyArm()이 Core 1 reset을 함께 요청한다.
             fault_rc = false;
             fault_imu1 = imu1_frozen_now;
             fault_imu2 = imu2_frozen_now;
@@ -1494,9 +1508,6 @@ void udp_task(void *pv) {
             targetAngleZ = 0.0f;
             angleZ = 0.0f;
             mag_reference_pending = true;
-            hoverTracker = {};
-            hover_est = 0.0f;
-            hover_valid = false;
             fs_probe_state = FS_PROBE_WAIT;
             fs_probe_no_response = 0;
             fs_probe_response_g = 0.0f;

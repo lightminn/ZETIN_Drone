@@ -64,6 +64,8 @@ last_arm_time    = 0.0      # 드론 Armed 필드와 대조할 grace 기준 시�
 rc_seq = 0
 
 # 텔레메트리 상태
+# 락 순서: safety_cmd_lock -> telem_lock만 허용한다. telem_lock 안에서는
+# send_cmd/reliable_send 같은 블로킹 가능 I/O를 호출하지 않는다.
 telem_lock        = threading.Lock()
 safety_cmd_lock   = threading.Lock()
 last_telem_time   = 0.0
@@ -122,8 +124,9 @@ def disarm(reason: str = "수동"):
         cancelled_resume = _invalidate_resume_attempt()
         is_armed         = False
         is_streaming     = False
-        current_throttle = 1000
-        throttle_f       = 1000.0
+        with telem_lock:
+            current_throttle = 1000
+            throttle_f       = 1000.0
         reliable_send("stop")
     if cancelled_resume:
         print(f"\n[RESUME] 실패: {reason}으로 복구 시도 취소")
@@ -146,8 +149,9 @@ def stop_streaming_only(reason: str):
     with safety_cmd_lock:
         cancelled_resume = _invalidate_resume_attempt()
         is_streaming = False
-        current_throttle = 1000
-        throttle_f = 1000.0
+        with telem_lock:
+            current_throttle = 1000
+            throttle_f = 1000.0
     if cancelled_resume:
         print(f"\n[RESUME] 실패: {reason}으로 복구 시도 취소")
     print(f"\n>>> [SYSTEM] 로컬 해제 ({reason}) - stop 미전송")
@@ -356,8 +360,9 @@ def arm():
     is_armed         = True
     is_streaming     = True
     last_arm_time    = time.monotonic()
-    current_throttle = 1100
-    throttle_f       = 1100.0
+    with telem_lock:
+        current_throttle = 1100
+        throttle_f       = 1100.0
     # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
     # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
     reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
@@ -593,32 +598,38 @@ def controller_thread():
             # 휴지 상태에서 a2·a5 모두 ≈ -1.00 이어야 정상.
             now_dbg = time.monotonic()
             if now_dbg - last_axis_print >= 0.5:
+                with telem_lock:
+                    displayed_throttle = current_throttle
                 print(f" [AXIS] a2(L2)={joy.get_axis(2):+.2f} a5(R2)={joy.get_axis(5):+.2f} "
-                      f"th={current_throttle}")
+                      f"th={displayed_throttle}")
                 last_axis_print = now_dbg
 
             # --- 스로틀: 트리거 전용 (오른쪽 스틱 매핑 제거 → 스틱 드리프트 자기감소 없음) ---
             # R2/L2 누르고 있는 동안 연속 램프(±THROTTLE_RATE µs/s), 짧게 누르면 미세.
             # R1/L1 = ±1 정밀. 트리거는 해제 시 확실히 안 눌린 상태라 스틱과 달리 드리프트가 없다.
-            if curr_R2:
-                throttle_f += THROTTLE_RATE * loop_dt
-            if curr_L2:
-                throttle_f -= THROTTLE_RATE * loop_dt
-
             delta = 0
             if   curr_R1 and not last_btn_R1: delta = +1
             elif curr_L1 and not last_btn_L1: delta = -1
-            if delta:
-                throttle_f += delta
+            throttle_to_send = None
+            with telem_lock:
+                if curr_R2:
+                    throttle_f += THROTTLE_RATE * loop_dt
+                if curr_L2:
+                    throttle_f -= THROTTLE_RATE * loop_dt
+                if delta:
+                    throttle_f += delta
 
-            throttle_f = max(1000.0, min(1900.0, throttle_f))
-            new_throttle = int(round(throttle_f))
-            if new_throttle != current_throttle:
-                current_throttle = new_throttle
-                send_cmd(f"th {current_throttle}")
+                throttle_f = max(1000.0, min(1900.0, throttle_f))
+                new_throttle = int(round(throttle_f))
+                if new_throttle != current_throttle:
+                    current_throttle = new_throttle
+                    throttle_to_send = new_throttle
+
+            if throttle_to_send is not None:
+                send_cmd(f"th {throttle_to_send}")
                 now_mono = time.monotonic()
                 if delta or now_mono - last_th_print >= 0.5:
-                    print(f" [TH] -> {current_throttle}")
+                    print(f" [TH] -> {throttle_to_send}")
                     last_th_print = now_mono
 
             last_btn_R1  = curr_R1; last_btn_L1  = curr_L1

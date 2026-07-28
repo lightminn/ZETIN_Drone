@@ -858,6 +858,34 @@ int main() {
              static_cast<std::size_t>(1));
   });
 
+  runCase("start의 hover tracker reset은 다음 pid tick에서만 적용된다", [] {
+    prepareStartCommandState(FS_CUT_ABORT);
+    primeHoverEstimate(1420.0f);
+
+    sendUdpCommandOnce("start");
+
+    std::cout << "[CONTROL] hover reset before pid"
+              << " actual_valid=" << static_cast<int>(hoverTracker.valid)
+              << " actual_est=" << hover_est
+              << " expected_valid=1 expected_est=1420\n";
+    CHECK(safety_lock);
+    CHECK(safety_arm_requested);
+    CHECK_EQ(hoverTracker.valid, true);
+    CHECK_NEAR(hover_est, 1420.0f, 1e-4f);
+
+    runPidTicks(1);
+
+    std::cout << "[CONTROL] hover reset after pid"
+              << " actual_valid=" << static_cast<int>(hoverTracker.valid)
+              << " actual_est=" << hover_est
+              << " expected_valid=0 expected_est=0\n";
+    CHECK(!safety_lock);
+    CHECK_EQ(hoverTracker.initialized, false);
+    CHECK_EQ(hoverTracker.valid, false);
+    CHECK_NEAR(hover_est, 0.0f, 1e-4f);
+    CHECK_EQ(hover_valid, false);
+  });
+
   for (uint8_t terminal_phase :
        {FS_CUT_LANDED, FS_CUT_TIMEOUT, FS_CUT_ABORT}) {
     runCase("start는 종료 phase " + std::to_string((int)terminal_phase) +
@@ -1131,6 +1159,8 @@ int main() {
     safety_lock = true;
     fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
+    runPidTicks(1);  // Core 1에서 arm과 hover reset 요청을 먼저 적용한다.
+    CHECK(!safety_lock);
     fs_phase = FS_NONE;
     base_throttle = 1360;
     primeHoverEstimate(1360.0f);
@@ -1152,6 +1182,8 @@ int main() {
     safety_lock = true;
     fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
+    runPidTicks(1);  // Core 1에서 arm과 hover reset 요청을 먼저 적용한다.
+    CHECK(!safety_lock);
     fs_phase = FS_NONE;
     base_throttle = 1360;
     primeHoverEstimate(1360.0f);
@@ -1229,6 +1261,8 @@ int main() {
     safety_lock = true;
     fs_phase = FS_NONE;
     sendUdpCommandOnce("start");
+    runPidTicks(1);  // Core 1에서 arm과 hover reset 요청을 먼저 적용한다.
+    CHECK(!safety_lock);
     fs_phase = FS_NONE;
     base_throttle = 1360;
     primeHoverEstimate(1360.0f);
