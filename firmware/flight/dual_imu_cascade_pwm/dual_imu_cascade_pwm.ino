@@ -279,6 +279,13 @@ struct MotorMix {
   float collective_us;
 };
 
+struct ImuTelemetrySample {
+  float imu1GyroX, imu1GyroY, imu1GyroZ;
+  float imu1AccelX, imu1AccelY, imu1AccelZ;
+  float imu2GyroX, imu2GyroY, imu2GyroZ;
+  float imu2AccelX, imu2AccelY, imu2AccelZ;
+};
+
 // IMU별 freeze 감시 (raw 레지스터 값이 멈췄는지)
 struct FreezeMon {
   int16_t  lastGyro[3] = {0, 0, 0};
@@ -286,6 +293,17 @@ struct FreezeMon {
   uint32_t since = 0;
   bool     init  = false;
 };
+
+static inline ImuTelemetrySample makeImuTelemetrySample(
+    const float g1[3], const float a1[3],
+    const float g2[3], const float a2[3]) {
+  return {
+    g1[1], -g1[0], -g1[2],
+    a1[1] * ACCEL_SCALE, -a1[0] * ACCEL_SCALE, a1[2] * ACCEL_SCALE,
+    g2[1], -g2[0], -g2[2],
+    a2[1] * ACCEL_SCALE, -a2[0] * ACCEL_SCALE, a2[2] * ACCEL_SCALE
+  };
+}
 #if WIFI_LATENCY_DEBUG
 static inline void recordLatEvent(LatRing &ring, uint32_t tMs,
                                   uint32_t durUs, LatKind kind) {
@@ -438,6 +456,8 @@ volatile float targetYawRate = 0.0f;   // rcr이 준 yaw 각속도 명령 (dps)
 volatile float angleX = 0.0f, angleY = 0.0f, angleZ = 0.0f; // 추정 각도
 volatile float gyroX  = 0.0f, gyroY  = 0.0f, gyroZ  = 0.0f; // 융합 각속도 (body frame)
 volatile float accX   = 0.0f, accY   = 0.0f, accZ   = 0.0f; // 융합 가속도 (g)
+ImuTelemetrySample imuSampleSnapshot = {};
+portMUX_TYPE imuSampleMux = portMUX_INITIALIZER_UNLOCKED;
 volatile int   motorOut[4] = {1000,1000,1000,1000};
 volatile float tgtRate[3]  = {0,0,0}; // roll,pitch,yaw dps
 volatile int   pidLoopHz   = 0;
@@ -608,6 +628,19 @@ static inline bool takeMagReferenceRequest() {
   mag_reference_pending = false;
   portEXIT_CRITICAL(&magSnapshotMux);
   return requested;
+}
+
+static inline void publishImuSample(const ImuTelemetrySample &sample) {
+  portENTER_CRITICAL(&imuSampleMux);
+  imuSampleSnapshot = sample;
+  portEXIT_CRITICAL(&imuSampleMux);
+}
+
+static inline ImuTelemetrySample readImuSampleSnapshot() {
+  portENTER_CRITICAL(&imuSampleMux);
+  const ImuTelemetrySample sample = imuSampleSnapshot;
+  portEXIT_CRITICAL(&imuSampleMux);
+  return sample;
 }
 
 static bool initMagnetometer() {
@@ -960,6 +993,12 @@ void pid_task(void *pv) {
       IMU2_SIGN_X*e2.accel[0] * accel_scale2,
       IMU2_SIGN_Y*e2.accel[1] * accel_scale2,
       IMU2_SIGN_Z*e2.accel[2] * accel_scale2 };
+
+    // LPF 후 gyro와 LPF 없는 accel을 같은 1kHz 프레임에서 body 좌표로 게시한다.
+    // 변환 계산은 락 밖에서 끝내고 임계구역에서는 float 12개만 복사한다.
+    const ImuTelemetrySample currentImuSample =
+        makeImuTelemetrySample(g1, a1, g2, a2);
+    publishImuSample(currentImuSample);
 
     // 현재 샘플 불일치는 재시동 거부 판단에도 사용한다.
     bool disagreeSample = false;
@@ -1485,7 +1524,8 @@ static void handleGainCommand(const char *buf) {
 // fault_imu1,fault_imu2,fault_disagree,active_imus,scaled,fault_attitude,
 // calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z, Yaw_Hold,
 // Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid와 프로브 상태/연속
-// 무반응/최근 차분 반응을 append-only로 보낸다.
+// 무반응/최근 차분 반응, IMU1 gyro/accel XYZ, IMU2 gyro/accel XYZ를
+// append-only로 보낸다. IMU별 값은 융합값과 같은 body frame이다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
@@ -1494,8 +1534,9 @@ static void sendTelemetry() {
   const uint8_t probeStateSnapshot = fs_probe_state;
   const uint8_t probeNoResponseSnapshot = fs_probe_no_response;
   const float probeResponseSnapshot = fs_probe_response_g;
+  const ImuTelemetrySample imuSample = readImuSampleSnapshot();
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1511,7 +1552,11 @@ static void sendTelemetry() {
              (int)fs_phase, trim_roll, trim_pitch,
              hoverEstSnapshot, (int)hoverValidSnapshot,
              (int)probeStateSnapshot, (int)probeNoResponseSnapshot,
-             probeResponseSnapshot);
+             probeResponseSnapshot,
+             imuSample.imu1GyroX, imuSample.imu1GyroY, imuSample.imu1GyroZ,
+             imuSample.imu1AccelX, imuSample.imu1AccelY, imuSample.imu1AccelZ,
+             imuSample.imu2GyroX, imuSample.imu2GyroY, imuSample.imu2GyroZ,
+             imuSample.imu2AccelX, imuSample.imu2AccelY, imuSample.imu2AccelZ);
   udp.endPacket();
 }
 

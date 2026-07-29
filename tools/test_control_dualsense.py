@@ -201,6 +201,18 @@ def _telemetry_sample(**overrides):
         "Failsafe_Probe_State": 0,
         "Failsafe_Probe_NoResponse": 0,
         "Failsafe_Probe_Response_G": 0.0,
+        "IMU1_Gyro_X": 0.0,
+        "IMU1_Gyro_Y": 0.0,
+        "IMU1_Gyro_Z": 0.0,
+        "IMU1_Accel_X": 0.0,
+        "IMU1_Accel_Y": 0.0,
+        "IMU1_Accel_Z": 0.0,
+        "IMU2_Gyro_X": 0.0,
+        "IMU2_Gyro_Y": 0.0,
+        "IMU2_Gyro_Z": 0.0,
+        "IMU2_Accel_X": 0.0,
+        "IMU2_Accel_Y": 0.0,
+        "IMU2_Accel_Z": 0.0,
     }
     sample.update(overrides)
     return sample
@@ -1079,6 +1091,55 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertIn("Yaw_Hold=1", diag_lines[0])
         self.assertIn("Hover_Est=1423.6", diag_lines[0])
         self.assertIn("Hover_Valid=1", diag_lines[0])
+
+    def test_armed_diag_line_reports_maximum_per_axis_gyro_difference(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Failsafe_Phase=0,
+            IMU1_Gyro_X=1.0,
+            IMU1_Gyro_Y=2.0,
+            IMU1_Gyro_Z=3.0,
+            IMU2_Gyro_X=0.0,
+            IMU2_Gyro_Y=6.0,
+            IMU2_Gyro_Z=1.0,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag_lines = [line for line in output.splitlines() if "[DIAG]" in line]
+        self.assertEqual(1, len(diag_lines))
+        self.assertIn("dG=4.0", diag_lines[0])
+
+    def test_armed_diag_line_reports_unknown_when_any_per_imu_field_is_missing(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(Failsafe_Phase=0, IMU2_Accel_Z=None)
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag_lines = [line for line in output.splitlines() if "[DIAG]" in line]
+        self.assertEqual(1, len(diag_lines))
+        self.assertIn("dG=-", diag_lines[0])
+
+    def test_current_telemetry_csv_row_keeps_all_per_imu_values(self):
+        imu_names = (
+            "IMU1_Gyro_X", "IMU1_Gyro_Y", "IMU1_Gyro_Z",
+            "IMU1_Accel_X", "IMU1_Accel_Y", "IMU1_Accel_Z",
+            "IMU2_Gyro_X", "IMU2_Gyro_Y", "IMU2_Gyro_Z",
+            "IMU2_Accel_X", "IMU2_Accel_Y", "IMU2_Accel_Z",
+        )
+        imu_values = (
+            1.25, -2.5, 3.75, 0.125, -0.25, 0.5,
+            -4.5, 5.25, -6.0, -0.625, 0.75, -0.875,
+        )
+        packet = ",".join(["1"] * 43 + [str(value) for value in imu_values])
+
+        sample = self.module.parse_telemetry_packet(packet)
+        row = self.module.sample_to_csv_row("12:34:56.789", sample)
+
+        self.assertEqual(
+            list(imu_values),
+            [row[self.module.CSV_FIELDS.index(name)] for name in imu_names],
+        )
 
     def test_telemetry_thread_advances_resume_attempt(self):
         commands = []

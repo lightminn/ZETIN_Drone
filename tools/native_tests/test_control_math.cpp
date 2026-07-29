@@ -2131,6 +2131,41 @@ int main() {
     CHECK_NEAR(filter.last, 0.0f, 1e-6f);
   });
 
+  runCase("per-IMU telemetry uses the fused body-frame axis and sign contract", [] {
+    const float g1[3] = {11.0f, -22.0f, 33.0f};
+    const float a1[3] = {2048.0f, -4096.0f, 1024.0f};
+    const float g2[3] = {-44.0f, 55.0f, -66.0f};
+    const float a2[3] = {-1024.0f, 3072.0f, -512.0f};
+
+    const ImuTelemetrySample sample = makeImuTelemetrySample(g1, a1, g2, a2);
+
+    CHECK_NEAR(sample.imu1GyroX, -22.0f, 1e-6f);
+    CHECK_NEAR(sample.imu1GyroY, -11.0f, 1e-6f);
+    CHECK_NEAR(sample.imu1GyroZ, -33.0f, 1e-6f);
+    CHECK_NEAR(sample.imu1AccelX, -2.0f, 1e-6f);
+    CHECK_NEAR(sample.imu1AccelY, -1.0f, 1e-6f);
+    CHECK_NEAR(sample.imu1AccelZ, 0.5f, 1e-6f);
+    CHECK_NEAR(sample.imu2GyroX, 55.0f, 1e-6f);
+    CHECK_NEAR(sample.imu2GyroY, 44.0f, 1e-6f);
+    CHECK_NEAR(sample.imu2GyroZ, 66.0f, 1e-6f);
+    CHECK_NEAR(sample.imu2AccelX, 1.5f, 1e-6f);
+    CHECK_NEAR(sample.imu2AccelY, 0.5f, 1e-6f);
+    CHECK_NEAR(sample.imu2AccelZ, -0.25f, 1e-6f);
+
+    CHECK_NEAR(
+        (sample.imu1GyroX + sample.imu2GyroX) * 0.5f, 16.5f, 1e-6f);
+    CHECK_NEAR(
+        (sample.imu1GyroY + sample.imu2GyroY) * 0.5f, 16.5f, 1e-6f);
+    CHECK_NEAR(
+        (sample.imu1GyroZ + sample.imu2GyroZ) * 0.5f, 16.5f, 1e-6f);
+    CHECK_NEAR(
+        (sample.imu1AccelX + sample.imu2AccelX) * 0.5f, -0.25f, 1e-6f);
+    CHECK_NEAR(
+        (sample.imu1AccelY + sample.imu2AccelY) * 0.5f, -0.25f, 1e-6f);
+    CHECK_NEAR(
+        (sample.imu1AccelZ + sample.imu2AccelZ) * 0.5f, 0.125f, 1e-6f);
+  });
+
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count
             << " native control-math cases passed\n";
   return failure_count == 0 ? 0 : 1;

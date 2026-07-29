@@ -43,6 +43,13 @@ STATUS_PERIOD     = 1.0      # 무장 여부와 무관한 링크/상태 요약 �
 TILT_WARN_DEG     = 30.0
 TILT_WARN_PERIOD  = 1.0      # 과도 기울기 경고 최소 간격 (초)
 
+IMU_TELEMETRY_FIELDS = (
+    "IMU1_Gyro_X", "IMU1_Gyro_Y", "IMU1_Gyro_Z",
+    "IMU1_Accel_X", "IMU1_Accel_Y", "IMU1_Accel_Z",
+    "IMU2_Gyro_X", "IMU2_Gyro_Y", "IMU2_Gyro_Z",
+    "IMU2_Accel_X", "IMU2_Accel_Y", "IMU2_Accel_Z",
+)
+
 # 송신/수신 단일 소켓 사용 (드론이 송신자 포트로 텔레메트리를 응답하므로 동일 소켓을 사용해야 함)
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(("", UDP_PORT))
@@ -542,6 +549,16 @@ def format_status_telemetry(sample):
     )
 
 
+def _format_gyro_disagreement(sample):
+    if any(sample.get(name) is None for name in IMU_TELEMETRY_FIELDS):
+        return "-"
+    difference = max(
+        abs(sample[f"IMU1_Gyro_{axis}"] - sample[f"IMU2_Gyro_{axis}"])
+        for axis in ("X", "Y", "Z")
+    )
+    return f"{difference:.1f}"
+
+
 # ==========================================================
 # 텔레메트리 수신 + 고장진단 스레드
 # ==========================================================
@@ -591,7 +608,7 @@ def telemetry_thread():
                 )
 
         try:
-            data, _ = sock.recvfrom(512)
+            data, _ = sock.recvfrom(2048)
         except socket.timeout:
             if shutdown_event.is_set():
                 break
@@ -682,7 +699,7 @@ def telemetry_thread():
                 print(f" [DIAG] M1(FL)={m[0]} M2(RR)={m[1]} M3(FR)={m[2]} M4(RL)={m[3]} "
                       f"[yaw축 CW-CCW={cw - ccw:+d}] | "
                       f"aX={sample['Roll']:+5.1f} aY={sample['Pitch']:+5.1f} aZ={az:+6.1f} | "
-                      f"gZ={gz:+6.1f} "
+                      f"gZ={gz:+6.1f} dG={_format_gyro_disagreement(sample)} "
                       f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
                       f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
                       f"th={sample['Throttle']} "

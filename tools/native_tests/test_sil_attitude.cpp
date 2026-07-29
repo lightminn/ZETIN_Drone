@@ -1390,7 +1390,7 @@ int main() {
         "implausible accel calibration did not emit the safety warning");
   });
 
-  runCase("telemetry: hover and failsafe probe diagnostics are appended", [] {
+  runCase("telemetry: per-IMU body samples append after the 43-field prefix", [] {
     PlantState state;
     resetFirmwareState(state);
     connectionEstablished = true;
@@ -1399,6 +1399,11 @@ int main() {
     fs_probe_state = FS_PROBE_UNAVAILABLE;
     fs_probe_no_response = 2;
     fs_probe_response_g = 0.0125f;
+    imuSampleSnapshot = {
+        1.25f, -2.5f, 3.75f,
+        0.125f, -0.25f, 0.5f,
+        -4.5f, 5.25f, -6.0f,
+        -0.625f, 0.75f, -0.875f};
 
     sendTelemetry();
 
@@ -1409,15 +1414,24 @@ int main() {
             : 1U + static_cast<std::size_t>(
                        std::count(packet.begin(), packet.end(), ','));
     std::ostringstream detail;
+    const std::string expected_suffix =
+        ",1337.50,1,3,2,0.013"
+        ",1.25,-2.50,3.75,0.125,-0.250,0.500"
+        ",-4.50,5.25,-6.00,-0.625,0.750,-0.875";
     detail << "actual field_count=" << field_count
            << ", packet_suffix="
-           << packet.substr(packet.size() > 24U ? packet.size() - 24U : 0U)
-           << "; expected field_count=43 and suffix ,1337.50,1,3,2,0.013";
-    CHECK_MSG(field_count == 43U, detail.str());
+           << packet.substr(
+                  packet.size() > expected_suffix.size()
+                      ? packet.size() - expected_suffix.size()
+                      : 0U)
+           << "; expected field_count=55 and suffix " << expected_suffix;
+    CHECK_MSG(field_count == 55U, detail.str());
     CHECK_MSG(
-        packet.size() >= 20U &&
+        packet.size() >= expected_suffix.size() &&
             packet.compare(
-                packet.size() - 20U, 20U, ",1337.50,1,3,2,0.013") == 0,
+                packet.size() - expected_suffix.size(),
+                expected_suffix.size(),
+                expected_suffix) == 0,
         detail.str());
   });
 

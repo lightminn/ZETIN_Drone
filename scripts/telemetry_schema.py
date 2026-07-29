@@ -14,7 +14,12 @@ estimated hover throttle and its validity flag. Fields 41-43 append the
 failsafe active-probe state, consecutive no-response count, and most recent
 differential response in g. Probe-state values are 0=WAIT, 1=DIP,
 2=EVALUATE, 3=UNAVAILABLE, and 4=BLOCKED (the mixer did not deliver at least
-80% of the requested dip during the sampling interval).
+80% of the requested dip during the sampling interval). Fields 44-55 append
+IMU1 and IMU2 gyro (dps) and accel (g) XYZ values in the same body frame as
+the fused fields. Per-IMU gyro is sampled after its software LPF; per-IMU
+accel has no software LPF. When ``Active_IMUs == 2`` and
+``Fault_Disagree == 0``, each fused gyro/accel axis equals the average of the
+corresponding IMU1 and IMU2 axes within floating-point rounding error.
 """
 
 import math
@@ -64,6 +69,18 @@ TELEMETRY_FIELDS = (
     "Failsafe_Probe_State",
     "Failsafe_Probe_NoResponse",
     "Failsafe_Probe_Response_G",
+    "IMU1_Gyro_X",
+    "IMU1_Gyro_Y",
+    "IMU1_Gyro_Z",
+    "IMU1_Accel_X",
+    "IMU1_Accel_Y",
+    "IMU1_Accel_Z",
+    "IMU2_Gyro_X",
+    "IMU2_Gyro_Y",
+    "IMU2_Gyro_Z",
+    "IMU2_Accel_X",
+    "IMU2_Accel_Y",
+    "IMU2_Accel_Z",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -110,6 +127,18 @@ TELEMETRY_FIELD_TYPES = {
     "Failsafe_Probe_State": int,
     "Failsafe_Probe_NoResponse": int,
     "Failsafe_Probe_Response_G": float,
+    "IMU1_Gyro_X": float,
+    "IMU1_Gyro_Y": float,
+    "IMU1_Gyro_Z": float,
+    "IMU1_Accel_X": float,
+    "IMU1_Accel_Y": float,
+    "IMU1_Accel_Z": float,
+    "IMU2_Gyro_X": float,
+    "IMU2_Gyro_Y": float,
+    "IMU2_Gyro_Z": float,
+    "IMU2_Accel_X": float,
+    "IMU2_Accel_Y": float,
+    "IMU2_Accel_Z": float,
 }
 
 GAIN_FIELDS = (
@@ -146,11 +175,11 @@ def _parse_integer(raw, name):
 
 
 def parse_telemetry_packet(line):
-    """Parse a legacy or current (43-field) packet into a fixed-schema dict.
+    """Parse a legacy or current (55-field) packet into a fixed-schema dict.
 
     Fields unavailable in legacy packets are returned as ``None`` so CSV
     files retain the full header without inventing healthy/fault values. Extra
-    future fields are ignored after the known 43 fields. The first
+    future fields are ignored after the known 55 fields. The first
     ``REQUIRED_FIELD_COUNT`` fields must be non-empty: consumers format and
     do arithmetic on them, so a blank there is a malformed packet, not a
     legacy one.

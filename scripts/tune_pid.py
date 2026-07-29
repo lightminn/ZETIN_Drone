@@ -26,7 +26,7 @@ def receive_thread():
     last_status = 0.0
     while True:
         try:
-            data, _ = sock.recvfrom(1024)
+            data, _ = sock.recvfrom(2048)
         except socket.timeout:
             continue
         except OSError:

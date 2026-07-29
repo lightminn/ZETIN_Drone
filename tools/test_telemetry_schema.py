@@ -36,6 +36,21 @@ GAIN_NAMES = (
     "Kd_Rate_Yaw",
 )
 
+IMU_TELEMETRY_NAMES = (
+    "IMU1_Gyro_X",
+    "IMU1_Gyro_Y",
+    "IMU1_Gyro_Z",
+    "IMU1_Accel_X",
+    "IMU1_Accel_Y",
+    "IMU1_Accel_Z",
+    "IMU2_Gyro_X",
+    "IMU2_Gyro_Y",
+    "IMU2_Gyro_Z",
+    "IMU2_Accel_X",
+    "IMU2_Accel_Y",
+    "IMU2_Accel_Z",
+)
+
 
 class TelemetryCompatibilityTest(unittest.TestCase):
     def test_10_field_packet_keeps_extended_values_unknown(self):
@@ -73,8 +88,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Failsafe_Probe_Response_G",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(43, len(TELEMETRY_FIELDS))
-        self.assertEqual(44, len(CSV_FIELDS))
+        self.assertEqual(55, len(TELEMETRY_FIELDS))
+        self.assertEqual(56, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -199,6 +214,32 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertAlmostEqual(sample["Failsafe_Probe_Response_G"], 0.0125)
         self.assertIs(type(sample["Failsafe_Probe_Response_G"]), float)
 
+    def test_55_field_packet_appends_per_imu_body_frame_values(self):
+        imu_values = (
+            1.25, -2.5, 3.75,
+            0.125, -0.25, 0.5,
+            -4.5, 5.25, -6.0,
+            -0.625, 0.75, -0.875,
+        )
+        current_packet = ",".join(["1"] * 43 + [str(value) for value in imu_values])
+
+        sample = parse_telemetry_packet(current_packet)
+
+        for name, expected in zip(IMU_TELEMETRY_NAMES, imu_values):
+            self.assertEqual(expected, sample[name])
+            self.assertIs(type(sample[name]), float)
+
+    def test_43_field_packet_leaves_per_imu_values_unknown(self):
+        sample = parse_telemetry_packet(",".join(["1"] * 43))
+
+        for name in IMU_TELEMETRY_NAMES:
+            self.assertIn(name, sample)
+            self.assertIsNone(sample[name])
+
+    def test_per_imu_field_names_are_appended_in_exact_wire_order(self):
+        self.assertEqual(IMU_TELEMETRY_NAMES, TELEMETRY_FIELDS[43:])
+        self.assertEqual(55, len(TELEMETRY_FIELDS))
+
     def test_35_field_packet_leaves_new_fields_none(self):
         packet = ",".join(["1"] * 35)
         sample = telemetry_schema.parse_telemetry_packet(packet)
@@ -206,8 +247,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIsNone(sample["Trim_Roll"])
         self.assertIsNone(sample["Trim_Pitch"])
 
-    def test_csv_has_44_columns(self):
-        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 44)
+    def test_csv_has_56_columns(self):
+        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 56)
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in (
@@ -235,6 +276,7 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Trim_Pitch",
             "Hover_Est",
             "Failsafe_Probe_Response_G",
+            *IMU_TELEMETRY_NAMES,
         ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], float)
 

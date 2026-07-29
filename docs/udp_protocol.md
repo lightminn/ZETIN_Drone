@@ -174,7 +174,7 @@ ar|at|ay <value>      # roll / pitch / yaw
 
 ## 드론 → 지상국
 
-텔레메트리는 다음 43개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
+텔레메트리는 다음 55개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
 
 ```text
 Roll, Pitch, Yaw,
@@ -193,13 +193,18 @@ Yaw_Hold,
 Failsafe_Phase, Trim_Roll, Trim_Pitch,
 Hover_Est, Hover_Valid,
 Failsafe_Probe_State, Failsafe_Probe_NoResponse,
-Failsafe_Probe_Response_G
+Failsafe_Probe_Response_G,
+IMU1_Gyro_X, IMU1_Gyro_Y, IMU1_Gyro_Z,
+IMU1_Accel_X, IMU1_Accel_Y, IMU1_Accel_Z,
+IMU2_Gyro_X, IMU2_Gyro_Y, IMU2_Gyro_Z,
+IMU2_Accel_X, IMU2_Accel_Y, IMU2_Accel_Z
 ```
 
 기존 21개 필드 뒤에 `Armed`(22), Tier 1 관측 필드(23~30), `MagHeading`(31),
 `Mag_X`/`Mag_Y`/`Mag_Z`(32~34), `Yaw_Hold`(35), `Failsafe_Phase`(36),
 `Trim_Roll`/`Trim_Pitch`(37~38), `Hover_Est`(39), `Hover_Valid`(40),
-프로브 진단(41~43)을 차례로 append한다.
+프로브 진단(41~43), IMU1 gyro/accel(44~49), IMU2 gyro/accel(50~55)을
+차례로 append한다.
 
 - `Armed`는 펌웨어 safety lock의 반전값이다. `start`가 거부되거나
   펌웨어가 스스로 시동을 해제한 것을 지상국이 이 필드로 감지한다.
@@ -219,10 +224,37 @@ Failsafe_Probe_Response_G
 | 41 | `Failsafe_Probe_State` | int | 0=WAIT, 1=DIP, 2=EVALUATE, 3=UNAVAILABLE(1000µs 아래 딥 가드), 4=BLOCKED(표본 구간 중 요청 딥의 80% 미만 전달) |
 | 42 | `Failsafe_Probe_NoResponse` | int | 연속 무반응 프로브 수. 공중 반응이면 0으로 초기화 |
 | 43 | `Failsafe_Probe_Response_G` | float | 최근 프로브의 `딥 직전 LPF − 딥 중 LPF 최솟값`(g) |
+| 44 | `IMU1_Gyro_X` | float | IMU1 body-frame X 각속도(dps), gyro 소프트웨어 LPF 적용 후 |
+| 45 | `IMU1_Gyro_Y` | float | IMU1 body-frame Y 각속도(dps), gyro 소프트웨어 LPF 적용 후 |
+| 46 | `IMU1_Gyro_Z` | float | IMU1 body-frame Z 각속도(dps), gyro 소프트웨어 LPF 적용 후 |
+| 47 | `IMU1_Accel_X` | float | IMU1 body-frame X 가속도(g), 소프트웨어 LPF 없음 |
+| 48 | `IMU1_Accel_Y` | float | IMU1 body-frame Y 가속도(g), 소프트웨어 LPF 없음 |
+| 49 | `IMU1_Accel_Z` | float | IMU1 body-frame Z 가속도(g), 소프트웨어 LPF 없음 |
+| 50 | `IMU2_Gyro_X` | float | IMU2 body-frame X 각속도(dps), gyro 소프트웨어 LPF 적용 후 |
+| 51 | `IMU2_Gyro_Y` | float | IMU2 body-frame Y 각속도(dps), gyro 소프트웨어 LPF 적용 후 |
+| 52 | `IMU2_Gyro_Z` | float | IMU2 body-frame Z 각속도(dps), gyro 소프트웨어 LPF 적용 후 |
+| 53 | `IMU2_Accel_X` | float | IMU2 body-frame X 가속도(g), 소프트웨어 LPF 없음 |
+| 54 | `IMU2_Accel_Y` | float | IMU2 body-frame Y 가속도(g), 소프트웨어 LPF 없음 |
+| 55 | `IMU2_Accel_Z` | float | IMU2 body-frame Z 가속도(g), 소프트웨어 LPF 없음 |
 
 `Yaw`(3번, 융합 결과)와 `MagHeading`(31번, mag heading)의 차이를 보면
 융합이 실제로 동작하는지 확인할 수 있다. `Mag_X`~`Mag_Z`는 모터 전류 간섭
 특성화/검증에 쓴다(스로틀 램프 중 값이 평평하면 간섭 보정이 잘 된 것).
+
+IMU별 필드는 융합 `Gyro_*`/`Accel_*`와 동일한 body frame이다.
+`Active_IMUs == 2`이고 `Fault_Disagree == 0`이면 각 축에서 다음 항등식이
+부동소수 반올림 오차 안에서 성립한다.
+
+```text
+Gyro_axis  = (IMU1_Gyro_axis  + IMU2_Gyro_axis)  / 2
+Accel_axis = (IMU1_Accel_axis + IMU2_Accel_axis) / 2
+```
+
+이 필드는 1kHz 센서 루프의 원본 스트림이 아니라 20Hz 텔레메트리
+스냅샷이다. Nyquist 주파수는 10Hz이므로 프롭 진동은 앨리어싱되며, 이
+필드만으로 진동·순간 disagree·freeze를 판정할 수 없다. 용도는 IMU별 느린
+bias/scale 드리프트와 정상상태 오프셋 관찰로 한정한다. accel은 소프트웨어
+LPF가 없으므로 20Hz 로그에서도 gyro보다 시끄러운 것이 정상이다.
 
 `gains` 명령의 one-shot 응답은 텔레메트리와 별도인 다음 형식이다.
 
@@ -251,9 +283,10 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 - 35필드 패킷은 `Yaw_Hold`에서 끝난다 (자동착륙·기체 트림 도입 이전 펌웨어).
 - 38필드 패킷은 `Trim_Pitch`에서 끝난다 (호버 추정 텔레메트리 도입 이전 펌웨어).
 - 40필드 패킷은 `Hover_Valid`에서 끝난다 (능동 프로브 진단 도입 이전 펌웨어).
+- 43필드 패킷은 `Failsafe_Probe_Response_G`에서 끝난다 (IMU별 텔레메트리 도입 이전 펌웨어).
 - 과거 패킷에 없는 값은 정규화된 CSV에서 빈 셀이 된다.
 - `Timestamp`는 드론이 보내지 않는다. 지상 도구가 CSV의 첫 열로 추가하므로
-  현행 CSV는 44개 열이 된다.
+  현행 CSV는 56개 열이 된다.
 
 공유 구현은
 [`telemetry_schema.py`](../scripts/telemetry_schema.py)에 있다.

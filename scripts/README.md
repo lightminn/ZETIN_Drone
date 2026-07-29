@@ -18,12 +18,15 @@ python scripts/test_dualsense_input.py
 수신 내용을 `logs/`에 기록한다. 두 도구는
 [`telemetry_schema.py`](telemetry_schema.py)의 동일한 필드 정의와 파서를
 공유하므로 10개, 14개, 21개, 22개, 30개, 31개 필드 레거시 텔레메트리와 현재
-43개 필드 패킷을 같은 방식으로 해석한다. 현행 패킷의 마지막 세 필드는
-`Failsafe_Probe_State`, `Failsafe_Probe_NoResponse`,
-`Failsafe_Probe_Response_G`이며, `Mag_Z`에서 끝나는 34필드,
+55개 필드 패킷을 같은 방식으로 해석한다. 현행 패킷의 마지막 12개 필드는
+body frame의 `IMU1_Gyro_X/Y/Z`, `IMU1_Accel_X/Y/Z`,
+`IMU2_Gyro_X/Y/Z`, `IMU2_Accel_X/Y/Z`다. gyro는 소프트웨어 LPF 적용
+후 값이고 accel에는 소프트웨어 LPF가 없다. `Mag_Z`에서 끝나는 34필드,
 `Yaw_Hold`에서 끝나는 35필드, `Trim_Pitch`에서 끝나는 38필드 패킷도
 레거시로 받아들인다. `Hover_Valid`에서 끝나는 40필드도 프로브 진단 도입 전
-패킷으로 수락한다. CSV에는 PC 수신 시각까지 포함해 44개 열을 쓴다.
+패킷으로 수락하며, `Failsafe_Probe_Response_G`에서 끝나는 43필드는 IMU별
+텔레메트리 도입 전 패킷으로 수락한다. CSV에는 PC 수신 시각까지 포함해 56개
+열을 쓴다.
 
 `analyze_probe_response.py`는 Stage E-4a용으로 프로브 판정 이벤트와
 `Hover_Est` 일관성을 확인하고, 지면/공중 응답 분포 및 1.5배 여유를 판정한다.
@@ -36,6 +39,14 @@ matplotlib을 불러오므로 터미널 요약에는 matplotlib이 필요 없다
 `control_dualsense.py`는 정상 조종·벤치 작업에서 쓰는 **유일한 대화형
 지상국**이다. DualSense RC 스트리밍, stdin 명령·PID 조정, `gains` 확인,
 상태/고장 표시와 CSV 기록을 한 프로세스에서 처리한다.
+무장 중 `[DIAG]` 줄의 `dG`는 세 body-frame gyro 축에서 계산한
+`max(|IMU1 − IMU2|)`를 소수 한 자리로 표시한다. 구형 패킷처럼 IMU별
+12필드 중 하나라도 없으면 `dG=-`로 표시하며, CSV에는 수신한 12개 원본값을
+모두 기록한다.
+
+IMU별 값도 20Hz 스냅샷이므로 Nyquist 주파수는 10Hz다. 프롭 진동은
+앨리어싱되며, 이 값이나 `dG`만으로 진동·순간 disagree·freeze를 판정할 수
+없다. 느린 bias/scale 드리프트와 정상상태 오프셋 관찰에만 사용한다.
 
 `control_dualsense.py`는 yaw 스틱을 상태 없는 `rcr` 각속도 명령으로 보내며,
 `YAW_RATE_MAX_DPS = 90.0`에 따라 최대 편향을 ±90dps로 제한한다. 펌웨어의
