@@ -65,7 +65,7 @@ class _FakeThread:
         return False
 
 
-class _TimeoutUntilReleasedSocket:
+class _PacketsUntilReleasedSocket:
     def __init__(self):
         self.entered = threading.Event()
         self.release = threading.Event()
@@ -74,7 +74,7 @@ class _TimeoutUntilReleasedSocket:
         self.entered.set()
         if self.release.wait(timeout=0.01):
             raise SystemExit
-        raise socket.timeout
+        return b"invalid", ("192.168.4.1", 4210)
 
     def sendto(self, _data, _address):
         pass
@@ -1323,7 +1323,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
     def test_telemetry_thread_exits_after_shutdown_event_is_set(self):
         shutdown_event = getattr(self.module, "shutdown_event", None)
         self.assertIsNotNone(shutdown_event)
-        blocking_socket = _TimeoutUntilReleasedSocket()
+        blocking_socket = _PacketsUntilReleasedSocket()
         self.module.sock = blocking_socket
         self.module.is_streaming = False
         shutdown_event.clear()
