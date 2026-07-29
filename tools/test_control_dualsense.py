@@ -43,9 +43,12 @@ class _FakeSocket:
 
     def recvfrom(self, _size):
         try:
-            return next(self.packets), ("192.168.4.1", 4210)
+            packet = next(self.packets)
         except StopIteration:
             raise _LoopComplete
+        if isinstance(packet, BaseException):
+            raise packet
+        return packet, ("192.168.4.1", 4210)
 
     def close(self):
         pass
@@ -279,11 +282,6 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
                 "sample_to_csv_row",
                 return_value=[],
             ),
-            mock.patch.object(
-                self.module,
-                "active_fault_names",
-                return_value=["Fault_Critical"],
-            ),
             contextlib.redirect_stdout(output),
             self.assertRaises(_LoopComplete),
         ):
@@ -304,6 +302,14 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             line.strip()
             for line in output.splitlines()
             if "[FAULT] 드론: RC 타임아웃" in line
+        ]
+
+    def _status_lines(self, samples):
+        output = self._run_telemetry(samples)
+        return [
+            line.strip()
+            for line in output.splitlines()
+            if "[STATUS]" in line
         ]
 
     def test_resume_request_restarts_streaming_before_sending_resume(self):
@@ -860,6 +866,171 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         ):
             self.assertIn(f"{field}=-", line)
 
+    def test_gains_packet_is_printed_in_tuning_console_format(self):
+        self.module.sock = _FakeSocket([
+            (
+                b"GAINS,1,2,3,4,5,6,7,8,9,10,11,12"
+            ),
+        ])
+        output = io.StringIO()
+
+        with (
+            contextlib.redirect_stdout(output),
+            self.assertRaises(_LoopComplete),
+        ):
+            self.module.telemetry_thread()
+
+        gains_lines = [
+            line.strip()
+            for line in output.getvalue().splitlines()
+            if "[GAINS]" in line
+        ]
+        self.assertEqual(
+            gains_lines,
+            [
+                "[GAINS] "
+                "Kp_Angle_Roll=1.0000 Kp_Angle_Pitch=2.0000 "
+                "Kp_Angle_Yaw=3.0000 Kp_Rate_Roll=4.0000 "
+                "Kp_Rate_Pitch=5.0000 Kp_Rate_Yaw=6.0000 "
+                "Ki_Rate_Roll=7.0000 Ki_Rate_Pitch=8.0000 "
+                "Ki_Rate_Yaw=9.0000 Kd_Rate_Roll=10.0000 "
+                "Kd_Rate_Pitch=11.0000 Kd_Rate_Yaw=12.0000"
+            ],
+        )
+
+    def test_truncated_gains_packet_is_ignored_without_exception(self):
+        self.module.sock = _FakeSocket([
+            b"GAINS,1,2,3",
+        ])
+        output = io.StringIO()
+
+        with (
+            contextlib.redirect_stdout(output),
+            self.assertRaises(_LoopComplete),
+        ):
+            self.module.telemetry_thread()
+
+        self.assertNotIn("[GAINS]", output.getvalue())
+
+    def test_prearm_status_prints_once_for_rapid_samples_with_required_fields(self):
+        self.module.is_armed = False
+        sample = _telemetry_sample(
+            Roll=1.25,
+            Pitch=-2.5,
+            Yaw=37.75,
+            Throttle=1120,
+            Armed=0,
+            Hover_Est=1342.5,
+            Hover_Valid=1,
+            Failsafe_Phase=0,
+        )
+
+        lines = self._status_lines([sample, sample, sample])
+
+        self.assertEqual(len(lines), 1)
+        for expected in (
+            "Roll=1.25",
+            "Pitch=-2.50",
+            "Yaw=37.75",
+            "Throttle=1120",
+            "Armed=0",
+            "Hover_Est=1342.5",
+            "Hover_Valid=1",
+            "Faults=-",
+        ):
+            self.assertIn(expected, lines[0])
+
+    def test_status_output_continues_while_armed(self):
+        self.module.is_armed = True
+        self.module.last_arm_time = self.module.time.monotonic()
+
+        lines = self._status_lines([
+            _telemetry_sample(Armed=1, Failsafe_Phase=0),
+        ])
+
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Armed=1", lines[0])
+
+    def test_status_line_lists_active_fault_names(self):
+        self.module.is_armed = False
+
+        lines = self._status_lines([
+            _telemetry_sample(
+                Armed=0,
+                Failsafe_Phase=0,
+                Fault_IMU1=1,
+                Fault_Attitude=1,
+            ),
+        ])
+
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Faults=IMU1,TILT", lines[0])
+
+    def test_prearm_telemetry_loss_and_recovery_are_each_reported(self):
+        self.module.is_armed = False
+        self.module.is_streaming = False
+        self.module.last_telem_time = (
+            self.module.time.monotonic()
+            - self.module.TELEM_TIMEOUT_SEC
+            - 0.5
+        )
+        self.module.sock = _FakeSocket([
+            socket.timeout(),
+            b"packet",
+        ])
+        self.module.csv_writer = types.SimpleNamespace(
+            writerow=lambda _row: None,
+        )
+        self.module.csv_file = types.SimpleNamespace(flush=lambda: None)
+        output = io.StringIO()
+
+        with (
+            mock.patch.object(
+                self.module,
+                "parse_telemetry_packet",
+                return_value=_telemetry_sample(
+                    Armed=0,
+                    Failsafe_Phase=0,
+                ),
+            ),
+            mock.patch.object(
+                self.module,
+                "sample_to_csv_row",
+                return_value=[],
+            ),
+            contextlib.redirect_stdout(output),
+            self.assertRaises(_LoopComplete),
+        ):
+            self.module.telemetry_thread()
+
+        rendered = output.getvalue()
+        self.assertEqual(rendered.count("[FAULT] 텔레메트리"), 1)
+        self.assertEqual(rendered.count("[OK] 텔레메트리 수신 복구"), 1)
+        self.assertNotIn("rc 중단", rendered)
+
+    def test_malformed_datagrams_cannot_mask_streaming_telemetry_loss(self):
+        self.module.is_armed = True
+        self.module.is_streaming = True
+        self.module.last_telem_time = (
+            self.module.time.monotonic()
+            - self.module.TELEM_TIMEOUT_SEC
+            - 0.5
+        )
+        self.module.sock = _FakeSocket([
+            b"malformed",
+            b"still,malformed",
+        ])
+        output = io.StringIO()
+
+        with (
+            contextlib.redirect_stdout(output),
+            self.assertRaises(_LoopComplete),
+        ):
+            self.module.telemetry_thread()
+
+        self.assertFalse(self.module.is_streaming)
+        self.assertEqual(output.getvalue().count("[FAULT] 텔레메트리"), 1)
+
     def test_armed_diag_line_contains_hover_estimate_and_validity(self):
         self.module.is_armed = True
         output = self._run_telemetry([
@@ -996,6 +1167,137 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertTrue(self.module.is_streaming)
         self.assertEqual(direct_commands, [])
         self.assertEqual(reliable_commands, [])
+
+    def test_stdin_start_uses_arm_and_starts_local_rc_streaming(self):
+        direct_commands = []
+        reliable_commands = []
+        self.module.send_cmd = direct_commands.append
+        self.module.reliable_send = reliable_commands.append
+        self.module.is_armed = False
+        self.module.is_streaming = False
+
+        self.module.handle_stdin_command("  start  ")
+
+        self.assertTrue(self.module.is_armed)
+        self.assertTrue(self.module.is_streaming)
+        self.assertEqual(self.module.current_throttle, 1100)
+        self.assertEqual(self.module.throttle_f, 1100.0)
+        self.assertEqual(reliable_commands, ["mag 1", "start"])
+        self.assertEqual(
+            direct_commands,
+            [],
+            "stdin start must not leak through send_cmd without arm state",
+        )
+
+    def test_stdin_throttle_updates_both_local_values_before_sending(self):
+        commands = []
+        telem_lock_free_during_send = []
+
+        def capture_command(command):
+            acquired = self.module.telem_lock.acquire(blocking=False)
+            telem_lock_free_during_send.append(acquired)
+            if acquired:
+                self.module.telem_lock.release()
+            commands.append(command)
+
+        self.module.send_cmd = capture_command
+        self.module.current_throttle = 1000
+        self.module.throttle_f = 1000.0
+
+        self.module.handle_stdin_command("th 1200")
+
+        self.assertEqual(self.module.current_throttle, 1200)
+        self.assertEqual(self.module.throttle_f, 1200.0)
+        self.assertEqual(commands, ["th 1200"])
+        self.assertEqual(telem_lock_free_during_send, [True])
+
+    def test_stdin_throttle_cannot_be_overtaken_by_stale_controller_send(self):
+        commands = []
+        stale_send_started = threading.Event()
+        stdin_command_sent = threading.Event()
+        release_stale_send = threading.Event()
+        controller_errors = []
+
+        def controlled_send(command):
+            if command == "th 1200":
+                stale_send_started.set()
+                release_stale_send.wait(timeout=2.0)
+            commands.append(command)
+            if command == "th 1210":
+                stdin_command_sent.set()
+
+        self.module.send_cmd = controlled_send
+        self.module.is_armed = True
+        self.module.is_streaming = True
+        self.module.current_throttle = 1190
+        self.module.throttle_f = 1190.0
+        event = _LoopEvent(1)
+        joystick = _Joystick(event)
+        joystick.get_axis = lambda index: 1.0 if index == 5 else 0.0
+        self.module.pygame = _pygame_for(joystick, event)
+
+        def run_controller():
+            try:
+                self.module.controller_thread()
+            except _LoopComplete:
+                pass
+            except BaseException as error:
+                controller_errors.append(error)
+
+        controller = threading.Thread(target=run_controller)
+        controller.start()
+        self.assertTrue(stale_send_started.wait(timeout=1.0))
+
+        stdin_worker = threading.Thread(
+            target=self.module.handle_stdin_command,
+            args=("th 1210",),
+        )
+        stdin_worker.start()
+        stdin_command_sent.wait(timeout=0.2)
+        release_stale_send.set()
+        controller.join(timeout=2.0)
+        stdin_worker.join(timeout=2.0)
+
+        self.assertFalse(controller.is_alive())
+        self.assertFalse(stdin_worker.is_alive())
+        self.assertEqual(controller_errors, [])
+        self.assertEqual(
+            [command for command in commands if command.startswith("th ")],
+            ["th 1200", "th 1210"],
+        )
+        self.assertEqual(self.module.current_throttle, 1210)
+        self.assertEqual(self.module.throttle_f, 1210.0)
+
+    def test_stdin_throttle_clamps_to_controller_range_and_reports_it(self):
+        commands = []
+        self.module.send_cmd = commands.append
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            self.module.handle_stdin_command("th 2500")
+
+        self.assertEqual(self.module.current_throttle, 1900)
+        self.assertEqual(self.module.throttle_f, 1900.0)
+        self.assertEqual(commands, ["th 1900"])
+        self.assertIn("2500", output.getvalue())
+        self.assertIn("1900", output.getvalue())
+        self.assertIn("clamp", output.getvalue().lower())
+
+    def test_invalid_stdin_throttle_prints_usage_without_sending(self):
+        commands = []
+        self.module.send_cmd = commands.append
+        self.module.current_throttle = 1175
+        self.module.throttle_f = 1175.0
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            self.module.handle_stdin_command("th abc")
+
+        self.assertEqual(commands, [])
+        self.assertEqual(self.module.current_throttle, 1175)
+        self.assertEqual(self.module.throttle_f, 1175.0)
+        self.assertIn("사용법", output.getvalue())
+        self.assertIn("th <val>", output.getvalue())
 
     def test_stdin_stop_cancels_resume_before_sending_stop(self):
         direct_commands = []
@@ -1319,6 +1621,57 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             commands,
             ["trim 0.00 0.00"],
         )
+
+    def test_controller_banner_lists_supported_stdin_commands(self):
+        event = _LoopEvent(0)
+        joystick = _Joystick(event)
+        self.module.pygame = _pygame_for(joystick, event)
+        output = io.StringIO()
+
+        with (
+            contextlib.redirect_stdout(output),
+            self.assertRaises(_LoopComplete),
+        ):
+            self.module.controller_thread()
+
+        banner = output.getvalue()
+        for expected in (
+            "stdin",
+            "pa|ia|da",
+            "pr|ir|dr",
+            "pp|ip|dp",
+            "py|iy|dy",
+            "ap",
+            "ar|at|ay",
+            "th <val>",
+            "yaw <0|1>",
+            "gains",
+            "start",
+            "stop",
+            "resume",
+            "trim",
+            "magc",
+        ):
+            self.assertIn(expected, banner)
+
+    def test_stdin_help_is_still_printed_without_a_gamepad(self):
+        pygame = types.ModuleType("pygame")
+        pygame.init = lambda: None
+        pygame.joystick = types.SimpleNamespace(
+            init=lambda: None,
+            get_count=lambda: 0,
+        )
+        self.module.pygame = pygame
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            self.module.controller_thread()
+
+        rendered = output.getvalue()
+        self.assertIn("stdin", rendered)
+        self.assertIn("th <val>", rendered)
+        self.assertIn("gains", rendered)
+        self.assertIn("[ERR] 컨트롤러가 없습니다!", rendered)
 
     def test_telemetry_thread_exits_after_shutdown_event_is_set(self):
         shutdown_event = getattr(self.module, "shutdown_event", None)

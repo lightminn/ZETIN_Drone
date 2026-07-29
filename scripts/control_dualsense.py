@@ -17,6 +17,7 @@ from telemetry_schema import (
     CSV_FIELDS,
     active_fault_names,
     is_gains_packet,
+    parse_gains_packet,
     parse_telemetry_packet,
     sample_to_csv_row,
 )
@@ -38,6 +39,7 @@ RESUME_RESULT_TIMEOUT_SEC = 1.0  # resume 후 phase=0 확인 대기
 
 # --- 고장진단 상수 ---
 TELEM_TIMEOUT_SEC = 1.5
+STATUS_PERIOD     = 1.0      # 무장 여부와 무관한 링크/상태 요약 주기 (초)
 TILT_WARN_DEG     = 30.0
 TILT_WARN_PERIOD  = 1.0      # 과도 기울기 경고 최소 간격 (초)
 
@@ -383,14 +385,42 @@ def deadzone(v: float, dz: float = 0.05) -> float:
 
 
 def handle_stdin_command(msg: str):
-    """stdin resume은 RC 선행 확인 경로로 보내고, 나머지는 기존대로 전달한다."""
+    """Route safety/stateful stdin commands before generic UDP passthrough."""
+    global current_throttle, throttle_f
+
     command = msg.strip()
     if not command:
         return
-    if command.lower() == "resume":
+    parts = command.split()
+    command_lower = command.lower()
+    if command_lower == "resume":
         request_resume("stdin")
-    elif command.lower() == "stop":
+    elif command_lower == "start":
+        arm()
+    elif command_lower == "stop":
         disarm("stdin stop")
+    elif parts[0].lower() == "th":
+        if len(parts) != 2:
+            print("[STDIN] 사용법: th <val> (정수, 1000~1900)")
+            return
+        try:
+            requested_throttle = int(parts[1], 10)
+        except ValueError:
+            print("[STDIN] 사용법: th <val> (정수, 1000~1900)")
+            return
+        clamped_throttle = max(1000, min(1900, requested_throttle))
+        with safety_cmd_lock:
+            with telem_lock:
+                throttle_f = float(clamped_throttle)
+                current_throttle = clamped_throttle
+            send_cmd(f"th {clamped_throttle}")
+        if clamped_throttle != requested_throttle:
+            print(
+                f" [TH] {requested_throttle} -> {clamped_throttle} "
+                "(1000~1900 clamp)"
+            )
+        else:
+            print(f" [TH] -> {clamped_throttle}")
     else:
         send_cmd(command)
 
@@ -495,6 +525,22 @@ def format_autoland_telemetry(sample):
     return f"{marker} {' '.join(fields)}"
 
 
+def format_status_telemetry(sample):
+    """Return the 1Hz operator status line for a valid telemetry sample."""
+    faults = ",".join(active_fault_names(sample)) or "-"
+    return (
+        "[STATUS] "
+        f"Roll={_format_optional_float(sample.get('Roll'), 2)} "
+        f"Pitch={_format_optional_float(sample.get('Pitch'), 2)} "
+        f"Yaw={_format_optional_float(sample.get('Yaw'), 2)} "
+        f"Throttle={_format_optional_int(sample.get('Throttle'))} "
+        f"Armed={_format_binary_flag(sample.get('Armed'))} "
+        f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
+        f"Hover_Valid={_format_binary_flag(sample.get('Hover_Valid'))} "
+        f"Faults={faults}"
+    )
+
+
 # ==========================================================
 # 텔레메트리 수신 + 고장진단 스레드
 # ==========================================================
@@ -513,6 +559,9 @@ def telemetry_thread():
     last_tilt_warn = 0.0
     packet_count = 0
     previous_autoland_phase = 0
+    last_status = 0.0
+    telemetry_wait_started = time.monotonic()
+    telemetry_lost = False
 
     while not shutdown_event.is_set():
         check_resume_timeout()
@@ -522,17 +571,29 @@ def telemetry_thread():
             send_cmd("connect")
             last_connect = now
 
+        last_seen = (
+            last_telem_time
+            if last_telem_time > 0
+            else telemetry_wait_started
+        )
+        elapsed = now - last_seen
+        if elapsed > TELEM_TIMEOUT_SEC and not telemetry_lost:
+            telemetry_lost = True
+            if is_streaming:
+                print(f"\n[FAULT] 텔레메트리 {elapsed:.1f}s 수신 없음 "
+                      f"- rc 중단, 드론 자동착륙에 맡김")
+                stop_streaming_only("텔레메트리 끊김")
+            else:
+                print(
+                    f"\n[FAULT] 텔레메트리 {elapsed:.1f}s 수신 없음 "
+                    "- 링크 확인 필요"
+                )
+
         try:
             data, _ = sock.recvfrom(512)
         except socket.timeout:
             if shutdown_event.is_set():
                 break
-            if is_streaming and last_telem_time > 0:
-                elapsed = time.monotonic() - last_telem_time
-                if elapsed > TELEM_TIMEOUT_SEC:
-                    print(f"\n[FAULT] 텔레메트리 {elapsed:.1f}s 수신 없음 "
-                          f"- rc 중단, 드론 자동착륙에 맡김")
-                    stop_streaming_only("텔레메트리 끊김")
             continue
         except OSError as e:
             if shutdown_event.is_set():
@@ -543,11 +604,20 @@ def telemetry_thread():
         try:
             line = data.decode("utf-8", errors="strict")
             if is_gains_packet(line):
+                gains = parse_gains_packet(line)
+                print(
+                    "\n[GAINS] "
+                    + " ".join(
+                        f"{name}={value:.4f}"
+                        for name, value in gains.items()
+                    )
+                )
                 continue
             sample = parse_telemetry_packet(line)
         except (UnicodeDecodeError, ValueError):
             continue
 
+        received_at = time.monotonic()
         with telem_lock:
             telem_angle_x      = sample["Roll"]
             telem_angle_y      = sample["Pitch"]
@@ -559,7 +629,7 @@ def telemetry_thread():
             telem_failsafe_phase = sample["Failsafe_Phase"]
             telem_hover_est = sample["Hover_Est"]
             telem_hover_valid = sample["Hover_Valid"] == 1
-            last_telem_time    = time.monotonic()
+            last_telem_time    = received_at
             if not trim_synced:
                 received_trim_roll = sample["Trim_Roll"]
                 received_trim_pitch = sample["Trim_Pitch"]
@@ -568,11 +638,19 @@ def telemetry_thread():
                     trim_pitch = received_trim_pitch
                     trim_synced = True
 
+        if telemetry_lost:
+            print("[OK] 텔레메트리 수신 복구")
+            telemetry_lost = False
+
         now_str = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         csv_writer.writerow(sample_to_csv_row(now_str, sample))
         packet_count += 1
         if packet_count % 20 == 0:
             csv_file.flush()
+
+        if received_at - last_status >= STATUS_PERIOD:
+            print(format_status_telemetry(sample))
+            last_status = received_at
 
         # Stage E: DESCENDING은 120ms 프로브 딥을 위해 매 패킷 출력하되,
         # 갱신 정보가 없는 종료 phase는 전이 시점에만 한 번 출력한다.
@@ -658,12 +736,6 @@ def controller_thread():
 
     pygame.init()
     pygame.joystick.init()
-    if pygame.joystick.get_count() == 0:
-        print("\n[ERR] 컨트롤러가 없습니다!")
-        return
-
-    joy = pygame.joystick.Joystick(0)
-    joy.init()
 
     print("========== DRONE CONTROLLER ==========")
     print(f" [X]        Arm / Disarm")
@@ -672,7 +744,19 @@ def controller_thread():
     print(f" [R1/L1]    Throttle +1 / -1 (정밀)")
     print(f" [DPAD]     Trim  |  [PS] Trim Reset")
     print(f" [L-Stick]  Roll / Pitch (max ±{MAX_ANGLE}°),  [R-Stick↔] Yaw 각속도 (max ±{YAW_RATE_MAX_DPS:.0f}°/s)")
+    print("--------------- stdin ----------------")
+    print(" PID: pa|ia|da, pr|ir|dr, pp|ip|dp, py|iy|dy <val>")
+    print("      ap <val>, ar|at|ay <val>")
+    print(" Control: th <val>, yaw <0|1>, gains, start, stop, resume")
+    print("          trim <roll> <pitch>, magc <x> <y> <z>")
     print("======================================")
+
+    if pygame.joystick.get_count() == 0:
+        print("\n[ERR] 컨트롤러가 없습니다!")
+        return
+
+    joy = pygame.joystick.Joystick(0)
+    joy.init()
 
     loop_dt = 1.0 / CTRL_LOOP_HZ
     next_loop = time.monotonic()
@@ -746,22 +830,26 @@ def controller_thread():
             if   curr_R1 and not last_btn_R1: delta = +1
             elif curr_L1 and not last_btn_L1: delta = -1
             throttle_to_send = None
-            with telem_lock:
-                if curr_R2:
-                    throttle_f += THROTTLE_RATE * loop_dt
-                if curr_L2:
-                    throttle_f -= THROTTLE_RATE * loop_dt
-                if delta:
-                    throttle_f += delta
+            with safety_cmd_lock:
+                if is_streaming:
+                    with telem_lock:
+                        if curr_R2:
+                            throttle_f += THROTTLE_RATE * loop_dt
+                        if curr_L2:
+                            throttle_f -= THROTTLE_RATE * loop_dt
+                        if delta:
+                            throttle_f += delta
 
-                throttle_f = max(1000.0, min(1900.0, throttle_f))
-                new_throttle = int(round(throttle_f))
-                if new_throttle != current_throttle:
-                    current_throttle = new_throttle
-                    throttle_to_send = new_throttle
+                        throttle_f = max(1000.0, min(1900.0, throttle_f))
+                        new_throttle = int(round(throttle_f))
+                        if new_throttle != current_throttle:
+                            current_throttle = new_throttle
+                            throttle_to_send = new_throttle
+
+                    if throttle_to_send is not None:
+                        send_cmd(f"th {throttle_to_send}")
 
             if throttle_to_send is not None:
-                send_cmd(f"th {throttle_to_send}")
                 now_mono = time.monotonic()
                 if delta or now_mono - last_th_print >= 0.5:
                     print(f" [TH] -> {throttle_to_send}")

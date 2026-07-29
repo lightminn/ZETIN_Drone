@@ -52,7 +52,7 @@ SIL은 믹서·제어법칙의 부호 자기일관성만 확인했다. 이 벤�
 - 기체를 안정된 곳(또는 손)에 두고, 프로펠러 **제거** 상태로 시작.
 - 텔레메트리 모니터 실행:
   ```bash
-  python scripts/monitor_telemetry.py
+  python scripts/control_dualsense.py
   ```
   확인할 필드: `Calibration_OK`, `Armed`, `angleX/Y/Z`,
   `Motor_M1..M4`, `PID_Loop_Hz`, `TgtRate_Roll/Pitch/Yaw`, `Yaw_Hold`,
@@ -580,17 +580,22 @@ Kp_Angle 6.0000 / 6.0000 / 3.0000    Kp_Rate 0.5000 / 0.5000 / 1.5000
 Ki_Rate  0.0500 / 0.0500 / 0.0500    Kd_Rate 0.0150 / 0.0150 / 0.0000
 ```
 
-⚠️ **`gains` 응답을 출력하는 스크립트는 `tune_pid.py` 하나뿐이다.**
+✅ **해소됨 — `control_dualsense.py`가 `gains` 응답을 직접 출력한다.**
+2026-07-29 실측 당시에는 `tune_pid.py`만 `[GAINS]`를 출력했고,
 `control_dualsense.py`·`monitor_telemetry.py`·`receive_telemetry.py`는
-`is_gains_packet()`으로 걸러 `continue`한다. `control_dualsense.py`에서
-`gains`를 치면 링크가 멀쩡해도 영원히 무반응이다.
+`is_gains_packet()`으로 걸러 `continue`했다. 그래서 링크가 정상이어도
+`control_dualsense.py`에서 `gains`를 치면 무반응이었다. 현재
+`control_dualsense.py`는 12개 값을 `[GAINS] name=value ...` 형식(소수 4자리)으로
+출력하므로 지상국을 바꾸지 않고 B-1을 확인한다.
 
-⚠️ **`control_dualsense.py`는 무장 전에 아무것도 출력하지 않는다.**
-`[DIAG]`는 `is_armed`, `[AUTO-LAND]`는 `Failsafe_Phase != 0`을 요구하고
-고장 알림은 엣지 트리거다. 따라서 **무장 전 + 고장 없음 = 완전 침묵**이며,
-조종자가 프롭을 돌리기 직전에 링크 생존을 확인할 수단이 없다. 2026-07-29
-세션에서 실제로 "링크가 죽은 것인지 `gains`가 버려진 것인지" 구분할 수
-없었다(`tune_pid.py`로 바꾸자 `[TELEM]`이 정상 수신됐다).
+✅ **해소됨 — 무장 전에도 1초마다 상태와 링크 단절/복구를 출력한다.**
+2026-07-29 세션 당시 `[DIAG]`는 `is_armed`, `[AUTO-LAND]`는
+`Failsafe_Phase != 0`을 요구하고 고장 알림은 엣지 트리거라서
+**무장 전 + 고장 없음 = 완전 침묵**이었다. 실제로 링크가 죽은 것인지
+`gains`가 버려진 것인지 구분할 수 없었다(`tune_pid.py`로 바꾸자 `[TELEM]`이
+정상 수신됐다). 현재는 무장 여부와 무관한 `[STATUS]` 줄이 Roll/Pitch/Yaw,
+Throttle, Armed, Hover_Est/Valid와 활성 고장을 표시하며, 텔레메트리가
+`TELEM_TIMEOUT_SEC` 넘게 끊기거나 복구될 때도 각각 한 번 알린다.
 
 ### 그 밖에
 

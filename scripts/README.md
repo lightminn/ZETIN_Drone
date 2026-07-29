@@ -33,6 +33,10 @@ python scripts/test_dualsense_input.py
 때는 `--label`을 한 번만 주면 모든 입력에 적용된다. `--plot`을 지정할 때만
 matplotlib을 불러오므로 터미널 요약에는 matplotlib이 필요 없다.
 
+`control_dualsense.py`는 정상 조종·벤치 작업에서 쓰는 **유일한 대화형
+지상국**이다. DualSense RC 스트리밍, stdin 명령·PID 조정, `gains` 확인,
+상태/고장 표시와 CSV 기록을 한 프로세스에서 처리한다.
+
 `control_dualsense.py`는 yaw 스틱을 상태 없는 `rcr` 각속도 명령으로 보내며,
 `YAW_RATE_MAX_DPS = 90.0`에 따라 최대 편향을 ±90dps로 제한한다. 펌웨어의
 ±180dps 하드 제한과는 별도의 지상국 조종감 상수다.
@@ -55,10 +59,15 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-`control_dualsense.py`, `receive_telemetry.py`, `monitor_telemetry.py`는 모두
-UDP 4210을 bind하므로 한 번에 하나만 실행한다. 펌웨어 프로토콜상 텔레메트리
-목적지가 하나뿐이라 동시 실행은 지원하지 않으며, DualSense 조종 중 로그는
-`control_dualsense.py`가 직접 `logs/`에 기록한다.
+`tune_pid.py`와 `monitor_telemetry.py`는 게임패드가 없는 상황이나 수동 UDP
+확인에 쓰는 독립 보조 도구다. 두 도구 중 하나라도
+`control_dualsense.py`와 **동시에 실행하면 안 된다.** 펌웨어는 들어온 모든
+UDP 패킷의 발신자 IP/포트로 텔레메트리 목적지를 다시 지정하므로, 보조 도구가
+명령을 보내는 순간 텔레메트리를 가져간다. 20Hz RC를 보내는
+`control_dualsense.py`와 다른 대화형 도구는 구조적으로 공존할 수 없다.
+DualSense 조종 중 텔레메트리 확인과 로그 기록은 `control_dualsense.py` 하나로
+수행한다. `receive_telemetry.py`도 같은 UDP 4210을 쓰는 독립 수신 도구이므로
+동시에 실행하지 않는다.
 
 ⚠️ `control_dualsense.py`로 조종할 때 **게임패드는 USB로 연결한다.** 블루투스
 패드는 노트북 WiFi와 무선부를 공유해 드론으로 가는 업링크를 수백 ms씩 막고,
