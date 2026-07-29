@@ -2,11 +2,13 @@
 
 import builtins
 import contextlib
+import csv
 import importlib.util
 import io
 import pathlib
 import socket
 import sys
+import tempfile
 import threading
 import types
 import unittest
@@ -55,6 +57,40 @@ class _FakeThread:
 
     def start(self):
         pass
+
+    def join(self, timeout=None):
+        pass
+
+    def is_alive(self):
+        return False
+
+
+class _TimeoutUntilReleasedSocket:
+    def __init__(self):
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def recvfrom(self, _size):
+        self.entered.set()
+        if self.release.wait(timeout=0.01):
+            raise SystemExit
+        raise socket.timeout
+
+    def sendto(self, _data, _address):
+        pass
+
+
+class _PumpUntilReleased:
+    def __init__(self):
+        self.calls = 0
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def pump(self):
+        self.calls += 1
+        self.entered.set()
+        if self.release.wait(timeout=0.01):
+            raise SystemExit
 
 
 class _LoopEvent:
@@ -196,6 +232,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         ):
             spec.loader.exec_module(module)
         self.module = module
+        self.module.shutdown_event.clear()
         self.module.last_telem_time = self.module.time.monotonic()
 
     def tearDown(self):
@@ -725,8 +762,60 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
 
         self.assertEqual(len(lines), 3)
 
+    def test_cut_landed_autoland_line_is_printed_once_while_phase_persists(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=2),
+        ])
+
+        self.assertEqual(len(lines), 1)
+
+    def test_descending_samples_continue_then_cut_transition_prints_once(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(Failsafe_Phase=1),
+            _telemetry_sample(Failsafe_Phase=1),
+            _telemetry_sample(Failsafe_Phase=1),
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=2),
+        ])
+
+        self.assertEqual(len(lines), 4)
+        self.assertIn("Failsafe_Phase=CUT_LANDED", lines[-1])
+
+    def test_phase_zero_rearms_terminal_transition_output(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=2),
+            _telemetry_sample(Failsafe_Phase=0),
+            _telemetry_sample(Failsafe_Phase=3),
+            _telemetry_sample(Failsafe_Phase=3),
+        ])
+
+        self.assertEqual(len(lines), 2)
+        self.assertIn("Failsafe_Phase=CUT_LANDED", lines[0])
+        self.assertIn("Failsafe_Phase=CUT_TIMEOUT", lines[1])
+
+    def test_cut_timeout_and_cut_abort_each_print_once_while_persistent(self):
+        for phase, phase_name in ((3, "CUT_TIMEOUT"), (4, "CUT_ABORT")):
+            with self.subTest(phase=phase):
+                lines = self._autoland_lines([
+                    _telemetry_sample(Failsafe_Phase=phase),
+                    _telemetry_sample(Failsafe_Phase=phase),
+                    _telemetry_sample(Failsafe_Phase=phase),
+                ])
+
+                self.assertEqual(len(lines), 1)
+                self.assertIn(f"Failsafe_Phase={phase_name}", lines[0])
+
     def test_cut_landed_autoland_line_has_the_highest_priority_abort_marker(self):
         lines = self._autoland_lines([
+            _telemetry_sample(
+                Failsafe_Phase=2,
+                Failsafe_Probe_State=4,
+            ),
             _telemetry_sample(
                 Failsafe_Phase=2,
                 Failsafe_Probe_State=4,
@@ -1230,6 +1319,78 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             commands,
             ["trim 0.00 0.00"],
         )
+
+    def test_telemetry_thread_exits_after_shutdown_event_is_set(self):
+        shutdown_event = getattr(self.module, "shutdown_event", None)
+        self.assertIsNotNone(shutdown_event)
+        blocking_socket = _TimeoutUntilReleasedSocket()
+        self.module.sock = blocking_socket
+        self.module.is_streaming = False
+        shutdown_event.clear()
+        worker = threading.Thread(
+            target=self.module.telemetry_thread,
+            daemon=True,
+        )
+        worker.start()
+        self.assertTrue(blocking_socket.entered.wait(timeout=0.5))
+
+        shutdown_event.set()
+        worker.join(timeout=0.5)
+        stopped_on_shutdown = not worker.is_alive()
+        blocking_socket.release.set()
+        worker.join(timeout=0.5)
+
+        self.assertTrue(stopped_on_shutdown)
+
+    def test_controller_thread_exits_after_shutdown_event_is_set(self):
+        shutdown_event = getattr(self.module, "shutdown_event", None)
+        self.assertIsNotNone(shutdown_event)
+        event = _PumpUntilReleased()
+        joystick = _Joystick(event)
+        self.module.pygame = _pygame_for(joystick, event)
+        self.module.is_streaming = False
+        shutdown_event.clear()
+        worker = threading.Thread(
+            target=self.module.controller_thread,
+            daemon=True,
+        )
+        worker.start()
+        self.assertTrue(event.entered.wait(timeout=0.5))
+
+        shutdown_event.set()
+        worker.join(timeout=0.5)
+        stopped_on_shutdown = not worker.is_alive()
+        event.release.set()
+        worker.join(timeout=0.5)
+
+        self.assertTrue(stopped_on_shutdown)
+
+    def test_shutdown_closes_csv_after_preserving_header_and_record(self):
+        shutdown = getattr(
+            self.module,
+            "shutdown_workers_and_close_log",
+            None,
+        )
+        self.assertIsNotNone(shutdown)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = pathlib.Path(temp_dir) / "flight.csv"
+            csv_file = log_path.open("w", newline="", encoding="utf-8")
+            self.module.log_path = log_path
+            self.module.csv_file = csv_file
+            self.module.csv_writer = csv.writer(csv_file)
+            record = ["12:34:56.789", "1.25"] + [""] * (
+                len(self.module.CSV_FIELDS) - 2
+            )
+            self.module.csv_writer.writerow(self.module.CSV_FIELDS)
+            self.module.csv_writer.writerow(record)
+
+            self.module.shutdown_event.clear()
+            shutdown(())
+
+            self.assertTrue(csv_file.closed)
+            with log_path.open(newline="", encoding="utf-8") as saved_log:
+                rows = list(csv.reader(saved_log))
+            self.assertEqual(rows, [list(self.module.CSV_FIELDS), record])
 
 
 class BenchTrimResetTests(unittest.TestCase):

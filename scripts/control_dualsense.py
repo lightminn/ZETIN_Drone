@@ -32,6 +32,7 @@ TRIM_STEP     = 0.2
 TRIM_MAX_DEG  = 10.0
 STOP_RETRIES  = 5            # stop/start 재전송 횟수
 STOP_INTERVAL = 0.02         # 재전송 간격 (초)
+THREAD_JOIN_TIMEOUT_SEC = 2.0
 RESUME_RC_TIMEOUT_SEC = 2.0   # 새 RC가 드론에 수락됐음을 기다리는 시간
 RESUME_RESULT_TIMEOUT_SEC = 1.0  # resume 후 phase=0 확인 대기
 
@@ -73,6 +74,7 @@ rc_seq = 0
 # send_cmd/reliable_send 같은 블로킹 가능 I/O를 호출하지 않는다.
 telem_lock        = threading.Lock()
 safety_cmd_lock   = threading.Lock()
+shutdown_event    = threading.Event()
 last_telem_time   = 0.0
 telem_angle_x     = 0.0
 telem_angle_y     = 0.0
@@ -510,8 +512,9 @@ def telemetry_thread():
     last_connect = 0.0
     last_tilt_warn = 0.0
     packet_count = 0
+    previous_autoland_phase = 0
 
-    while True:
+    while not shutdown_event.is_set():
         check_resume_timeout()
         # 시동 전에도 텔레메트리를 받도록 주기적으로 목적지를 등록한다.
         now = time.monotonic()
@@ -522,6 +525,8 @@ def telemetry_thread():
         try:
             data, _ = sock.recvfrom(512)
         except socket.timeout:
+            if shutdown_event.is_set():
+                break
             if is_streaming and last_telem_time > 0:
                 elapsed = time.monotonic() - last_telem_time
                 if elapsed > TELEM_TIMEOUT_SEC:
@@ -530,6 +535,8 @@ def telemetry_thread():
                     stop_streaming_only("텔레메트리 끊김")
             continue
         except OSError as e:
+            if shutdown_event.is_set():
+                break
             print(f"[TELEM ERR] 소켓 오류: {e}")
             continue
 
@@ -567,10 +574,19 @@ def telemetry_thread():
         if packet_count % 20 == 0:
             csv_file.flush()
 
-        # Stage E: 120ms 프로브 딥을 놓치지 않도록 자동착륙 중 매 패킷 출력한다.
+        # Stage E: DESCENDING은 120ms 프로브 딥을 위해 매 패킷 출력하되,
+        # 갱신 정보가 없는 종료 phase는 전이 시점에만 한 번 출력한다.
+        autoland_phase = phase_number(sample.get("Failsafe_Phase"))
         autoland_line = format_autoland_telemetry(sample)
-        if autoland_line is not None:
+        if (
+            autoland_line is not None
+            and (
+                autoland_phase not in (2, 3, 4)
+                or autoland_phase != previous_autoland_phase
+            )
+        ):
             print(autoland_line)
+        previous_autoland_phase = autoland_phase
 
         # [DIAG C-2] 틸트 복원 진단: 무장 중 모터µs/자세/목표레이트 라이브 출력(~5Hz).
         # 누른 쪽 모터 µs가 오르고 aX/aY(추정 자세)가 틸트를 따라가는지 확인용.
@@ -663,7 +679,7 @@ def controller_thread():
     last_th_print = 0.0
     last_axis_print = 0.0
 
-    while True:
+    while not shutdown_event.is_set():
         # [FIX] sleep 누적 오차 제거: monotonic 기반 정밀 타이밍
         now = time.monotonic()
         if now < next_loop:
@@ -677,9 +693,14 @@ def controller_thread():
             if is_streaming:
                 stop_streaming_only("컨트롤러 분리")
             print("\n[ERR] 컨트롤러 분리됨 - 재연결 대기 중...")
-            while pygame.joystick.get_count() == 0:
+            while (
+                pygame.joystick.get_count() == 0
+                and not shutdown_event.is_set()
+            ):
                 time.sleep(0.5)
                 pygame.event.pump()
+            if shutdown_event.is_set():
+                break
             joy = pygame.joystick.Joystick(0)
             joy.init()
             next_loop = time.monotonic()
@@ -790,6 +811,21 @@ def controller_thread():
 # ==========================================================
 # 메인
 # ==========================================================
+def shutdown_workers_and_close_log(workers):
+    shutdown_event.set()
+    for worker in workers:
+        worker.join(timeout=THREAD_JOIN_TIMEOUT_SEC)
+        if worker.is_alive():
+            worker_name = getattr(worker, "name", "unknown")
+            print(
+                f"[WARN] {worker_name} 스레드가 "
+                f"{THREAD_JOIN_TIMEOUT_SEC:.1f}s 안에 종료되지 않음"
+            )
+    csv_file.flush()
+    csv_file.close()
+    print(f"[LOG] 저장 완료: {log_path}")
+
+
 t_telem = threading.Thread(target=telemetry_thread, daemon=True)
 t_ctrl  = threading.Thread(target=controller_thread, daemon=True)
 t_telem.start()
@@ -806,6 +842,4 @@ try:
                 disarm("키보드 인터럽트")
             break
 finally:
-    csv_file.flush()
-    csv_file.close()
-    print(f"[LOG] 저장 완료: {log_path}")
+    shutdown_workers_and_close_log((t_telem, t_ctrl))
