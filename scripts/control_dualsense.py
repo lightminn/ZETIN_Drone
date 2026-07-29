@@ -533,6 +533,7 @@ def format_status_telemetry(sample):
         f"Roll={_format_optional_float(sample.get('Roll'), 2)} "
         f"Pitch={_format_optional_float(sample.get('Pitch'), 2)} "
         f"Yaw={_format_optional_float(sample.get('Yaw'), 2)} "
+        f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
         f"Throttle={_format_optional_int(sample.get('Throttle'))} "
         f"Armed={_format_binary_flag(sample.get('Armed'))} "
         f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
@@ -681,7 +682,9 @@ def telemetry_thread():
                 print(f" [DIAG] M1(FL)={m[0]} M2(RR)={m[1]} M3(FR)={m[2]} M4(RL)={m[3]} "
                       f"[yaw축 CW-CCW={cw - ccw:+d}] | "
                       f"aX={sample['Roll']:+5.1f} aY={sample['Pitch']:+5.1f} aZ={az:+6.1f} | "
-                      f"gZ={gz:+6.1f} tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
+                      f"gZ={gz:+6.1f} "
+                      f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
+                      f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
                       f"th={sample['Throttle']} "
                       f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
                       f"Hover_Valid={_format_binary_flag(sample.get('Hover_Valid'))}")

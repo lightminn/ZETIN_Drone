@@ -187,6 +187,7 @@ def _telemetry_sample(**overrides):
         "TgtRate_Roll": 0.0,
         "TgtRate_Pitch": 0.0,
         "TgtRate_Yaw": 0.0,
+        "Yaw_Hold": 1,
         "Fault_RC": 0,
         "Fault_Critical": 0,
         "RC_Total_Pkts": 0,
@@ -951,6 +952,36 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertIn("Armed=1", lines[0])
 
+    def test_status_line_reports_yaw_hold_binary_states(self):
+        self.module.is_armed = False
+
+        for yaw_hold in (0, 1):
+            with self.subTest(yaw_hold=yaw_hold):
+                lines = self._status_lines([
+                    _telemetry_sample(
+                        Armed=0,
+                        Failsafe_Phase=0,
+                        Yaw_Hold=yaw_hold,
+                    ),
+                ])
+
+                self.assertEqual(len(lines), 1)
+                self.assertIn(f"Yaw_Hold={yaw_hold}", lines[0])
+
+    def test_status_line_formats_unknown_yaw_hold_as_dash(self):
+        self.module.is_armed = False
+
+        lines = self._status_lines([
+            _telemetry_sample(
+                Armed=0,
+                Failsafe_Phase=0,
+                Yaw_Hold=None,
+            ),
+        ])
+
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Yaw_Hold=-", lines[0])
+
     def test_status_line_lists_active_fault_names(self):
         self.module.is_armed = False
 
@@ -1033,17 +1064,19 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
 
     def test_armed_diag_line_contains_hover_estimate_and_validity(self):
         self.module.is_armed = True
-        output = self._run_telemetry([
-            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
-            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
-            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
-            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
-        ])
+        sample = _telemetry_sample(
+            Failsafe_Phase=0,
+            Hover_Est=1423.56,
+            Hover_Valid=1,
+            Yaw_Hold=1,
+        )
+        output = self._run_telemetry([sample] * 4)
 
         diag_lines = [
             line for line in output.splitlines() if "[DIAG]" in line
         ]
         self.assertEqual(len(diag_lines), 1)
+        self.assertIn("Yaw_Hold=1", diag_lines[0])
         self.assertIn("Hover_Est=1423.6", diag_lines[0])
         self.assertIn("Hover_Valid=1", diag_lines[0])
 

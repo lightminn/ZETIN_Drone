@@ -213,12 +213,17 @@ def update_plot(_frame):
         active_text = "legacy/unknown" if active is None else str(active)
         faults = active_fault_names(latest_sample)
         fault_text = ", ".join(faults) if faults else "none"
+        yaw_hold = latest_sample["Yaw_Hold"]
+        yaw_hold_text = "-" if yaw_hold is None else str(yaw_hold)
         status_sample = {
             name: latest_sample.get(name) for name in MONITOR_STATUS_FIELDS
         }
         render_monitor_title(
             ax4,
-            f"System status — active IMUs: {active_text}, faults: {fault_text}",
+            (
+                f"System status — active IMUs: {active_text}, "
+                f"faults: {fault_text}, Yaw_Hold={yaw_hold_text}"
+            ),
             status_sample,
         )
 
