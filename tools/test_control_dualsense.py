@@ -141,6 +141,13 @@ def _telemetry_sample(**overrides):
         "Yaw": 0.0,
         "Gyro_Z": 0.0,
         "Throttle": 1000,
+        "Motor_M1": 1001,
+        "Motor_M2": 1002,
+        "Motor_M3": 1003,
+        "Motor_M4": 1004,
+        "TgtRate_Roll": 0.0,
+        "TgtRate_Pitch": 0.0,
+        "TgtRate_Yaw": 0.0,
         "Fault_RC": 0,
         "Fault_Critical": 0,
         "RC_Total_Pkts": 0,
@@ -151,6 +158,9 @@ def _telemetry_sample(**overrides):
         "Failsafe_Phase": 1,
         "Hover_Est": 1360.0,
         "Hover_Valid": 1,
+        "Failsafe_Probe_State": 0,
+        "Failsafe_Probe_NoResponse": 0,
+        "Failsafe_Probe_Response_G": 0.0,
     }
     sample.update(overrides)
     return sample
@@ -220,6 +230,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.module.sock = _FakeSocket([b"packet"] * len(samples))
         self.module.csv_writer = types.SimpleNamespace(writerow=lambda _row: None)
         self.module.csv_file = types.SimpleNamespace(flush=lambda: None)
+        output = io.StringIO()
         with (
             mock.patch.object(
                 self.module,
@@ -236,10 +247,19 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
                 "active_fault_names",
                 return_value=["Fault_Critical"],
             ),
-            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stdout(output),
             self.assertRaises(_LoopComplete),
         ):
             self.module.telemetry_thread()
+        return output.getvalue()
+
+    def _autoland_lines(self, samples):
+        output = self._run_telemetry(samples)
+        return [
+            line.strip()
+            for line in output.splitlines()
+            if "[AUTO-LAND]" in line
+        ]
 
     def test_resume_request_restarts_streaming_before_sending_resume(self):
         commands = []
@@ -573,6 +593,123 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertEqual(commands, [])
         self.assertIn("실패", output.getvalue())
         self.assertIn("시간 초과", output.getvalue())
+
+    def test_autoland_line_contains_named_phase_probe_and_all_stage_e_fields(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(
+                Failsafe_Phase=1,
+                Failsafe_Probe_State=4,
+                Failsafe_Probe_NoResponse=2,
+                Failsafe_Probe_Response_G=0.05786,
+                Hover_Est=1360.4,
+                Throttle=1302,
+                Motor_M1=1291,
+                Motor_M2=1298,
+                Motor_M3=1306,
+                Motor_M4=1313,
+            ),
+        ])
+
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertIn("[PROBE BLOCKED]", line)
+        self.assertIn("Failsafe_Phase=DESCENDING", line)
+        self.assertIn("Failsafe_Probe_State=BLOCKED", line)
+        self.assertNotIn("Failsafe_Phase=1", line)
+        self.assertNotIn("Failsafe_Probe_State=4", line)
+        for expected in (
+            "Failsafe_Probe_NoResponse=2",
+            "Throttle=1302",
+            "Motor_M1=1291",
+            "Motor_M2=1298",
+            "Motor_M3=1306",
+            "Motor_M4=1313",
+        ):
+            self.assertIn(expected, line)
+        self.assertRegex(
+            line,
+            r"(?:^| )Failsafe_Probe_Response_G=0\.0579(?: |$)",
+        )
+        self.assertRegex(line, r"(?:^| )Hover_Est=1360\.4(?: |$)")
+
+    def test_phase_zero_does_not_print_an_autoland_line(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(Failsafe_Phase=0),
+        ])
+
+        self.assertEqual(lines, [])
+
+    def test_autoland_line_is_printed_for_every_sample_without_decimation(self):
+        self.module.is_armed = True
+        lines = self._autoland_lines([
+            _telemetry_sample(Failsafe_Phase=1),
+            _telemetry_sample(Failsafe_Phase=1),
+            _telemetry_sample(Failsafe_Phase=1),
+        ])
+
+        self.assertEqual(len(lines), 3)
+
+    def test_cut_landed_autoland_line_has_the_highest_priority_abort_marker(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(
+                Failsafe_Phase=2,
+                Failsafe_Probe_State=4,
+            ),
+        ])
+
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(
+            lines[0].startswith(
+                "[AUTO-LAND][!!! CUT_LANDED: IMMEDIATE ABORT !!!]"
+            )
+        )
+
+    def test_autoland_line_survives_missing_stage_e_fields(self):
+        lines = self._autoland_lines([
+            _telemetry_sample(
+                Failsafe_Phase=1,
+                Failsafe_Probe_State=None,
+                Failsafe_Probe_NoResponse=None,
+                Failsafe_Probe_Response_G=None,
+                Hover_Est=None,
+                Throttle=None,
+                Motor_M1=None,
+                Motor_M2=None,
+                Motor_M3=None,
+                Motor_M4=None,
+            ),
+        ])
+
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        for field in (
+            "Failsafe_Probe_State",
+            "Failsafe_Probe_NoResponse",
+            "Failsafe_Probe_Response_G",
+            "Hover_Est",
+            "Throttle",
+            "Motor_M1",
+            "Motor_M2",
+            "Motor_M3",
+            "Motor_M4",
+        ):
+            self.assertIn(f"{field}=-", line)
+
+    def test_armed_diag_line_contains_hover_estimate_and_validity(self):
+        self.module.is_armed = True
+        output = self._run_telemetry([
+            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
+            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
+            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
+            _telemetry_sample(Failsafe_Phase=0, Hover_Est=1423.56, Hover_Valid=1),
+        ])
+
+        diag_lines = [
+            line for line in output.splitlines() if "[DIAG]" in line
+        ]
+        self.assertEqual(len(diag_lines), 1)
+        self.assertIn("Hover_Est=1423.6", diag_lines[0])
+        self.assertIn("Hover_Valid=1", diag_lines[0])
 
     def test_telemetry_thread_advances_resume_attempt(self):
         commands = []

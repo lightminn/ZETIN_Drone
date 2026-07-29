@@ -224,6 +224,14 @@ Stage B에서 부호가 **숫자로** 확인됐으므로, 이제 프롭을 달�
 않는다. 유효 추정치가 없거나 현재 스로틀이 절대 지상컷 하한
 `FS_GROUND_CUT_MAX_US=1150` 이하이면 즉시 컷이다(Stage B-2).
 
+⚠️ **Stage E 중에는 지상국 도구를 `control_dualsense.py` 하나만 띄운다.**
+펌웨어가 들어온 모든 UDP 패킷의 마지막 발신자 IP/포트로 텔레메트리 목적지를
+바꾸므로, `monitor_telemetry.py` 같은 다른 도구를 함께 실행하면 50Hz RC
+스트림 사이에서 텔레메트리를 안정적으로 받을 수 없다. 실시간 관측은
+`control_dualsense.py`의 `[DIAG]`와 `[AUTO-LAND]` 출력으로 한다. 전체
+43필드 텔레메트리는 이 도구가 `logs/`에 CSV로 계속 기록하므로, 사후 프로브
+분석은 해당 CSV를 `scripts/analyze_probe_response.py`에 넣어 수행한다.
+
 ### E-0. 호버 추정치 확인 (프롭 ON, 저고도 테더)
 수평에 가깝게 실제 호버를 유지하면서 `Hover_Est`와 `Hover_Valid`를 기록한다.
 roll/pitch ±10° 안, `|accel|=1g±0.05g`, 스로틀 1150µs 초과인 샘플 시간이

@@ -8,6 +8,11 @@ from pathlib import Path
 
 import pygame
 
+from failsafe_telemetry import (
+    FAILSAFE_PHASE_NAMES,
+    FAILSAFE_PROBE_STATE_NAMES,
+    phase_number,
+)
 from telemetry_schema import (
     CSV_FIELDS,
     active_fault_names,
@@ -388,6 +393,73 @@ def handle_stdin_command(msg: str):
         send_cmd(command)
 
 
+def _format_optional_float(value, decimal_places):
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if not math.isfinite(numeric):
+        return "-"
+    return f"{numeric:.{decimal_places}f}"
+
+
+def _format_optional_int(value):
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if not math.isfinite(numeric):
+        return "-"
+    if numeric.is_integer():
+        return str(int(numeric))
+    return f"{numeric:.1f}"
+
+
+def _format_binary_flag(value):
+    flag = phase_number(value)
+    return str(flag) if flag in (0, 1) else "-"
+
+
+def format_autoland_telemetry(sample):
+    """Return the non-decimated Stage E status line, or None outside failsafe."""
+    phase = phase_number(sample.get("Failsafe_Phase"))
+    if phase is None or phase == 0:
+        return None
+
+    probe_state = phase_number(sample.get("Failsafe_Probe_State"))
+    phase_name = FAILSAFE_PHASE_NAMES.get(phase, f"UNKNOWN({phase})")
+    if probe_state is None:
+        probe_state_name = "-"
+    else:
+        probe_state_name = FAILSAFE_PROBE_STATE_NAMES.get(
+            probe_state,
+            f"UNKNOWN({probe_state})",
+        )
+
+    if phase == 2:
+        marker = "[AUTO-LAND][!!! CUT_LANDED: IMMEDIATE ABORT !!!]"
+    elif probe_state == 4:
+        marker = "[AUTO-LAND][PROBE BLOCKED]"
+    else:
+        marker = "[AUTO-LAND]"
+
+    fields = (
+        f"Failsafe_Phase={phase_name}",
+        f"Failsafe_Probe_State={probe_state_name}",
+        "Failsafe_Probe_NoResponse="
+        f"{_format_optional_int(sample.get('Failsafe_Probe_NoResponse'))}",
+        "Failsafe_Probe_Response_G="
+        f"{_format_optional_float(sample.get('Failsafe_Probe_Response_G'), 4)}",
+        f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)}",
+        f"Throttle={_format_optional_int(sample.get('Throttle'))}",
+        f"Motor_M1={_format_optional_int(sample.get('Motor_M1'))}",
+        f"Motor_M2={_format_optional_int(sample.get('Motor_M2'))}",
+        f"Motor_M3={_format_optional_int(sample.get('Motor_M3'))}",
+        f"Motor_M4={_format_optional_int(sample.get('Motor_M4'))}",
+    )
+    return f"{marker} {' '.join(fields)}"
+
+
 # ==========================================================
 # 텔레메트리 수신 + 고장진단 스레드
 # ==========================================================
@@ -462,6 +534,11 @@ def telemetry_thread():
         if packet_count % 20 == 0:
             csv_file.flush()
 
+        # Stage E: 120ms 프로브 딥을 놓치지 않도록 자동착륙 중 매 패킷 출력한다.
+        autoland_line = format_autoland_telemetry(sample)
+        if autoland_line is not None:
+            print(autoland_line)
+
         # [DIAG C-2] 틸트 복원 진단: 무장 중 모터µs/자세/목표레이트 라이브 출력(~5Hz).
         # 누른 쪽 모터 µs가 오르고 aX/aY(추정 자세)가 틸트를 따라가는지 확인용.
         if is_armed and packet_count % 4 == 0:
@@ -477,7 +554,10 @@ def telemetry_thread():
                 print(f" [DIAG] M1(FL)={m[0]} M2(RR)={m[1]} M3(FR)={m[2]} M4(RL)={m[3]} "
                       f"[yaw축 CW-CCW={cw - ccw:+d}] | "
                       f"aX={sample['Roll']:+5.1f} aY={sample['Pitch']:+5.1f} aZ={az:+6.1f} | "
-                      f"gZ={gz:+6.1f} tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} th={sample['Throttle']}")
+                      f"gZ={gz:+6.1f} tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
+                      f"th={sample['Throttle']} "
+                      f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
+                      f"Hover_Valid={_format_binary_flag(sample.get('Hover_Valid'))}")
 
         # 드론 Armed 필드와 대조: 시동 명령이 거부됐거나(START REFUSED는
         # 시리얼에만 출력됨) 드론이 스스로 disarm한 것을 감지한다.
