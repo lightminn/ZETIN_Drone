@@ -261,6 +261,14 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             if "[AUTO-LAND]" in line
         ]
 
+    def _rc_timeout_fault_lines(self, samples):
+        output = self._run_telemetry(samples)
+        return [
+            line.strip()
+            for line in output.splitlines()
+            if "[FAULT] 드론: RC 타임아웃" in line
+        ]
+
     def test_resume_request_restarts_streaming_before_sending_resume(self):
         commands = []
         self.module.reliable_send = commands.append
@@ -593,6 +601,74 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertEqual(commands, [])
         self.assertIn("실패", output.getvalue())
         self.assertIn("시간 초과", output.getvalue())
+
+    def test_rc_timeout_phase_one_reports_autoland_descent_once(self):
+        samples = [
+            _telemetry_sample(Fault_RC=1, Failsafe_Phase=1, Armed=1),
+            _telemetry_sample(Fault_RC=1, Failsafe_Phase=1, Armed=1),
+        ]
+
+        lines = self._rc_timeout_fault_lines(samples)
+
+        self.assertEqual(len(lines), 1)
+        self.assertIn("자동착륙", lines[0])
+        self.assertIn("하강", lines[0])
+        self.assertIn("DESCENDING", lines[0])
+
+    def test_rc_timeout_phase_zero_disarmed_reports_immediate_cut_once(self):
+        samples = [
+            _telemetry_sample(Fault_RC=1, Failsafe_Phase=0, Armed=0),
+            _telemetry_sample(Fault_RC=1, Failsafe_Phase=0, Armed=0),
+        ]
+
+        lines = self._rc_timeout_fault_lines(samples)
+
+        self.assertEqual(len(lines), 1)
+        self.assertNotIn("자동착륙", lines[0])
+        self.assertIn("즉시 컷", lines[0])
+        self.assertIn("호버 추정치 없음", lines[0])
+        self.assertIn("지상 스로틀", lines[0])
+        self.assertIn("시리얼", lines[0])
+
+    def test_rc_timeout_terminal_phases_report_the_named_end_state_once(self):
+        for phase, phase_name in (
+            (2, "CUT_LANDED"),
+            (3, "CUT_TIMEOUT"),
+            (4, "CUT_ABORT"),
+        ):
+            with self.subTest(phase=phase):
+                samples = [
+                    _telemetry_sample(
+                        Fault_RC=1,
+                        Failsafe_Phase=phase,
+                        Armed=0,
+                    ),
+                    _telemetry_sample(
+                        Fault_RC=1,
+                        Failsafe_Phase=phase,
+                        Armed=0,
+                    ),
+                ]
+
+                lines = self._rc_timeout_fault_lines(samples)
+
+                self.assertEqual(len(lines), 1)
+                self.assertIn("이미 종료", lines[0])
+                self.assertIn(phase_name, lines[0])
+
+    def test_rc_timeout_unknown_phase_reports_observed_values_once(self):
+        samples = [
+            _telemetry_sample(Fault_RC=1, Failsafe_Phase=None, Armed=0),
+            _telemetry_sample(Fault_RC=1, Failsafe_Phase=None, Armed=0),
+        ]
+
+        lines = self._rc_timeout_fault_lines(samples)
+
+        self.assertEqual(len(lines), 1)
+        self.assertIn("상태 확정 불가", lines[0])
+        self.assertIn("Failsafe_Phase=None", lines[0])
+        self.assertIn("Armed=0", lines[0])
+        self.assertNotIn("자동착륙 진행", lines[0])
 
     def test_autoland_line_contains_named_phase_probe_and_all_stage_e_fields(self):
         lines = self._autoland_lines([

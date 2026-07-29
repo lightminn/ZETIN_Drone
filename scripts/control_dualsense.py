@@ -403,6 +403,39 @@ def _format_optional_float(value, decimal_places):
     return f"{numeric:.{decimal_places}f}"
 
 
+def format_rc_timeout_fault(sample):
+    """Describe the observed firmware action without guessing its cut reason."""
+    phase_raw = sample.get("Failsafe_Phase")
+    armed_raw = sample.get("Armed")
+    phase = phase_number(phase_raw)
+    armed = phase_number(armed_raw)
+
+    if phase == 1:
+        phase_name = FAILSAFE_PHASE_NAMES[phase]
+        return (
+            "자동착륙 하강 중 "
+            f"(Failsafe_Phase={phase_name} ({phase}), Armed={armed_raw!r})"
+        )
+    if phase == 0 and armed == 0:
+        phase_name = FAILSAFE_PHASE_NAMES[phase]
+        return (
+            "즉시 컷됨 "
+            "(가능 원인: 호버 추정치 없음 또는 지상 스로틀; "
+            "정확한 사유는 드론 시리얼 로그 확인) "
+            f"(Failsafe_Phase={phase_name} ({phase}), Armed={armed_raw!r})"
+        )
+    if phase in (2, 3, 4):
+        phase_name = FAILSAFE_PHASE_NAMES[phase]
+        return (
+            f"자동착륙 이미 종료: {phase_name} "
+            f"(Failsafe_Phase={phase}, Armed={armed_raw!r})"
+        )
+    return (
+        "상태 확정 불가 "
+        f"(Failsafe_Phase={phase_raw!r}, Armed={armed_raw!r})"
+    )
+
+
 def _format_optional_int(value):
     try:
         numeric = float(value)
@@ -569,7 +602,7 @@ def telemetry_thread():
 
         # 드론 측 고장 플래그 — fault는 latch되므로 상승 엣지에서만 알린다.
         if fault_rc_drone and not prev_fault_rc:
-            print("\n[FAULT] 드론: RC 타임아웃 - 자동착륙 진행 중")
+            print(f"\n[FAULT] 드론: RC 타임아웃 - {format_rc_timeout_fault(sample)}")
             if is_streaming:
                 stop_streaming_only("드론 RC 타임아웃")
         prev_fault_rc = fault_rc_drone
