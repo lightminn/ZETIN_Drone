@@ -2166,6 +2166,154 @@ int main() {
         (sample.imu1AccelZ + sample.imu2AccelZ) * 0.5f, 0.125f, 1e-6f);
   });
 
+  runCase("raw IMU ring fills, drains, and preserves FIFO order across wrap", [] {
+    ImuRawRing ring = {};
+    for (uint32_t value = 0; value < IMU_RAW_RING_SIZE; value++) {
+      ImuRawSample sample = {};
+      sample.dt_us = static_cast<uint16_t>(value);
+      sample.imu1_gyro[0] = static_cast<int16_t>(value);
+      CHECK(imuRawRingPush(ring, sample, 100000U + value));
+    }
+    CHECK_EQ(imuRawRingCount(ring), IMU_RAW_RING_SIZE);
+
+    for (uint32_t value = 0; value < 300; value++) {
+      ImuRawSample sample = {};
+      CHECK(imuRawRingPop(ring, sample));
+      CHECK_EQ(sample.imu1_gyro[0], static_cast<int16_t>(value));
+    }
+    for (uint32_t value = IMU_RAW_RING_SIZE;
+         value < IMU_RAW_RING_SIZE + 300U; value++) {
+      ImuRawSample sample = {};
+      sample.dt_us = static_cast<uint16_t>(value);
+      sample.imu1_gyro[0] = static_cast<int16_t>(value);
+      CHECK(imuRawRingPush(ring, sample, 100000U + value));
+    }
+    CHECK_EQ(imuRawRingCount(ring), IMU_RAW_RING_SIZE);
+
+    for (uint32_t value = 300; value < IMU_RAW_RING_SIZE + 300U; value++) {
+      ImuRawSample sample = {};
+      CHECK(imuRawRingPop(ring, sample));
+      CHECK_EQ(sample.imu1_gyro[0], static_cast<int16_t>(value));
+    }
+    ImuRawSample empty = {};
+    CHECK(!imuRawRingPop(ring, empty));
+    CHECK_EQ(imuRawRingCount(ring), 0U);
+  });
+
+  runCase("raw IMU ring drops the new sample when full without corrupting old data", [] {
+    ImuRawRing ring = {};
+    for (uint32_t value = 0; value < IMU_RAW_RING_SIZE; value++) {
+      ImuRawSample sample = {};
+      sample.imu2_accel[2] = static_cast<int16_t>(value);
+      CHECK(imuRawRingPush(ring, sample, 200000U + value));
+    }
+
+    ImuRawSample rejected = {};
+    rejected.imu2_accel[2] = -1234;
+    CHECK(!imuRawRingPush(ring, rejected, 999999U));
+    CHECK_EQ(ring.dropped, 1U);
+    CHECK_EQ(imuRawRingCount(ring), IMU_RAW_RING_SIZE);
+
+    for (uint32_t value = 0; value < IMU_RAW_RING_SIZE; value++) {
+      ImuRawSample sample = {};
+      CHECK(imuRawRingPop(ring, sample));
+      CHECK_EQ(sample.imu2_accel[2], static_cast<int16_t>(value));
+    }
+  });
+
+  runCase("raw IMU record and packet preserve register counts and little endian offsets", [] {
+    const auto e1 = eventWith(
+        0x1357, -2, std::numeric_limits<int16_t>::min(),
+        -300, 400, -500);
+    const auto e2 = eventWith(
+        -600, 700, -800,
+        900, -1000, 1100);
+    const ImuRawSample sample = makeImuRawSample(0x1234, e1, e2);
+
+    CHECK_EQ(sizeof(ImuRawSample), 26U);
+    CHECK_EQ(sample.imu1_gyro[0], 0x1357);
+    CHECK_EQ(sample.imu1_gyro[1], -2);
+    CHECK_EQ(sample.imu1_gyro[2], std::numeric_limits<int16_t>::min());
+    CHECK_EQ(sample.imu1_accel[0], -300);
+    CHECK_EQ(sample.imu2_gyro[0], -600);
+    CHECK_EQ(sample.imu2_accel[2], 1100);
+
+    ImuRawDatagram datagram = {};
+    const size_t packetSize = buildImuRawDatagram(
+        datagram, 0x12345678U, 0xA1B2C3D4U, 0x01020304U, &sample, 1);
+    CHECK_EQ(packetSize, 46U);
+    const auto *bytes = reinterpret_cast<const uint8_t *>(&datagram);
+    CHECK_EQ(bytes[0], static_cast<uint8_t>('Z'));
+    CHECK_EQ(bytes[1], static_cast<uint8_t>('I'));
+    CHECK_EQ(bytes[2], static_cast<uint8_t>('M'));
+    CHECK_EQ(bytes[3], static_cast<uint8_t>('U'));
+    CHECK_EQ(bytes[4], 1U);
+    CHECK_EQ(bytes[5], 1U);
+    CHECK_EQ(bytes[6], 0U);
+    CHECK_EQ(bytes[7], 0U);
+    CHECK_EQ(bytes[8], 0x78U);
+    CHECK_EQ(bytes[9], 0x56U);
+    CHECK_EQ(bytes[10], 0x34U);
+    CHECK_EQ(bytes[11], 0x12U);
+    CHECK_EQ(bytes[12], 0xD4U);
+    CHECK_EQ(bytes[13], 0xC3U);
+    CHECK_EQ(bytes[14], 0xB2U);
+    CHECK_EQ(bytes[15], 0xA1U);
+    CHECK_EQ(bytes[16], 0x04U);
+    CHECK_EQ(bytes[17], 0x03U);
+    CHECK_EQ(bytes[18], 0x02U);
+    CHECK_EQ(bytes[19], 0x01U);
+    CHECK_EQ(bytes[20], 0x34U);
+    CHECK_EQ(bytes[21], 0x12U);
+    CHECK_EQ(bytes[22], 0x57U);
+    CHECK_EQ(bytes[23], 0x13U);
+    CHECK_EQ(bytes[24], 0xFEU);
+    CHECK_EQ(bytes[25], 0xFFU);
+    CHECK_EQ(bytes[26], 0x00U);
+    CHECK_EQ(bytes[27], 0x80U);
+  });
+
+  runCase("raw UDP command defaults off and accepts only zero or one", [] {
+    raw_stream_enabled = false;
+    arduino_fake::serial_output.clear();
+
+    sendUdpCommandOnce("raw 1");
+    CHECK(raw_stream_enabled);
+    CHECK(arduino_fake::serial_output.find("Raw IMU ON") != std::string::npos);
+
+    sendUdpCommandOnce("raw 2");
+    CHECK(raw_stream_enabled);
+
+    sendUdpCommandOnce("raw 0");
+    CHECK(!raw_stream_enabled);
+    CHECK(arduino_fake::serial_output.find("Raw IMU OFF") != std::string::npos);
+  });
+
+  runCase("pid task publishes raw registers only while the runtime gate is on", [] {
+    imuRawRing = {};
+    raw_stream_enabled = false;
+    fault_imu1 = false;
+    fault_imu2 = false;
+    fault_disagree = false;
+    IMU1.next_event = eventWith(11, -12, 13, -14, 15, -16);
+    IMU2.next_event = eventWith(-21, 22, -23, 24, -25, 26);
+
+    runPidTicks(1);
+    CHECK_EQ(imuRawRingCount(imuRawRing), 0U);
+
+    rawProducerTimeValid = false;
+    raw_stream_enabled = true;
+    runPidTicks(1);
+    CHECK_EQ(imuRawRingCount(imuRawRing), 1U);
+    ImuRawSample sample = {};
+    CHECK(imuRawRingPop(imuRawRing, sample));
+    CHECK_EQ(sample.imu1_gyro[0], 11);
+    CHECK_EQ(sample.imu1_accel[0], -14);
+    CHECK_EQ(sample.imu2_gyro[0], -21);
+    CHECK_EQ(sample.imu2_accel[2], 26);
+    raw_stream_enabled = false;
+  });
+
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count
             << " native control-math cases passed\n";
   return failure_count == 0 ? 0 : 1;

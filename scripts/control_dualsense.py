@@ -2,6 +2,7 @@ import csv
 import datetime
 import math
 import socket
+import struct
 import threading
 import time
 from pathlib import Path
@@ -40,6 +41,7 @@ RESUME_RESULT_TIMEOUT_SEC = 1.0  # resume 후 phase=0 확인 대기
 # --- 고장진단 상수 ---
 TELEM_TIMEOUT_SEC = 1.5
 STATUS_PERIOD     = 1.0      # 무장 여부와 무관한 링크/상태 요약 주기 (초)
+RAW_RECEIVE_TIMEOUT_SEC = 1.0
 TILT_WARN_DEG     = 30.0
 TILT_WARN_PERIOD  = 1.0      # 과도 기울기 경고 최소 간격 (초)
 
@@ -59,11 +61,17 @@ sock.settimeout(0.1)
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_DIR = SCRIPT_DIR.parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-log_path = LOG_DIR / f"flight_log_{datetime.datetime.now():%Y-%m-%d_%H%M%S}.csv"
+LOG_TIMESTAMP = f"{datetime.datetime.now():%Y-%m-%d_%H%M%S}"
+log_path = LOG_DIR / f"flight_log_{LOG_TIMESTAMP}.csv"
+raw_log_path = LOG_DIR / f"imuraw_{LOG_TIMESTAMP}.bin"
 csv_file = log_path.open("w", newline="", encoding="utf-8")
 csv_writer = csv.writer(csv_file)
 csv_writer.writerow(CSV_FIELDS)
 print(f"[LOG] 비행 로그: {log_path}")
+raw_file = None
+raw_batch_count = 0
+raw_last_dropped = 0
+raw_last_receive_time = 0.0
 
 # === 상태 변수 ===
 current_throttle = 1000
@@ -406,6 +414,11 @@ def handle_stdin_command(msg: str):
         arm()
     elif command_lower == "stop":
         disarm("stdin stop")
+    elif parts[0].lower() == "raw":
+        if len(parts) != 2 or parts[1].lower() not in ("on", "off"):
+            print("[STDIN] 사용법: raw on | raw off")
+            return
+        send_cmd(f"raw {1 if parts[1].lower() == 'on' else 0}")
     elif parts[0].lower() == "th":
         if len(parts) != 2:
             print("[STDIN] 사용법: th <val> (정수, 1000~1900)")
@@ -545,8 +558,32 @@ def format_status_telemetry(sample):
         f"Armed={_format_binary_flag(sample.get('Armed'))} "
         f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
         f"Hover_Valid={_format_binary_flag(sample.get('Hover_Valid'))} "
+        f"Raw={_format_raw_status()} "
         f"Faults={faults}"
     )
+
+
+def _format_raw_status():
+    if (
+        raw_last_receive_time <= 0
+        or time.monotonic() - raw_last_receive_time
+        > RAW_RECEIVE_TIMEOUT_SEC
+    ):
+        return "-"
+    return f"{raw_batch_count}b/{raw_last_dropped}d"
+
+
+def _append_raw_datagram(data):
+    """Append an opaque ZIMU/ZCAL datagram; inspect only ZIMU header counters."""
+    global raw_file, raw_batch_count, raw_last_dropped, raw_last_receive_time
+    if raw_file is None:
+        raw_file = raw_log_path.open("ab")
+        print(f"[LOG] IMU raw 로그: {raw_log_path}")
+    raw_file.write(data)
+    if data[:4] == b"ZIMU" and len(data) >= 20:
+        raw_batch_count += 1
+        raw_last_dropped = struct.unpack_from("<I", data, 16)[0]
+    raw_last_receive_time = time.monotonic()
 
 
 def _format_gyro_disagreement(sample):
@@ -617,6 +654,13 @@ def telemetry_thread():
             if shutdown_event.is_set():
                 break
             print(f"[TELEM ERR] 소켓 오류: {e}")
+            continue
+
+        if data[:4] == b"ZIMU":
+            _append_raw_datagram(data)
+            continue
+        if data[:4] == b"ZCAL":
+            _append_raw_datagram(data)
             continue
 
         try:
@@ -767,7 +811,7 @@ def controller_thread():
     print("--------------- stdin ----------------")
     print(" PID: pa|ia|da, pr|ir|dr, pp|ip|dp, py|iy|dy <val>")
     print("      ap <val>, ar|at|ay <val>")
-    print(" Control: th <val>, yaw <0|1>, gains, start, stop, resume")
+    print(" Control: th <val>, yaw <0|1>, raw on|off, gains, start, stop, resume")
     print("          trim <roll> <pitch>, magc <x> <y> <z>")
     print("======================================")
 
@@ -932,6 +976,10 @@ def shutdown_workers_and_close_log(workers):
     csv_file.flush()
     csv_file.close()
     print(f"[LOG] 저장 완료: {log_path}")
+    if raw_file is not None:
+        raw_file.flush()
+        raw_file.close()
+        print(f"[LOG] IMU raw 저장 완료: {raw_log_path}")
 
 
 t_telem = threading.Thread(target=telemetry_thread, daemon=True)

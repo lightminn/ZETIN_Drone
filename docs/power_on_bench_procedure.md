@@ -168,6 +168,19 @@ RC 스트림을 켜고 `start`(무장). 저스로틀 `th 1150`(프롭 없으니 
 outer/inner 부호. 텔레메트리 `angle` 부호가 먼저 맞는지 보고(센서 문제 vs 믹서
 문제 구분), 수정 후 재검증.
 
+### B-4. 1kHz IMU raw 전송 부하 확인 — 무장 해제 상태에서만
+
+1. `Armed=0`인 상태에서 `control_dualsense.py` stdin에 `raw on`을 입력한다.
+2. 기존 55필드 텔레메트리의 `RC_Dropped_Pkts`와 `PID_Loop_Hz`를 raw OFF
+   기준값과 나란히 관찰한다. `[STATUS]`의 `Raw=<batches>b/<dropped>d`도
+   확인한다.
+3. `RC_Dropped_Pkts` 증가 양상과 `PID_Loop_Hz`가 둘 다 나빠지지 않고,
+   `Raw`의 생산자 dropped가 증가하지 않는 것을 확인한 뒤에만 무장한다.
+   하나라도 나빠지면 `raw off` 후 원인을 조사하며 무장하지 않는다.
+4. 기록이 끝나면 `raw off`를 보내고 생성된
+   `logs/imuraw_<timestamp>.bin`을 오프라인
+   `scripts/decode_imu_raw.py`로 변환한다.
+
 ---
 
 ## Stage C — 프롭 ON, 손 파지, 저속: 추력 방향 + yaw 부호
@@ -240,11 +253,13 @@ Stage B에서 부호가 **숫자로** 확인됐으므로, 이제 프롭을 달�
 `FS_GROUND_CUT_MAX_US=1150` 이하이면 즉시 컷이다(Stage B-2).
 
 ⚠️ **Stage E 중에는 지상국 도구를 `control_dualsense.py` 하나만 띄운다.**
+또한 Stage E(자동착륙) 검증 중에는 반드시 `raw off`로 1kHz 원시 스트림을
+끈다.
 펌웨어가 들어온 모든 UDP 패킷의 마지막 발신자 IP/포트로 텔레메트리 목적지를
 바꾸므로, `monitor_telemetry.py` 같은 다른 도구를 함께 실행하면 50Hz RC
 스트림 사이에서 텔레메트리를 안정적으로 받을 수 없다. 실시간 관측은
 `control_dualsense.py`의 `[DIAG]`와 `[AUTO-LAND]` 출력으로 한다. 전체
-43필드 텔레메트리는 이 도구가 `logs/`에 CSV로 계속 기록하므로, 사후 프로브
+55필드 텔레메트리는 이 도구가 `logs/`에 CSV로 계속 기록하므로, 사후 프로브
 분석은 해당 CSV를 `scripts/analyze_probe_response.py`에 넣어 수행한다.
 
 ### E-0. 호버 추정치 확인 (프롭 ON, 저고도 테더)

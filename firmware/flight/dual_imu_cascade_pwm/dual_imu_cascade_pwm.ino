@@ -13,6 +13,74 @@
 #include "yaw_command.h"
 #include "failsafe_land.h"
 
+static const uint32_t IMU_RAW_RING_SIZE = 512;
+static const uint32_t IMU_RAW_RING_MASK = IMU_RAW_RING_SIZE - 1;
+static const uint8_t IMU_RAW_BATCH_MAX = 50;
+static const uint8_t IMU_RAW_VERSION = 1;
+
+struct __attribute__((packed)) ImuRawSample {
+  uint16_t dt_us;
+  int16_t imu1_gyro[3];
+  int16_t imu1_accel[3];
+  int16_t imu2_gyro[3];
+  int16_t imu2_accel[3];
+};
+
+struct __attribute__((packed)) ImuRawHeader {
+  char magic[4];
+  uint8_t version;
+  uint8_t n_samples;
+  uint16_t reserved;
+  uint32_t batch_seq;
+  uint32_t base_t_us;
+  uint32_t dropped;
+};
+
+struct __attribute__((packed)) ImuRawDatagram {
+  ImuRawHeader header;
+  ImuRawSample samples[IMU_RAW_BATCH_MAX];
+};
+
+struct __attribute__((packed)) ImuCalDatagram {
+  char magic[4];
+  uint8_t version;
+  uint8_t reserved[3];
+  float gyro_bias1[3];
+  float gyro_bias2[3];
+  float accel_scale1;
+  float accel_scale2;
+  float gyro_scale;
+  float accel_scale;
+  float imu2_sign[3];
+};
+
+static_assert(sizeof(ImuRawSample) == 26, "ZIMU sample must be 26 bytes");
+static_assert(sizeof(ImuRawHeader) == 20, "ZIMU header must be 20 bytes");
+static_assert(sizeof(ImuRawDatagram) == 1320,
+              "maximum ZIMU datagram must be 1320 bytes");
+static_assert(sizeof(ImuCalDatagram) == 60, "ZCAL datagram must be 60 bytes");
+
+struct ImuRawRing {
+  ImuRawSample samples[IMU_RAW_RING_SIZE];
+  volatile uint32_t head = 0;
+  volatile uint32_t tail = 0;
+  volatile uint32_t dropped = 0;
+  volatile uint32_t first_t_us = 0;
+};
+
+static ImuRawRing imuRawRing;
+static ImuRawSample imuRawBatch[IMU_RAW_BATCH_MAX];
+static ImuRawDatagram imuRawDatagram;
+static ImuCalDatagram imuCalDatagram;
+volatile bool raw_stream_enabled = false;
+static bool rawProducerTimeValid = false;
+static uint32_t rawProducerLastUs = 0;
+static bool rawConsumerTimeValid = false;
+static uint32_t rawConsumerLastUs = 0;
+static uint32_t rawBatchSeq = 0;
+static uint32_t rawLastSendMs = 0;
+static uint32_t rawLastCalMs = 0;
+
 #ifndef WIFI_LATENCY_DEBUG
 #define WIFI_LATENCY_DEBUG 0
 #endif
@@ -293,6 +361,65 @@ struct FreezeMon {
   uint32_t since = 0;
   bool     init  = false;
 };
+
+static inline uint32_t imuRawRingCount(const ImuRawRing &ring) {
+  const uint32_t head = __atomic_load_n(&ring.head, __ATOMIC_ACQUIRE);
+  const uint32_t tail = __atomic_load_n(&ring.tail, __ATOMIC_ACQUIRE);
+  return head - tail;
+}
+
+static inline bool imuRawRingPush(
+    ImuRawRing &ring, const ImuRawSample &sample, uint32_t sampleUs) {
+  const uint32_t head = __atomic_load_n(&ring.head, __ATOMIC_RELAXED);
+  const uint32_t tail = __atomic_load_n(&ring.tail, __ATOMIC_ACQUIRE);
+  if (head - tail >= IMU_RAW_RING_SIZE) {
+    __atomic_fetch_add(&ring.dropped, 1, __ATOMIC_RELAXED);
+    return false;
+  }
+  if (head == tail) {
+    __atomic_store_n(&ring.first_t_us, sampleUs, __ATOMIC_RELAXED);
+  }
+  ring.samples[head & IMU_RAW_RING_MASK] = sample;
+  __atomic_store_n(&ring.head, head + 1, __ATOMIC_RELEASE);
+  return true;
+}
+
+static inline bool imuRawRingPop(ImuRawRing &ring, ImuRawSample &sample) {
+  const uint32_t tail = __atomic_load_n(&ring.tail, __ATOMIC_RELAXED);
+  if (tail == __atomic_load_n(&ring.head, __ATOMIC_ACQUIRE)) return false;
+  sample = ring.samples[tail & IMU_RAW_RING_MASK];
+  __atomic_store_n(&ring.tail, tail + 1, __ATOMIC_RELEASE);
+  return true;
+}
+
+static inline ImuRawSample makeImuRawSample(
+    uint16_t dtUs, const inv_imu_sensor_event_t &e1,
+    const inv_imu_sensor_event_t &e2) {
+  ImuRawSample sample = {};
+  sample.dt_us = dtUs;
+  for (int axis = 0; axis < 3; axis++) {
+    sample.imu1_gyro[axis] = e1.gyro[axis];
+    sample.imu1_accel[axis] = e1.accel[axis];
+    sample.imu2_gyro[axis] = e2.gyro[axis];
+    sample.imu2_accel[axis] = e2.accel[axis];
+  }
+  return sample;
+}
+
+static inline size_t buildImuRawDatagram(
+    ImuRawDatagram &datagram, uint32_t batchSeq, uint32_t baseTUs,
+    uint32_t dropped, const ImuRawSample *samples, uint8_t nSamples) {
+  if (nSamples == 0 || nSamples > IMU_RAW_BATCH_MAX) return 0;
+  memcpy(datagram.header.magic, "ZIMU", 4);
+  datagram.header.version = IMU_RAW_VERSION;
+  datagram.header.n_samples = nSamples;
+  datagram.header.reserved = 0;
+  datagram.header.batch_seq = batchSeq;
+  datagram.header.base_t_us = baseTUs;
+  datagram.header.dropped = dropped;
+  memcpy(datagram.samples, samples, nSamples * sizeof(ImuRawSample));
+  return sizeof(ImuRawHeader) + nSamples * sizeof(ImuRawSample);
+}
 
 static inline ImuTelemetrySample makeImuTelemetrySample(
     const float g1[3], const float a1[3],
@@ -643,6 +770,23 @@ static inline ImuTelemetrySample readImuSampleSnapshot() {
   return sample;
 }
 
+static inline void publishImuRawRegisters(
+    const inv_imu_sensor_event_t &e1, const inv_imu_sensor_event_t &e2,
+    uint32_t sampleUs) {
+  uint16_t dtUs = 0;
+  if (rawProducerTimeValid) {
+    const uint32_t elapsedUs = sampleUs - rawProducerLastUs;
+    dtUs = elapsedUs > 65535UL
+        ? 0xFFFFU
+        : static_cast<uint16_t>(elapsedUs);
+  }
+  const ImuRawSample sample = makeImuRawSample(dtUs, e1, e2);
+  if (imuRawRingPush(imuRawRing, sample, sampleUs)) {
+    rawProducerLastUs = sampleUs;
+    rawProducerTimeValid = true;
+  }
+}
+
 static bool initMagnetometer() {
   if (mag_ready) return true;
 
@@ -969,6 +1113,12 @@ void pid_task(void *pv) {
     if (frozen2 && !fault_imu2) Serial.printf("[FAULT] IMU2 FROZEN (read=%d)\n", readStatus2);
     if (frozen1) fault_imu1 = true;
     if (frozen2) fault_imu2 = true;
+
+    // OFF hot path는 이 bool 검사 하나뿐이다. ON일 때만 micros()와 26B 복사를 한다.
+    // freeze 판정 직후, 부호/scale/bias/LPF/body 변환 전의 레지스터 원값을 게시한다.
+    if (__atomic_load_n(&raw_stream_enabled, __ATOMIC_ACQUIRE)) {
+      publishImuRawRegisters(e1, e2, micros());
+    }
 
     // IMU1 sensor frame 기준 각속도 (IMU2 축 정렬 + 개별 bias 보정)
     float g1[3] = {
@@ -1560,8 +1710,65 @@ static void sendTelemetry() {
   udp.endPacket();
 }
 
+static bool sendImuRawBatch() {
+  if (!connectionEstablished) return false;
+  uint32_t queued = imuRawRingCount(imuRawRing);
+  if (queued == 0) return false;
+  const uint8_t nSamples = static_cast<uint8_t>(
+      min(queued, static_cast<uint32_t>(IMU_RAW_BATCH_MAX)));
+  uint32_t baseTUs = 0;
+  uint8_t copied = 0;
+  for (; copied < nSamples; copied++) {
+    ImuRawSample sample = {};
+    if (!imuRawRingPop(imuRawRing, sample)) break;
+    uint32_t sampleUs;
+    if (!rawConsumerTimeValid) {
+      sampleUs = __atomic_load_n(&imuRawRing.first_t_us, __ATOMIC_ACQUIRE);
+    } else {
+      sampleUs = rawConsumerLastUs + sample.dt_us;
+    }
+    if (copied == 0) baseTUs = sampleUs;
+    rawConsumerLastUs = sampleUs;
+    rawConsumerTimeValid = true;
+    imuRawBatch[copied] = sample;
+  }
+  if (copied == 0) return false;
+
+  const uint32_t dropped =
+      __atomic_load_n(&imuRawRing.dropped, __ATOMIC_RELAXED);
+  const size_t packetSize = buildImuRawDatagram(
+      imuRawDatagram, rawBatchSeq, baseTUs, dropped, imuRawBatch, copied);
+  udp.beginPacket(laptopIP, laptopPort);
+  udp.write(reinterpret_cast<const uint8_t *>(&imuRawDatagram), packetSize);
+  udp.endPacket();
+  rawBatchSeq++;
+  return true;
+}
+
+static bool sendImuCalibration() {
+  if (!connectionEstablished) return false;
+  memcpy(imuCalDatagram.magic, "ZCAL", 4);
+  imuCalDatagram.version = IMU_RAW_VERSION;
+  memset(imuCalDatagram.reserved, 0, sizeof(imuCalDatagram.reserved));
+  for (int axis = 0; axis < 3; axis++) {
+    imuCalDatagram.gyro_bias1[axis] = gyro_bias1[axis];
+    imuCalDatagram.gyro_bias2[axis] = gyro_bias2[axis];
+    imuCalDatagram.imu2_sign[axis] = IMU2_SIGN[axis];
+  }
+  imuCalDatagram.accel_scale1 = accel_scale1;
+  imuCalDatagram.accel_scale2 = accel_scale2;
+  imuCalDatagram.gyro_scale = GYRO_SCALE;
+  imuCalDatagram.accel_scale = ACCEL_SCALE;
+  udp.beginPacket(laptopIP, laptopPort);
+  udp.write(reinterpret_cast<const uint8_t *>(&imuCalDatagram),
+            sizeof(imuCalDatagram));
+  udp.endPacket();
+  return true;
+}
+
 void udp_task(void *pv) {
   uint32_t lastSend = 0;
+  uint32_t lastRawCheck = 0;
 #if WIFI_LATENCY_DEBUG
   uint32_t prevTopUs = micros();
 #endif
@@ -1731,6 +1938,30 @@ void udp_task(void *pv) {
             }
           }
         }
+        else if (strncmp(buf, "raw", 3) == 0) {
+          long enabled;
+          if (parseIntStrict(buf + 3, enabled) && (enabled == 0 || enabled == 1)) {
+            const bool wasEnabled =
+                __atomic_load_n(&raw_stream_enabled, __ATOMIC_ACQUIRE);
+            if (enabled == 0) {
+              __atomic_store_n(&raw_stream_enabled, false, __ATOMIC_RELEASE);
+              Serial.println(">>> Raw IMU OFF");
+            } else {
+              if (!wasEnabled) {
+                const uint32_t head =
+                    __atomic_load_n(&imuRawRing.head, __ATOMIC_ACQUIRE);
+                __atomic_store_n(&imuRawRing.tail, head, __ATOMIC_RELEASE);
+                rawProducerTimeValid = false;
+                rawConsumerTimeValid = false;
+                rawLastSendMs = millis();
+                rawLastCalMs = rawLastSendMs - 1000U;
+                __atomic_store_n(
+                    &raw_stream_enabled, true, __ATOMIC_RELEASE);
+              }
+              Serial.println(">>> Raw IMU ON");
+            }
+          }
+        }
         else if (strncmp(buf, "trim", 4) == 0 &&
                  (buf[4] == ' ' || buf[4] == '\t')) {
           char *save = nullptr;
@@ -1768,7 +1999,29 @@ void udp_task(void *pv) {
 
     uint32_t now = millis();
     if (mag_enabled || mag_calibrating) sampleMagnetometer(now);
-    if (now - lastSend >= 50) {
+    bool sentImuPacket = false;
+    if (now - lastRawCheck >= 10U) {
+      lastRawCheck = now;
+      bool sentRawPacket = false;
+      if (__atomic_load_n(&raw_stream_enabled, __ATOMIC_ACQUIRE)
+          && connectionEstablished) {
+        const uint32_t queued = imuRawRingCount(imuRawRing);
+        if (queued >= IMU_RAW_BATCH_MAX
+            || (queued > 0 && now - rawLastSendMs >= 50U)) {
+          sentImuPacket = sendImuRawBatch();
+          sentRawPacket = sentImuPacket;
+          if (sentImuPacket) rawLastSendMs = now;
+        }
+        // 한 udp_task 반복에서는 ZIMU 또는 ZCAL 중 최대 하나만 추가 전송한다.
+        if (!sentRawPacket && now - rawLastCalMs >= 1000U) {
+          sentImuPacket = sendImuCalibration();
+          if (sentImuPacket) rawLastCalMs = now;
+        }
+      }
+    }
+    // 새 바이너리 경로는 한 반복에 최대 한 데이터그램만 보낸다. 같은 시각의
+    // 기존 ASCII 텔레메트리는 다음 반복으로 미뤄 20Hz 주기를 유지한다.
+    if (!sentImuPacket && now - lastSend >= 50) {
       lastSend = now;
 #if WIFI_LATENCY_DEBUG
       uint32_t sendStartUs = micros();

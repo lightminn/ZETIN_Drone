@@ -10,6 +10,7 @@ python scripts/receive_telemetry.py
 python scripts/monitor_telemetry.py
 python scripts/analyze_flight_log.py [optional-log.csv]
 python scripts/analyze_probe_response.py <csv> [<csv> ...] [--label ground|air]
+python scripts/decode_imu_raw.py <input.bin> [output.csv]
 python scripts/receive_dual_imu_debug.py
 python scripts/test_dualsense_input.py
 ```
@@ -47,6 +48,32 @@ matplotlib을 불러오므로 터미널 요약에는 matplotlib이 필요 없다
 IMU별 값도 20Hz 스냅샷이므로 Nyquist 주파수는 10Hz다. 프롭 진동은
 앨리어싱되며, 이 값이나 `dG`만으로 진동·순간 disagree·freeze를 판정할 수
 없다. 느린 bias/scale 드리프트와 정상상태 오프셋 관찰에만 사용한다.
+
+1kHz 원시 기록이 필요하면 `control_dualsense.py` stdin에서 `raw on`을
+보낸다. 첫 `ZIMU` 또는 `ZCAL` 데이터그램을 받을 때만 기존 flight log와 같은
+타임스탬프의 `logs/imuraw_<timestamp>.bin`을 lazy-open하므로, raw를 쓰지
+않은 보통 세션에는 빈 `.bin`이 남지 않는다. `[STATUS]`의
+`Raw=<batches>b/<dropped>d`는 받은 `ZIMU` 배치 수와 펌웨어 생산자 누적
+드롭을 뜻한다. 끝나면 `raw off`를 보낸다.
+
+`.bin`은 실시간으로 파싱하지 않고 데이터그램 바이트를 그대로 이어 쓴
+파일이다. 비행/벤치가 끝난 뒤 다음처럼 CSV로 변환한다.
+
+```bash
+python scripts/decode_imu_raw.py logs/imuraw_2026-07-30_120000.bin
+python scripts/decode_imu_raw.py logs/imuraw_2026-07-30_120000.bin /tmp/imu.csv
+```
+
+출력을 생략하면 입력과 같은 경로의 `.csv`를 만든다. 디코더는 원시 int16
+12축과, `ZCAL`이 있으면 bias/scale 및 IMU2 부호를 적용한 IMU1 센서 프레임
+dps/g 12축을 기록한다. stderr 요약의 `wireless_lost_batches`는
+`batch_seq` 구멍, `producer_dropped`는 링 포화이며 서로 다른 결측이다.
+`ZCAL`이 없으면 원시 컬럼만 만들고 경고한다. 잘린/알 수 없는/미지원 버전
+레코드는 건너뛰되 각각 개수를 보고한다.
+
+하드웨어 LPF는 gyro 121Hz, accel 25Hz다. 1kHz raw 파일이라도 accel에는
+25Hz 위 내용이 없으므로 accel 진동 스펙트럼 분석에는 사용할 수 없다. 이
+기능은 제어 루프, FreeRTOS tick, 센서 ODR, 하드웨어 LPF 설정을 바꾸지 않는다.
 
 `control_dualsense.py`는 yaw 스틱을 상태 없는 `rcr` 각속도 명령으로 보내며,
 `YAW_RATE_MAX_DPS = 90.0`에 따라 최대 편향을 ±90dps로 제한한다. 펌웨어의

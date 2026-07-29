@@ -7,6 +7,7 @@ import importlib.util
 import io
 import pathlib
 import socket
+import struct
 import sys
 import tempfile
 import threading
@@ -300,6 +301,15 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         ):
             self.module.telemetry_thread()
         return output.getvalue()
+
+    def _run_datagrams(self, packets, rows):
+        self.module.sock = _FakeSocket(packets)
+        self.module.csv_writer = types.SimpleNamespace(
+            writerow=rows.append,
+        )
+        self.module.csv_file = types.SimpleNamespace(flush=lambda: None)
+        with self.assertRaises(_LoopComplete):
+            self.module.telemetry_thread()
 
     def _autoland_lines(self, samples):
         output = self._run_telemetry(samples)
@@ -1140,6 +1150,102 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             list(imu_values),
             [row[self.module.CSV_FIELDS.index(name)] for name in imu_names],
         )
+
+    def test_raw_magic_routes_zimu_and_zcal_to_binary_before_utf8_decode(self):
+        zimu = (
+            struct.pack("<4sBBHIII", b"ZIMU", 1, 1, 0, 7, 123_000, 9)
+            + struct.pack("<H12h", 1000, -1, *range(1, 12))
+        )
+        zcal = struct.pack("<4sB3x13f", b"ZCAL", 1, *range(13))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            raw_path = pathlib.Path(temp_dir) / "imuraw_test.bin"
+            self.module.raw_log_path = raw_path
+            self.module.raw_file = None
+            rows = []
+            with mock.patch.object(
+                self.module,
+                "parse_telemetry_packet",
+                side_effect=AssertionError("raw packet reached ASCII parser"),
+            ):
+                self._run_datagrams([zimu, zcal], rows)
+            self.assertIsNotNone(
+                self.module.raw_file,
+                "raw magic must be routed before strict UTF-8 decode",
+            )
+            self.module.raw_file.close()
+
+            self.assertEqual(raw_path.read_bytes(), zimu + zcal)
+            self.assertEqual(rows, [])
+            self.assertEqual(self.module.raw_batch_count, 1)
+            self.assertEqual(self.module.raw_last_dropped, 9)
+
+    def test_raw_packets_never_create_csv_rows(self):
+        zimu = (
+            struct.pack("<4sBBHIII", b"ZIMU", 1, 1, 0, 1, 1000, 0)
+            + struct.pack("<H12h", 1000, *range(12))
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.module.raw_log_path = (
+                pathlib.Path(temp_dir) / "imuraw_test.bin"
+            )
+            self.module.raw_file = None
+            rows = []
+            self._run_datagrams([zimu], rows)
+            self.module.raw_file.close()
+
+            self.assertEqual(rows, [])
+
+    def test_current_55_field_ascii_telemetry_still_reaches_csv(self):
+        packet = ",".join(str(value) for value in range(55)).encode("ascii")
+        rows = []
+
+        self._run_datagrams([packet], rows)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(rows[0]), len(self.module.CSV_FIELDS))
+        self.assertEqual(rows[0][1], 0.0)
+        self.assertEqual(rows[0][-1], 54.0)
+
+    def test_session_without_raw_packet_does_not_create_binary_file(self):
+        packet = ",".join(["0"] * 55).encode("ascii")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            raw_path = pathlib.Path(temp_dir) / "imuraw_test.bin"
+            self.module.raw_log_path = raw_path
+            self.module.raw_file = None
+            rows = []
+
+            self._run_datagrams([packet], rows)
+
+            self.assertFalse(raw_path.exists())
+
+    def test_status_line_reports_raw_batch_and_producer_drop_counts(self):
+        self.module.raw_batch_count = 1234
+        self.module.raw_last_dropped = 7
+        self.module.raw_last_receive_time = self.module.time.monotonic()
+
+        status = self.module.format_status_telemetry(_telemetry_sample())
+
+        self.assertIn("Raw=1234b/7d", status)
+
+    def test_status_line_reports_dash_when_raw_is_not_being_received(self):
+        self.module.raw_batch_count = 1234
+        self.module.raw_last_dropped = 7
+        self.module.raw_last_receive_time = (
+            self.module.time.monotonic() - 2.0
+        )
+
+        status = self.module.format_status_telemetry(_telemetry_sample())
+
+        self.assertIn("Raw=-", status)
+
+    def test_stdin_raw_on_and_off_map_to_firmware_gate_commands(self):
+        commands = []
+        self.module.send_cmd = commands.append
+
+        self.module.handle_stdin_command("raw on")
+        self.module.handle_stdin_command("raw off")
+
+        self.assertEqual(commands, ["raw 1", "raw 0"])
 
     def test_telemetry_thread_advances_resume_attempt(self):
         commands = []

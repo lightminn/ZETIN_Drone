@@ -44,6 +44,13 @@ public:
     return static_cast<int>(outgoing_packet_.size() - before);
   }
 
+  std::size_t write(const uint8_t *buffer, std::size_t length) {
+    outgoing_packet_.append(
+        reinterpret_cast<const char *>(buffer),
+        length);
+    return length;
+  }
+
   int endPacket() {
     wifi_udp_fake::telemetry_output = outgoing_packet_;
     return 1;

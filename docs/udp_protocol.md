@@ -37,6 +37,7 @@ yaw <0|1>
 mag <0|1>                # 자기계 yaw 드리프트 보정 ON/OFF (기본 OFF)
 magcal <0|1>             # 하드아이언 캘리브레이션 시작/종료 (시동 해제 상태에서만)
 magc <x> <y> <z>         # 모터 전류 간섭 보정 계수(µT/µs) 3축. "0 0 0" = 보정 off
+raw <0|1>                # 1kHz dual-IMU 원시 배치 스트림 ON/OFF (기본 OFF)
 gains                    # 현재 PID 게인 12개를 1회 응답
 
 # 안쪽 각속도 PID 게인
@@ -162,6 +163,10 @@ ar|at|ay <value>      # roll / pitch / yaw
   기수 방위에 무관하다. 벤치 특성화로 얻은 기본값이 펌웨어에 박혀 있고
   (`mag_comp_x/y/z`), `"0 0 0"`으로 보내면 보정을 끈다. 자동착륙 하강
   중에는 변경을 거부한다.
+- `raw 1`은 1kHz 제어 루프에서 읽은 두 IMU의 int16 레지스터 원값을
+  `ZIMU` 배치로 보내며 `raw 0`은 중지한다. 기본값은 **OFF**다. 부호,
+  bias/scale, 소프트웨어 LPF, body-frame 변환은 이 스트림에 적용하지 않는다.
+  `control_dualsense.py` stdin에서는 각각 `raw on`, `raw off`로 보낸다.
 - `gains`는 현재 cascade PID 게인 12개를 `GAINS,<...>` 데이터그램 한 개로
   요청을 보낸 지상국에 응답한다. 값은 소수점 아래 4자리로 전송한다.
 - 게인 값은 0~100 범위의 유한한 수만 수락하며, 범위를 벗어나거나 파싱에
@@ -290,3 +295,66 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 
 공유 구현은
 [`telemetry_schema.py`](../scripts/telemetry_schema.py)에 있다.
+
+### 1kHz IMU 원시 배치 (`ZIMU`)
+
+`raw 1`일 때만 전송하는 리틀엔디언 바이너리 데이터그램이다. 1kHz 샘플을
+50개씩 묶어 정상상태 패킷률을 20pkt/s로 제한한다. 소비자는 10ms마다 확인해
+50개가 모이면 보내고, 마지막 `ZIMU` 전송 후 50ms가 지나면 1~49개 부분
+배치를 보낸다. 한 `udp_task` 반복에서 추가 raw 데이터그램은 최대 한 개다.
+
+헤더는 20바이트다.
+
+| 오프셋 | 필드 | 타입 | 크기 | 의미 |
+|---:|---|---|---:|---|
+| 0 | `magic` | `char[4]` | 4 | ASCII `ZIMU` |
+| 4 | `version` | `uint8` | 1 | `1` |
+| 5 | `n_samples` | `uint8` | 1 | 1~50 |
+| 6 | `reserved` | `uint16` | 2 | `0` |
+| 8 | `batch_seq` | `uint32` | 4 | 배치마다 단조 증가, uint32 래핑 허용 |
+| 12 | `base_t_us` | `uint32` | 4 | 첫 샘플의 `micros()` |
+| 16 | `dropped` | `uint32` | 4 | 생산자 링 포화로 버린 신규 샘플 누적 수 |
+
+헤더 뒤에는 다음 26바이트 샘플이 `n_samples`개 이어진다.
+
+| 샘플 내 오프셋 | 필드 | 타입 | 크기 | 의미 |
+|---:|---|---|---:|---|
+| 0 | `dt_us` | `uint16` | 2 | 직전 기록 샘플과의 시간차. 배치 첫 샘플도 이전 배치 마지막 샘플 기준 |
+| 2 | `imu1_gyro` | `int16[3]` | 6 | `e1.gyro[0..2]` 레지스터 원값 |
+| 8 | `imu1_accel` | `int16[3]` | 6 | `e1.accel[0..2]` 레지스터 원값 |
+| 14 | `imu2_gyro` | `int16[3]` | 6 | `e2.gyro[0..2]` 레지스터 원값 |
+| 20 | `imu2_accel` | `int16[3]` | 6 | `e2.accel[0..2]` 레지스터 원값 |
+
+최대 크기는 `20 + 50 × 26 = 1320B`로 1472바이트 UDP payload 한도보다
+작다. 링이 가득 차면 기존 샘플을 보존하고 새 샘플만 버린다. 따라서
+`dropped` 증가는 생산자/CPU/링 부족이고, `batch_seq` 불연속은 별도의 무선
+손실이다. 분석 시 두 결측 원인을 따로 보고해야 한다.
+
+### 보정상수 (`ZCAL`)
+
+raw 스트림이 켜져 있는 동안 1초에 한 번 보내는 60바이트 리틀엔디언
+데이터그램이다.
+
+| 오프셋 | 필드 | 타입 | 크기 | 의미 |
+|---:|---|---|---:|---|
+| 0 | `magic` | `char[4]` | 4 | ASCII `ZCAL` |
+| 4 | `version` | `uint8` | 1 | `1` |
+| 5 | `reserved` | `uint8[3]` | 3 | 모두 `0` |
+| 8 | `gyro_bias1` | `float[3]` | 12 | IMU1 부팅 보정 bias(dps) |
+| 20 | `gyro_bias2` | `float[3]` | 12 | IMU2 부팅 보정 bias(dps), IMU1 센서축 기준 |
+| 32 | `accel_scale1` | `float` | 4 | IMU1 부팅 accel 보정 배율 |
+| 36 | `accel_scale2` | `float` | 4 | IMU2 부팅 accel 보정 배율 |
+| 40 | `gyro_scale` | `float` | 4 | `GYRO_SCALE` |
+| 44 | `accel_scale` | `float` | 4 | `ACCEL_SCALE` |
+| 48 | `imu2_sign` | `float[3]` | 12 | `IMU2_SIGN_X/Y/Z` |
+
+`ZIMU`, `ZCAL`, 기존 55필드 ASCII 텔레메트리는 모두 **같은 UDP 포트
+4210, 같은 `laptopIP`/`laptopPort` 목적지**로 온다. 지상국은 UTF-8
+디코드보다 먼저 첫 4바이트를 검사해 `ZIMU`/`ZCAL`을 바이너리 로그로
+분기해야 한다. 그 외 데이터그램만 ASCII/`GAINS` 파서로 넘긴다.
+
+하드웨어 LPF는 gyro 121Hz, accel 25Hz로 설정돼 있다
+(`inv_imu_set_gyro_ln_bw`, `inv_imu_set_accel_ln_bw`). 따라서 1kHz로
+기록해도 accel에는 25Hz 위의 진동 정보가 없다. 이 로그로 accel 프롭 진동
+스펙트럼을 해석하면 안 된다. 기록 주파수를 올리는 것은 센서 ODR이나 하드웨어
+LPF 대역을 바꾸지 않는다.
