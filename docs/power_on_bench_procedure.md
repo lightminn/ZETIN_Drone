@@ -170,16 +170,21 @@ outer/inner 부호. 텔레메트리 `angle` 부호가 먼저 맞는지 보고(�
 
 ### B-4. 1kHz IMU raw 전송 부하 확인 — 무장 해제 상태에서만
 
-1. `Armed=0`인 상태에서 `control_dualsense.py` stdin에 `raw on`을 입력한다.
-2. 기존 55필드 텔레메트리의 `RC_Dropped_Pkts`와 `PID_Loop_Hz`를 raw OFF
-   기준값과 나란히 관찰한다. `[STATUS]`의 `Raw=<batches>b/<dropped>d`도
-   확인한다.
+1. `Armed=0`인 상태에서 `control_dualsense.py`를 시작한다. raw 스트림은
+   기본 ON이므로 `raw on`을 입력하지 말고, 연결 후 `[STATUS]`의
+   `Raw=<batches>b/<dropped>d`에서 배치 수가 증가하는지 확인한다.
+2. 기존 58필드 텔레메트리의 `RC_Dropped_Pkts`와 `PID_Loop_Hz`,
+   `[STATUS]`의 생산자 `dropped`를 나란히 관찰한다.
 3. `RC_Dropped_Pkts` 증가 양상과 `PID_Loop_Hz`가 둘 다 나빠지지 않고,
    `Raw`의 생산자 dropped가 증가하지 않는 것을 확인한 뒤에만 무장한다.
    하나라도 나빠지면 `raw off` 후 원인을 조사하며 무장하지 않는다.
-4. 기록이 끝나면 `raw off`를 보내고 생성된
-   `logs/imuraw_<timestamp>.bin`을 오프라인
-   `scripts/decode_imu_raw.py`로 변환한다.
+4. 기록이 끝나면 지상국을 정상 종료한다. 원본
+   `logs/imuraw_<timestamp>.bin`과 자동 변환된 같은 이름의 `.csv`가
+   남고, 종료 요약의 레이트·무선 유실·생산자 드롭을 확인한다.
+
+2026-07-30 무장 해제 벤치 실측(219배치, 10,950샘플)은
+`average_sample_rate_hz=999.999`, `wireless_lost_batches=0`,
+`producer_dropped=0`이었다.
 
 ---
 
@@ -279,13 +284,17 @@ R13(믹서가 딥을 흡수)은 아직 실기로 확인되지 않은 실패모�
 
 | 단계 | raw | 이유 |
 |---|---|---|
-| B-4 (무장 해제) | on | 부하 측정 자체가 목적 |
-| E-1, E-2 (자동착륙 첫 검증) | **off** | 안전기능을 처음 시험하는 구간에 미측정 변수를 더하면, 실패했을 때 자동착륙 로직 문제인지 RF 부하 문제인지 구분할 수 없다 |
-| E-4a (프로브 특성화, 20회+ 하강) | **on** | R6/R13을 판정할 데이터가 이 구간에서만 나온다 |
+| B-4 (무장 해제) | **on (기본값, 별도 조작 없음)** | 기본 ON 상태의 부하와 손실 회계를 확인하는 절차 |
+| E-1, E-2 (자동착륙 첫 검증) | **on (조건부 비교)** | 먼저 기본 ON으로 검증한다. 자동착륙 첫 검증이 예상과 다르게 거동하면 `raw off`로 한 번 더 돌려서 RF 부하가 원인인지 배제한다 |
+| E-4a (프로브 특성화, 20회+ 하강) | **on (기본값, 별도 조작 없음)** | R6/R13을 판정할 데이터가 이 구간에서만 나온다 |
 
-E-4a에서 raw를 켤 때는 B-4에서 확인한 `RC_Dropped_Pkts`·`PID_Loop_Hz`·`Raw`의
-생산자 dropped를 하강 중에도 같이 본다. 하강 텔레메트리에 결측이 생기면
-`raw off`로 되돌리고, 프로브 특성화는 20Hz CSV와 SIL로 대신한다.
+2026-07-30 B-4 실측에서 219배치/10,950샘플의 평균 레이트는
+999.999Hz였고 무선 유실과 생산자 드롭은 모두 0이었다. 이를 근거로 Stage E도
+기본 ON으로 시작하되, E-1/E-2가 예상과 다르게 거동할 때만 `raw off` 비교
+실험으로 RF 부하를 분리한다. 모든 단계에서 B-4에서 확인한
+`RC_Dropped_Pkts`·`PID_Loop_Hz`·`Raw`의 생산자 dropped를 같이 본다.
+하강 텔레메트리에 결측이 생기면 `raw off`로 되돌리고, 프로브 특성화는 20Hz
+CSV와 SIL로 대신한다.
 
 ### E-0. 호버 추정치 확인 (프롭 ON, 저고도 테더)
 수평에 가깝게 실제 호버를 유지하면서 `Hover_Est`와 `Hover_Valid`를 기록한다.

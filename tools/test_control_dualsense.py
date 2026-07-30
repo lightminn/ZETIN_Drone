@@ -232,7 +232,11 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         sys.path.remove(str(SCRIPTS_DIR))
 
     def setUp(self):
-        module_name = "_control_dualsense_under_test"
+        self.module, _ = self._load_module()
+        self.module.shutdown_event.clear()
+        self.module.last_telem_time = self.module.time.monotonic()
+
+    def _load_module(self, argv=(), module_name="_control_dualsense_under_test"):
         sys.modules.pop(module_name, None)
         spec = importlib.util.spec_from_file_location(module_name, CONTROL_PATH)
         module = importlib.util.module_from_spec(spec)
@@ -248,12 +252,13 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             mock.patch.object(pathlib.Path, "open", return_value=fake_csv_file),
             mock.patch.object(threading, "Thread", _FakeThread),
             mock.patch.object(builtins, "input", side_effect=KeyboardInterrupt),
+            mock.patch.object(
+                sys, "argv", [str(CONTROL_PATH), *argv],
+            ),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             spec.loader.exec_module(module)
-        self.module = module
-        self.module.shutdown_event.clear()
-        self.module.last_telem_time = self.module.time.monotonic()
+        return module, fake_socket
 
     def tearDown(self):
         sys.modules.pop(self.module.__name__, None)
@@ -1288,6 +1293,112 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             self._run_datagrams([packet], rows)
 
             self.assertFalse(raw_path.exists())
+
+    def test_shutdown_decodes_received_raw_capture_and_prints_summary(self):
+        zimu = (
+            struct.pack("<4sBBHIII", b"ZIMU", 1, 2, 0, 7, 123_000, 0)
+            + struct.pack("<H12h", 0, *range(12))
+            + struct.pack("<H12h", 1000, *range(12, 24))
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            raw_path = temp_path / "imuraw_test.bin"
+            self.module.raw_log_path = raw_path
+            self.module.raw_file = None
+            self.module.csv_file = io.StringIO()
+            self.module.log_path = temp_path / "flight.csv"
+            self.module._append_raw_datagram(zimu)
+            output = io.StringIO()
+
+            with (
+                contextlib.redirect_stdout(output),
+                contextlib.redirect_stderr(output),
+            ):
+                self.module.shutdown_workers_and_close_log(())
+
+            self.assertEqual(raw_path.read_bytes(), zimu)
+            self.assertTrue(raw_path.with_suffix(".csv").exists())
+            rendered = output.getvalue()
+            self.assertIn("[LOG] IMU raw CSV 변환 시작:", rendered)
+            self.assertIn(
+                "batches=1 samples=2 wireless_lost=0 "
+                "producer_dropped=0 average_sample_rate_hz=1000.000 "
+                "dt_us_min=0 dt_us_max=1000",
+                rendered,
+            )
+
+    def test_shutdown_without_raw_packet_creates_neither_bin_nor_raw_csv(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            raw_path = temp_path / "imuraw_test.bin"
+            self.module.raw_log_path = raw_path
+            self.module.raw_file = None
+            self.module.csv_file = io.StringIO()
+            self.module.log_path = temp_path / "flight.csv"
+
+            self.module.shutdown_workers_and_close_log(())
+
+            self.assertFalse(raw_path.exists())
+            self.assertFalse(raw_path.with_suffix(".csv").exists())
+
+    def test_shutdown_decode_failure_warns_and_preserves_binary_capture(self):
+        zimu = (
+            struct.pack("<4sBBHIII", b"ZIMU", 1, 1, 0, 9, 456_000, 0)
+            + struct.pack("<H12h", 0, *range(12))
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            raw_path = temp_path / "imuraw_test.bin"
+            self.module.raw_log_path = raw_path
+            self.module.raw_file = None
+            self.module.csv_file = io.StringIO()
+            self.module.log_path = temp_path / "flight.csv"
+            self.module._append_raw_datagram(zimu)
+            output = io.StringIO()
+
+            with (
+                mock.patch.object(
+                    self.module,
+                    "decode_file",
+                    side_effect=RuntimeError("synthetic decode failure"),
+                    create=True,
+                ),
+                contextlib.redirect_stdout(output),
+            ):
+                self.module.shutdown_workers_and_close_log(())
+
+            self.assertEqual(raw_path.read_bytes(), zimu)
+            self.assertFalse(raw_path.with_suffix(".csv").exists())
+            self.assertIn(
+                "[WARN] IMU raw CSV 변환 실패: synthetic decode failure",
+                output.getvalue(),
+            )
+
+    def test_no_raw_cli_sends_raw_zero_and_suppresses_binary_file(self):
+        module_name = "_control_dualsense_no_raw_under_test"
+        module, fake_socket = self._load_module(
+            ("--no-raw",), module_name=module_name,
+        )
+        try:
+            self.assertIn(
+                (b"raw 0", (module.UDP_IP, module.UDP_PORT)),
+                fake_socket.sent,
+            )
+            zimu = (
+                struct.pack("<4sBBHIII", b"ZIMU", 1, 1, 0, 1, 1000, 0)
+                + struct.pack("<H12h", 0, *range(12))
+            )
+            with tempfile.TemporaryDirectory() as temp_dir:
+                raw_path = pathlib.Path(temp_dir) / "imuraw_test.bin"
+                module.raw_log_path = raw_path
+                module.raw_file = None
+
+                module._append_raw_datagram(zimu)
+
+                self.assertIsNone(module.raw_file)
+                self.assertFalse(raw_path.exists())
+        finally:
+            sys.modules.pop(module_name, None)
 
     def test_status_line_reports_raw_batch_and_producer_drop_counts(self):
         self.module.raw_batch_count = 1234

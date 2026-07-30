@@ -37,7 +37,7 @@ yaw <0|1>
 mag <0|1>                # 자기계 yaw 드리프트 보정 ON/OFF (기본 OFF)
 magcal <0|1>             # 하드아이언 캘리브레이션 시작/종료 (시동 해제 상태에서만)
 magc <x> <y> <z>         # 모터 전류 간섭 보정 계수(µT/µs) 3축. "0 0 0" = 보정 off
-raw <0|1>                # 1kHz dual-IMU 원시 배치 스트림 ON/OFF (기본 OFF)
+raw <0|1>                # 1kHz dual-IMU 원시 배치 스트림 ON/OFF (기본 ON)
 gains                    # 현재 PID 게인 12개를 1회 응답
 
 # 안쪽 각속도 PID 게인
@@ -164,7 +164,10 @@ ar|at|ay <value>      # roll / pitch / yaw
   (`mag_comp_x/y/z`), `"0 0 0"`으로 보내면 보정을 끈다. 자동착륙 하강
   중에는 변경을 거부한다.
 - `raw 1`은 1kHz 제어 루프에서 읽은 두 IMU의 int16 레지스터 원값을
-  `ZIMU` 배치로 보내며 `raw 0`은 중지한다. 기본값은 **OFF**다. 부호,
+  `ZIMU` 배치로 보내며 `raw 0`은 중지한다. 기본값은 **ON**이다. 생산자는
+  `raw_stream_enabled && connectionEstablished`일 때만 링에 넣으므로, 지상국
+  연결 전에는 링을 채우거나 `dropped`를 올리지 않는다. 따라서 `dropped`는
+  실제 스트리밍 중 소비자가 생산자를 따라가지 못한 경우만 뜻한다. 부호,
   bias/scale, 소프트웨어 LPF, body-frame 변환은 이 스트림에 적용하지 않는다.
   `control_dualsense.py` stdin에서는 각각 `raw on`, `raw off`로 보낸다.
 - `gains`는 현재 cascade PID 게인 12개를 `GAINS,<...>` 데이터그램 한 개로
@@ -313,10 +316,12 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 
 ### 1kHz IMU 원시 배치 (`ZIMU`)
 
-`raw 1`일 때만 전송하는 리틀엔디언 바이너리 데이터그램이다. 1kHz 샘플을
-50개씩 묶어 정상상태 패킷률을 20pkt/s로 제한한다. 소비자는 10ms마다 확인해
-50개가 모이면 보내고, 마지막 `ZIMU` 전송 후 50ms가 지나면 1~49개 부분
-배치를 보낸다. 한 `udp_task` 반복에서 추가 raw 데이터그램은 최대 한 개다.
+raw 게이트가 ON이고 `connectionEstablished`일 때 전송하는 리틀엔디언
+바이너리 데이터그램이다. 게이트 기본값은 ON이지만 첫 지상국 데이터그램을
+받기 전에는 생산도 시작하지 않는다. 1kHz 샘플을 50개씩 묶어 정상상태
+패킷률을 20pkt/s로 제한한다. 소비자는 10ms마다 확인해 50개가 모이면 보내고,
+마지막 `ZIMU` 전송 후 50ms가 지나면 1~49개 부분 배치를 보낸다. 한
+`udp_task` 반복에서 추가 raw 데이터그램은 최대 한 개다.
 
 헤더는 20바이트다.
 

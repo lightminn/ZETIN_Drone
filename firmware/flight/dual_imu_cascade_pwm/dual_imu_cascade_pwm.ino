@@ -72,7 +72,7 @@ static ImuRawRing imuRawRing;
 static ImuRawSample imuRawBatch[IMU_RAW_BATCH_MAX];
 static ImuRawDatagram imuRawDatagram;
 static ImuCalDatagram imuCalDatagram;
-volatile bool raw_stream_enabled = false;
+volatile bool raw_stream_enabled = true;
 static bool rawProducerTimeValid = false;
 static uint32_t rawProducerLastUs = 0;
 static bool rawConsumerTimeValid = false;
@@ -529,7 +529,7 @@ WiFiUDP   udp;
 char      packetBuffer[256];
 IPAddress laptopIP;
 int       laptopPort            = 0;
-bool      connectionEstablished = false;
+volatile bool connectionEstablished = false;
 
 // startGyro/startAccel은 ODR·FSR만 설정하고 UI 필터 대역폭은 칩 전원
 // 기본값(bypass) 그대로 둔다. 그러면 프롭 진동이 필터 없이 PID에 들어오므로
@@ -1116,7 +1116,8 @@ void pid_task(void *pv) {
 
     // OFF hot path는 이 bool 검사 하나뿐이다. ON일 때만 micros()와 26B 복사를 한다.
     // freeze 판정 직후, 부호/scale/bias/LPF/body 변환 전의 레지스터 원값을 게시한다.
-    if (__atomic_load_n(&raw_stream_enabled, __ATOMIC_ACQUIRE)) {
+    if (__atomic_load_n(&raw_stream_enabled, __ATOMIC_ACQUIRE)
+        && connectionEstablished) {
       publishImuRawRegisters(e1, e2, micros());
     }
 

@@ -2273,13 +2273,9 @@ int main() {
     CHECK_EQ(bytes[27], 0x80U);
   });
 
-  runCase("raw UDP command defaults off and accepts only zero or one", [] {
-    raw_stream_enabled = false;
-    arduino_fake::serial_output.clear();
-
-    sendUdpCommandOnce("raw 1");
+  runCase("raw UDP command defaults on and raw zero disables production", [] {
     CHECK(raw_stream_enabled);
-    CHECK(arduino_fake::serial_output.find("Raw IMU ON") != std::string::npos);
+    arduino_fake::serial_output.clear();
 
     sendUdpCommandOnce("raw 2");
     CHECK(raw_stream_enabled);
@@ -2287,22 +2283,43 @@ int main() {
     sendUdpCommandOnce("raw 0");
     CHECK(!raw_stream_enabled);
     CHECK(arduino_fake::serial_output.find("Raw IMU OFF") != std::string::npos);
+
+    imuRawRing = {};
+    connectionEstablished = true;
+    runPidTicks(1);
+    CHECK_EQ(imuRawRingCount(imuRawRing), 0U);
   });
 
-  runCase("pid task publishes raw registers only while the runtime gate is on", [] {
+  runCase("pid task does not publish or drop raw samples before connection", [] {
     imuRawRing = {};
-    raw_stream_enabled = false;
+    ImuRawSample queued = {};
+    for (uint32_t value = 0; value < IMU_RAW_RING_SIZE; value++) {
+      CHECK(imuRawRingPush(imuRawRing, queued, 100000U + value));
+    }
+    rawProducerTimeValid = false;
+    raw_stream_enabled = true;
+    connectionEstablished = false;
+    fault_imu1 = false;
+    fault_imu2 = false;
+    fault_disagree = false;
+
+    runPidTicks(1);
+
+    CHECK_EQ(imuRawRingCount(imuRawRing), IMU_RAW_RING_SIZE);
+    CHECK_EQ(imuRawRing.dropped, 0U);
+  });
+
+  runCase("pid task publishes raw registers while connected and enabled", [] {
+    imuRawRing = {};
+    rawProducerTimeValid = false;
+    raw_stream_enabled = true;
+    connectionEstablished = true;
     fault_imu1 = false;
     fault_imu2 = false;
     fault_disagree = false;
     IMU1.next_event = eventWith(11, -12, 13, -14, 15, -16);
     IMU2.next_event = eventWith(-21, 22, -23, 24, -25, 26);
 
-    runPidTicks(1);
-    CHECK_EQ(imuRawRingCount(imuRawRing), 0U);
-
-    rawProducerTimeValid = false;
-    raw_stream_enabled = true;
     runPidTicks(1);
     CHECK_EQ(imuRawRingCount(imuRawRing), 1U);
     ImuRawSample sample = {};
@@ -2311,7 +2328,6 @@ int main() {
     CHECK_EQ(sample.imu1_accel[0], -14);
     CHECK_EQ(sample.imu2_gyro[0], -21);
     CHECK_EQ(sample.imu2_accel[2], 26);
-    raw_stream_enabled = false;
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count

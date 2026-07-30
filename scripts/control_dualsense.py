@@ -1,3 +1,4 @@
+import argparse
 import csv
 import datetime
 import math
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import pygame
 
+from decode_imu_raw import decode_file
 from failsafe_telemetry import (
     FAILSAFE_PHASE_NAMES,
     FAILSAFE_PROBE_STATE_NAMES,
@@ -22,6 +24,21 @@ from telemetry_schema import (
     parse_telemetry_packet,
     sample_to_csv_row,
 )
+
+
+def _parse_cli_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="DualSense flight controller and telemetry logger",
+    )
+    parser.add_argument(
+        "--no-raw",
+        action="store_true",
+        help="disable the firmware raw stream and do not create IMU raw logs",
+    )
+    return parser.parse_args(argv)
+
+
+cli_args = _parse_cli_args()
 
 # === 설정 ===
 UDP_IP        = "192.168.4.1"
@@ -72,6 +89,7 @@ raw_file = None
 raw_batch_count = 0
 raw_last_dropped = 0
 raw_last_receive_time = 0.0
+raw_capture_enabled = not cli_args.no_raw
 
 # === 상태 변수 ===
 current_throttle = 1000
@@ -586,6 +604,8 @@ def _format_raw_status():
 def _append_raw_datagram(data):
     """Append an opaque ZIMU/ZCAL datagram; inspect only ZIMU header counters."""
     global raw_file, raw_batch_count, raw_last_dropped, raw_last_receive_time
+    if not raw_capture_enabled:
+        return
     if raw_file is None:
         raw_file = raw_log_path.open("ab")
         print(f"[LOG] IMU raw 로그: {raw_log_path}")
@@ -992,10 +1012,42 @@ def shutdown_workers_and_close_log(workers):
         raw_file.flush()
         raw_file.close()
         print(f"[LOG] IMU raw 저장 완료: {raw_log_path}")
+        raw_csv_path = raw_log_path.with_suffix(".csv")
+        print(
+            f"[LOG] IMU raw CSV 변환 시작: {raw_csv_path} "
+            "(10분 세션은 약 12초 소요)"
+        )
+        try:
+            summary = decode_file(raw_log_path, raw_csv_path)
+            dt_us_min = (
+                "-" if summary.dt_us_min is None else summary.dt_us_min
+            )
+            dt_us_max = (
+                "-" if summary.dt_us_max is None else summary.dt_us_max
+            )
+            print(
+                "[LOG] IMU raw CSV 변환 완료: "
+                f"batches={summary.total_batches} "
+                f"samples={summary.total_samples} "
+                f"wireless_lost={summary.lost_batches} "
+                f"producer_dropped={summary.producer_dropped} "
+                "average_sample_rate_hz="
+                f"{summary.average_sample_rate_hz:.3f} "
+                f"dt_us_min={dt_us_min} "
+                f"dt_us_max={dt_us_max}"
+            )
+        except Exception as error:
+            print(
+                f"[WARN] IMU raw CSV 변환 실패: {error} "
+                f"(.bin 유지: {raw_log_path})"
+            )
 
 
 t_telem = threading.Thread(target=telemetry_thread, daemon=True)
 t_ctrl  = threading.Thread(target=controller_thread, daemon=True)
+if not raw_capture_enabled:
+    print("[RAW] --no-raw: 시작 시 드론 raw 스트림을 끕니다.")
+    reliable_send("raw 0")
 t_telem.start()
 t_ctrl.start()
 

@@ -4,7 +4,7 @@
 도구다. 아래 명령은 저장소 루트에서 실행한다.
 
 ```bash
-python scripts/control_dualsense.py
+python scripts/control_dualsense.py [--no-raw]
 python scripts/tune_pid.py
 python scripts/receive_telemetry.py
 python scripts/monitor_telemetry.py
@@ -54,15 +54,23 @@ IMU별 값도 20Hz 스냅샷이므로 Nyquist 주파수는 10Hz다. 프롭 진�
 앨리어싱되며, 이 값이나 `dG`만으로 진동·순간 disagree·freeze를 판정할 수
 없다. 느린 bias/scale 드리프트와 정상상태 오프셋 관찰에만 사용한다.
 
-1kHz 원시 기록이 필요하면 `control_dualsense.py` stdin에서 `raw on`을
-보낸다. 첫 `ZIMU` 또는 `ZCAL` 데이터그램을 받을 때만 기존 flight log와 같은
-타임스탬프의 `logs/imuraw_<timestamp>.bin`을 lazy-open하므로, raw를 쓰지
-않은 보통 세션에는 빈 `.bin`이 남지 않는다. `[STATUS]`의
+1kHz 원시 스트림은 펌웨어에서 기본 ON이다. 첫 `ZIMU` 또는 `ZCAL`
+데이터그램을 받을 때만 기존 flight log와 같은 타임스탬프의
+`logs/imuraw_<timestamp>.bin`을 lazy-open하므로, raw 패킷을 받지 않은
+세션에는 빈 `.bin`이 남지 않는다. `[STATUS]`의
 `Raw=<batches>b/<dropped>d`는 받은 `ZIMU` 배치 수와 펌웨어 생산자 누적
-드롭을 뜻한다. 끝나면 `raw off`를 보낸다.
+드롭을 뜻한다. stdin의 `raw on`/`raw off`로 런타임 게이트를 그대로 바꿀 수
+있다.
 
-`.bin`은 실시간으로 파싱하지 않고 데이터그램 바이트를 그대로 이어 쓴
-파일이다. 비행/벤치가 끝난 뒤 다음처럼 CSV로 변환한다.
+지상국을 종료하면 `.bin`을 닫은 뒤 같은 이름의 `.csv`로 자동 변환하고,
+`batches`, `samples`, `wireless_lost`, `producer_dropped`,
+`average_sample_rate_hz`, `dt_us_min`, `dt_us_max`를 요약한다. 변환 전에
+진행 안내를 출력하며, 실측 비용은 기록 시간의 약 2%라 10분 세션은 약
+12초가 걸린다. 변환이 실패해도 경고만 출력하고 정상 종료하며 원본 `.bin`은
+그대로 남긴다.
+
+`.bin`은 실시간으로 파싱하지 않고 데이터그램 바이트를 그대로 이어 쓴 와이어
+포맷 원본이다. 자동 변환과 별개로 다음처럼 언제든 다시 디코딩할 수 있다.
 
 ```bash
 python scripts/decode_imu_raw.py logs/imuraw_2026-07-30_120000.bin
@@ -75,6 +83,12 @@ dps/g 12축을 기록한다. stderr 요약의 `wireless_lost_batches`는
 `batch_seq` 구멍, `producer_dropped`는 링 포화이며 서로 다른 결측이다.
 `ZCAL`이 없으면 원시 컬럼만 만들고 경고한다. 잘린/알 수 없는/미지원 버전
 레코드는 건너뛰되 각각 개수를 보고한다.
+
+저장 공간이나 RF 부하 때문에 세션 단위로 raw를 쓰지 않으려면
+`python scripts/control_dualsense.py --no-raw`로 시작한다. 시작 시 드론에
+`raw 0`을 반복 전송하고, 수신된 raw 데이터그램도 기록하지 않으므로 해당
+세션에는 `.bin`과 raw `.csv`가 생기지 않는다. 기본 인자 없는 동작은 raw
+기록과 종료 시 자동 변환이다.
 
 하드웨어 LPF는 gyro 121Hz, accel 25Hz다. 1kHz raw 파일이라도 accel에는
 25Hz 위 내용이 없으므로 accel 진동 스펙트럼 분석에는 사용할 수 없다. 이
