@@ -41,6 +41,13 @@ SIL은 믹서·제어법칙의 부호 자기일관성만 확인했다. 이 벤�
    disarm을 한 손에 두고 시작.
 6. **틀리면 밀어붙이지 않는다.** 어떤 모터가 "내려가야 하는데 올라간다" →
    **즉시 stop**, 원인 수정, 재검증. 스로틀을 올려 "되게" 만들려 하지 말 것.
+7. **mag 융합은 검증 전 비행에서 켜지 않는다.** 과거
+   `control_dualsense.py`는 매 시동마다 조종자 선택과 무관하게 `mag 1`을
+   `start` 전에 강제로 보내 모든 비행을 mag 융합 ON으로 만들었다. 현행
+   지상국은 더 이상 강제하지 않으며 기본 선택은 OFF이고, `[STATUS]`의
+   `Mag=0|1`로 드론의 실제 상태를 확인한다. BMM350의 **M-2 heading 정확도
+   벤치 검증을 통과하기 전에는** `mag on`이나 `--mag`로 켠 채 비행하지
+   않는다. mag 오차는 heading hold를 통해 실제 yaw 운동으로 바뀐다.
 
 전류 제한 전원(랩 PSU, 예: 5A 리밋)이 있으면 폭주 시 피해를 줄인다. 없으면
 배터리로 하되 저스로틀 원칙을 더 엄격히.
@@ -56,7 +63,7 @@ SIL은 믹서·제어법칙의 부호 자기일관성만 확인했다. 이 벤�
   ```
   확인할 필드: `Calibration_OK`, `Armed`, `angleX/Y/Z`,
   `Motor_M1..M4`, `PID_Loop_Hz`, `TgtRate_Roll/Pitch/Yaw`, `Yaw_Hold`,
-  `Failsafe_Phase`, `Trim_Roll/Pitch`, `Fault_*`.
+  `Mag_Enabled`, `Failsafe_Phase`, `Trim_Roll/Pitch`, `Fault_*`.
 - 모터 물리 위치 라벨(펌웨어 핀 매핑):
 
   | 텔레메트리 | GPIO | 위치 | 프롭 방향(설계) |
@@ -173,7 +180,7 @@ outer/inner 부호. 텔레메트리 `angle` 부호가 먼저 맞는지 보고(�
 1. `Armed=0`인 상태에서 `control_dualsense.py`를 시작한다. raw 스트림은
    기본 ON이므로 `raw on`을 입력하지 말고, 연결 후 `[STATUS]`의
    `Raw=<batches>b/<dropped>d`에서 배치 수가 증가하는지 확인한다.
-2. 기존 58필드 텔레메트리의 `RC_Dropped_Pkts`와 `PID_Loop_Hz`,
+2. 현행 59필드 텔레메트리의 `RC_Dropped_Pkts`와 `PID_Loop_Hz`,
    `[STATUS]`의 생산자 `dropped`를 나란히 관찰한다.
 3. `RC_Dropped_Pkts` 증가 양상과 `PID_Loop_Hz`가 둘 다 나빠지지 않고,
    `Raw`의 생산자 dropped가 증가하지 않는 것을 확인한 뒤에만 무장한다.
@@ -709,10 +716,11 @@ BMM350 yaw 융합을 넣은 이유가 실측으로 뒷받침된다.
 | `start` | 5 | **2 / 2** |
 | `stop` | 5 | 4 / 4 |
 
-`start`만 일관되게 3개를 잃는다. `arm()`이 `mag 1`을 먼저 보내는데 **첫
-`mag 1`이 `initMagnetometer()`에서 블로킹 I2C + `delay(100)`을 수행**하므로
-그 동안 udp_task가 멈추고 뒤따르는 패킷이 수신 큐에 쌓이다 넘치는 것으로
-보인다.
+`start`만 일관되게 3개를 잃었다. 이 실측 당시 지상국 `arm()`은 매번
+`mag 1`을 강제로 먼저 보냈고, **첫 `mag 1`이 `initMagnetometer()`에서 블로킹
+I2C + `delay(100)`을 수행**하므로 그 동안 udp_task가 멈추고 뒤따르는 패킷이
+수신 큐에 쌓이다 넘친 것으로 보인다. 현행 지상국은 강제 ON을 제거하고
+조종자가 선택한 상태(기본 OFF)를 `start`보다 먼저 보낸다.
 
 **동작에는 문제가 없다** — 하나만 통과하면 무장되고 나머지는 "already armed"로
 거부된다. `stop`이 전부 유실돼도 지상국이 RC 송신을 멈추므로 500ms 뒤

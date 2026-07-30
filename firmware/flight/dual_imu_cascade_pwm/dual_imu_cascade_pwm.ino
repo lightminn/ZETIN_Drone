@@ -1677,8 +1677,8 @@ static void handleGainCommand(const char *buf) {
 // calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z, Yaw_Hold,
 // Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid와 프로브 상태/연속
 // 무반응/최근 차분 반응, IMU1 gyro/accel XYZ, IMU2 gyro/accel XYZ를
-// 보낸 뒤 목표 roll/pitch/yaw 각도를 append-only로 보낸다. IMU별 값은
-// 융합값과 같은 body frame이다.
+// 보낸 뒤 목표 roll/pitch/yaw 각도와 필드 59 Mag_Enabled를 append-only로
+// 보낸다. IMU별 값은 융합값과 같은 body frame이다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
@@ -1689,7 +1689,7 @@ static void sendTelemetry() {
   const float probeResponseSnapshot = fs_probe_response_g;
   const ImuTelemetrySample imuSample = readImuSampleSnapshot();
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1710,7 +1710,7 @@ static void sendTelemetry() {
              imuSample.imu1AccelX, imuSample.imu1AccelY, imuSample.imu1AccelZ,
              imuSample.imu2GyroX, imuSample.imu2GyroY, imuSample.imu2GyroZ,
              imuSample.imu2AccelX, imuSample.imu2AccelY, imuSample.imu2AccelZ,
-             targetAngleX, targetAngleY, targetAngleZ);
+             targetAngleX, targetAngleY, targetAngleZ, (int)mag_enabled);
   udp.endPacket();
 }
 

@@ -1391,7 +1391,7 @@ int main() {
         "implausible accel calibration did not emit the safety warning");
   });
 
-  runCase("telemetry: target angles append after the 55-field packet", [] {
+  runCase("telemetry: target angles and mag state append after field 55", [] {
     PlantState state;
     resetFirmwareState(state);
     connectionEstablished = true;
@@ -1408,6 +1408,7 @@ int main() {
     targetAngleX = 4.25f;
     targetAngleY = -3.5f;
     targetAngleZ = 172.75f;
+    mag_enabled = true;
 
     sendTelemetry();
 
@@ -1422,15 +1423,15 @@ int main() {
         ",1337.50,1,3,2,0.013"
         ",1.25,-2.50,3.75,0.125,-0.250,0.500"
         ",-4.50,5.25,-6.00,-0.625,0.750,-0.875"
-        ",4.25,-3.50,172.75";
+        ",4.25,-3.50,172.75,1";
     detail << "actual field_count=" << field_count
            << ", packet_suffix="
            << packet.substr(
                   packet.size() > expected_suffix.size()
                       ? packet.size() - expected_suffix.size()
                       : 0U)
-           << "; expected field_count=58 and suffix " << expected_suffix;
-    CHECK_MSG(field_count == 58U, detail.str());
+           << "; expected field_count=59 and suffix " << expected_suffix;
+    CHECK_MSG(field_count == 59U, detail.str());
     CHECK_MSG(
         packet.size() >= expected_suffix.size() &&
             packet.compare(

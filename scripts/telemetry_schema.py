@@ -28,6 +28,10 @@ reported targets contain ``trim_roll``, ``trim_pitch``, and ``fs_hold_yaw``:
 the level descent setpoint and held heading. ``TgtAngle_Yaw`` is
 ``yawOuter.target_angle_deg``; when ``Yaw_Hold == 1`` it is the held heading,
 and when ``Yaw_Hold == 0`` it is slaved to the current heading.
+Field 59 reports the firmware's actual ``Mag_Enabled`` fusion state.
+``MagHeading`` (field 31) retains its last value while magnetic fusion is off,
+so it cannot establish whether fusion is active; ``Mag_Enabled`` is the sole
+source of truth for that state.
 """
 
 import math
@@ -92,6 +96,7 @@ TELEMETRY_FIELDS = (
     "TgtAngle_Roll",
     "TgtAngle_Pitch",
     "TgtAngle_Yaw",
+    "Mag_Enabled",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -153,6 +158,7 @@ TELEMETRY_FIELD_TYPES = {
     "TgtAngle_Roll": float,
     "TgtAngle_Pitch": float,
     "TgtAngle_Yaw": float,
+    "Mag_Enabled": int,
 }
 
 GAIN_FIELDS = (
@@ -189,11 +195,11 @@ def _parse_integer(raw, name):
 
 
 def parse_telemetry_packet(line):
-    """Parse a legacy or current (58-field) packet into a fixed-schema dict.
+    """Parse a legacy or current (59-field) packet into a fixed-schema dict.
 
     Fields unavailable in legacy packets are returned as ``None`` so CSV
     files retain the full header without inventing healthy/fault values. Extra
-    future fields are ignored after the known 58 fields. The first
+    future fields are ignored after the known 59 fields. The first
     ``REQUIRED_FIELD_COUNT`` fields must be non-empty: consumers format and
     do arithmetic on them, so a blank there is a malformed packet, not a
     legacy one.

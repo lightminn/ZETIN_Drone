@@ -35,6 +35,11 @@ def _parse_cli_args(argv=None):
         action="store_true",
         help="disable the firmware raw stream and do not create IMU raw logs",
     )
+    parser.add_argument(
+        "--mag",
+        action="store_true",
+        help="start with magnetometer yaw fusion selected (default: off)",
+    )
     return parser.parse_args(argv)
 
 
@@ -90,6 +95,7 @@ raw_batch_count = 0
 raw_last_dropped = 0
 raw_last_receive_time = 0.0
 raw_capture_enabled = not cli_args.no_raw
+mag_enabled_choice = cli_args.mag
 
 # === 상태 변수 ===
 current_throttle = 1000
@@ -406,11 +412,13 @@ def arm():
         with telem_lock:
             current_throttle = 1100
             throttle_f       = 1100.0
-        # mag 융합을 start '전에' 보낸다: armed 상태에선 최초 mag init이 거부되므로
-        # 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도 init이 통과한다.
-        reliable_send("mag 1")   # 자기계 yaw 융합 ON (추정값 드리프트 보정). heading-hold는 켜지 않음
+        # 조종자가 선택한 mag 상태를 start '전에' 보낸다: armed 상태에선 최초
+        # mag init이 거부되므로 아직 disarmed인 이때 보내야 부팅 후 첫 arm에서도
+        # init이 통과한다.
+        reliable_send(f"mag {1 if mag_enabled_choice else 0}")
         reliable_send("start")
-        print("\n>>> [SYSTEM] ARMED (시동 ON, mag ON)")
+        mag_state = "ON" if mag_enabled_choice else "OFF"
+        print(f"\n>>> [SYSTEM] ARMED (시동 ON, mag {mag_state})")
 
 
 def deadzone(v: float, dz: float = 0.05) -> float:
@@ -419,7 +427,7 @@ def deadzone(v: float, dz: float = 0.05) -> float:
 
 def handle_stdin_command(msg: str):
     """Route safety/stateful stdin commands before generic UDP passthrough."""
-    global current_throttle, throttle_f
+    global current_throttle, throttle_f, mag_enabled_choice
 
     command = msg.strip()
     if not command:
@@ -437,6 +445,12 @@ def handle_stdin_command(msg: str):
             print("[STDIN] 사용법: raw on | raw off")
             return
         send_cmd(f"raw {1 if parts[1].lower() == 'on' else 0}")
+    elif parts[0].lower() == "mag":
+        if len(parts) != 2 or parts[1].lower() not in ("on", "off"):
+            print("[STDIN] 사용법: mag on | mag off")
+            return
+        mag_enabled_choice = parts[1].lower() == "on"
+        send_cmd(f"mag {1 if mag_enabled_choice else 0}")
     elif parts[0].lower() == "th":
         if len(parts) != 2:
             print("[STDIN] 사용법: th <val> (정수, 1000~1900)")
@@ -582,6 +596,7 @@ def format_status_telemetry(sample):
         f"Pitch={_format_optional_float(sample.get('Pitch'), 2)} "
         f"Yaw={_format_optional_float(sample.get('Yaw'), 2)} "
         f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
+        f"Mag={_format_binary_flag(sample.get('Mag_Enabled'))} "
         f"Throttle={_format_optional_int(sample.get('Throttle'))} "
         f"Armed={_format_binary_flag(sample.get('Armed'))} "
         f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
@@ -843,7 +858,7 @@ def controller_thread():
     print("--------------- stdin ----------------")
     print(" PID: pa|ia|da, pr|ir|dr, pp|ip|dp, py|iy|dy <val>")
     print("      ap <val>, ar|at|ay <val>")
-    print(" Control: th <val>, yaw <0|1>, raw on|off, gains, start, stop, resume")
+    print(" Control: th <val>, yaw <0|1>, raw on|off, mag on|off, gains, start, stop, resume")
     print("          trim <roll> <pitch>, magc <x> <y> <z>")
     print("======================================")
 

@@ -192,6 +192,7 @@ def _telemetry_sample(**overrides):
         "TgtAngle_Pitch": 0.0,
         "TgtAngle_Yaw": 0.0,
         "Yaw_Hold": 1,
+        "Mag_Enabled": 0,
         "Fault_RC": 0,
         "Fault_Critical": 0,
         "RC_Total_Pkts": 0,
@@ -1400,6 +1401,16 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         finally:
             sys.modules.pop(module_name, None)
 
+    def test_mag_cli_starts_with_mag_enabled_choice_on(self):
+        module_name = "_control_dualsense_mag_under_test"
+        module, _fake_socket = self._load_module(
+            ("--mag",), module_name=module_name,
+        )
+        try:
+            self.assertTrue(module.mag_enabled_choice)
+        finally:
+            sys.modules.pop(module_name, None)
+
     def test_default_cli_keeps_raw_capture_on_and_sends_no_raw_zero(self):
         self.assertTrue(self.module.raw_capture_enabled)
         self.assertNotIn(
@@ -1435,6 +1446,34 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.module.handle_stdin_command("raw off")
 
         self.assertEqual(commands, ["raw 1", "raw 0"])
+
+    def test_stdin_mag_on_and_off_update_choice_and_send_firmware_commands(self):
+        commands = []
+        self.module.send_cmd = commands.append
+
+        self.module.handle_stdin_command("mag on")
+        choice_after_on = self.module.mag_enabled_choice
+        self.module.handle_stdin_command("mag off")
+
+        self.assertTrue(choice_after_on)
+        self.assertFalse(self.module.mag_enabled_choice)
+        self.assertEqual(commands, ["mag 1", "mag 0"])
+
+    def test_status_mag_uses_telemetry_even_when_ground_choice_is_on(self):
+        self.module.mag_enabled_choice = True
+
+        status = self.module.format_status_telemetry(
+            _telemetry_sample(Mag_Enabled=0)
+        )
+
+        self.assertIn("Mag=0", status)
+
+    def test_status_mag_is_dash_when_telemetry_field_is_unknown(self):
+        status = self.module.format_status_telemetry(
+            _telemetry_sample(Mag_Enabled=None)
+        )
+
+        self.assertIn("Mag=-", status)
 
     def test_telemetry_thread_advances_resume_attempt(self):
         commands = []
@@ -1571,7 +1610,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertTrue(self.module.is_streaming)
         self.assertEqual(self.module.current_throttle, 1100)
         self.assertEqual(self.module.throttle_f, 1100.0)
-        self.assertEqual(reliable_commands, ["mag 1", "start"])
+        self.assertEqual(reliable_commands, ["mag 0", "start"])
         self.assertEqual(
             direct_commands,
             [],
@@ -1885,7 +1924,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertTrue(self.module.is_armed)
         self.assertFalse(self.module.is_streaming)
 
-    def test_arm_preserves_sequence_and_does_not_send_trim(self):
+    def test_arm_defaults_mag_off_before_start_and_does_not_send_trim(self):
         commands = []
         self.module.reliable_send = commands.append
         self.module.rc_seq = 73
@@ -1894,10 +1933,27 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
 
         self.module.arm()
 
-        self.assertEqual(commands, ["mag 1", "start"])
+        self.assertEqual(commands, ["mag 0", "start"])
         self.assertEqual(self.module.rc_seq, 73)
         self.assertTrue(self.module.is_armed)
         self.assertTrue(self.module.is_streaming)
+
+    def test_arm_uses_latest_mag_choice_for_on_and_off(self):
+        for choice_command, expected_mag_command in (
+            ("mag on", "mag 1"),
+            ("mag off", "mag 0"),
+        ):
+            with self.subTest(choice_command=choice_command):
+                commands = []
+                self.module.send_cmd = lambda _command: None
+                self.module.reliable_send = commands.append
+                self.module.handle_stdin_command(choice_command)
+                self.module.is_armed = False
+                self.module.is_streaming = False
+
+                self.module.arm()
+
+                self.assertEqual(commands, [expected_mag_command, "start"])
 
     def test_arm_serializes_start_against_concurrent_disarm(self):
         commands = []
@@ -1934,7 +1990,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertFalse(stop_raced_start)
         self.assertFalse(arm_thread.is_alive())
         self.assertFalse(disarm_thread.is_alive())
-        self.assertEqual(commands, ["mag 1", "start", "stop"])
+        self.assertEqual(commands, ["mag 0", "start", "stop"])
         self.assertFalse(self.module.is_armed)
         self.assertFalse(self.module.is_streaming)
 
@@ -2034,6 +2090,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             "ar|at|ay",
             "th <val>",
             "yaw <0|1>",
+            "mag on|off",
             "gains",
             "start",
             "stop",

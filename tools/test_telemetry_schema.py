@@ -103,6 +103,7 @@ EXPECTED_TELEMETRY_FIELDS = (
     "Failsafe_Probe_Response_G",
     *IMU_TELEMETRY_NAMES,
     *TARGET_ANGLE_TELEMETRY_NAMES,
+    "Mag_Enabled",
 )
 
 
@@ -142,8 +143,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Failsafe_Probe_Response_G",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(58, len(TELEMETRY_FIELDS))
-        self.assertEqual(59, len(CSV_FIELDS))
+        self.assertEqual(59, len(TELEMETRY_FIELDS))
+        self.assertEqual(60, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -258,7 +259,7 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIsNone(sample["Failsafe_Probe_NoResponse"])
         self.assertIsNone(sample["Failsafe_Probe_Response_G"])
 
-    def test_43_field_packet_appends_failsafe_probe_diagnostics(self):
+    def test_43_field_packet_still_parses_failsafe_probe_diagnostics(self):
         packet = ",".join(["1"] * 40 + ["3", "2", "0.0125"])
         sample = telemetry_schema.parse_telemetry_packet(packet)
         self.assertEqual(sample["Failsafe_Probe_State"], 3)
@@ -267,6 +268,7 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIs(type(sample["Failsafe_Probe_NoResponse"]), int)
         self.assertAlmostEqual(sample["Failsafe_Probe_Response_G"], 0.0125)
         self.assertIs(type(sample["Failsafe_Probe_Response_G"]), float)
+        self.assertIsNone(sample["Mag_Enabled"])
 
     def test_55_field_packet_appends_per_imu_body_frame_values(self):
         imu_values = (
@@ -295,6 +297,15 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             self.assertIn(name, sample)
             self.assertEqual(expected, sample[name])
             self.assertIs(type(sample[name]), float)
+        self.assertIsNone(sample["Mag_Enabled"])
+
+    def test_59_field_packet_appends_actual_mag_enabled_state(self):
+        current_packet = ",".join(["1"] * 58 + ["0"])
+
+        sample = parse_telemetry_packet(current_packet)
+
+        self.assertEqual(0, sample["Mag_Enabled"])
+        self.assertIs(type(sample["Mag_Enabled"]), int)
 
     def test_55_field_packet_leaves_target_angles_unknown(self):
         sample = parse_telemetry_packet(",".join(["1"] * 55))
@@ -313,9 +324,9 @@ class TelemetryCompatibilityTest(unittest.TestCase):
     def test_per_imu_field_names_are_appended_in_exact_wire_order(self):
         self.assertEqual(IMU_TELEMETRY_NAMES, TELEMETRY_FIELDS[43:55])
 
-    def test_field_names_and_order_match_the_58_field_wire_contract(self):
+    def test_field_names_and_order_match_the_59_field_wire_contract(self):
         self.assertEqual(EXPECTED_TELEMETRY_FIELDS, TELEMETRY_FIELDS)
-        self.assertEqual(58, len(TELEMETRY_FIELDS))
+        self.assertEqual(59, len(TELEMETRY_FIELDS))
 
     def test_35_field_packet_leaves_new_fields_none(self):
         packet = ",".join(["1"] * 35)
@@ -324,8 +335,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIsNone(sample["Trim_Roll"])
         self.assertIsNone(sample["Trim_Pitch"])
 
-    def test_csv_has_59_columns(self):
-        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 59)
+    def test_csv_has_60_columns(self):
+        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 60)
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in (
@@ -339,6 +350,7 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Hover_Valid",
             "Failsafe_Probe_State",
             "Failsafe_Probe_NoResponse",
+            "Mag_Enabled",
         ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], int)
         for name in (
