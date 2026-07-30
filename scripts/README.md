@@ -4,7 +4,7 @@
 도구다. 아래 명령은 저장소 루트에서 실행한다.
 
 ```bash
-python scripts/control_dualsense.py [--no-raw] [--mag]
+python scripts/control_dualsense.py [--no-raw] [--no-mag]
 python scripts/tune_pid.py
 python scripts/receive_telemetry.py
 python scripts/monitor_telemetry.py
@@ -44,10 +44,12 @@ matplotlib을 불러오므로 터미널 요약에는 matplotlib이 필요 없다
 `control_dualsense.py`는 정상 조종·벤치 작업에서 쓰는 **유일한 대화형
 지상국**이다. DualSense RC 스트리밍, stdin 명령·PID 조정, `gains` 확인,
 상태/고장 표시와 CSV 기록을 한 프로세스에서 처리한다.
-자기계 yaw 융합 선택은 기본 **OFF**다. stdin의 `mag on`/`mag off`가 선택을
-바꾸고 드론에 즉시 `mag 1`/`mag 0`을 보내며, 다음 시동에서도 지상국이 그
-선택을 `start`보다 먼저 다시 보낸다. 시작부터 명시적으로 ON을 선택하려면
-`python scripts/control_dualsense.py --mag`를 사용한다. `[STATUS]`의
+자기계 yaw 융합 선택은 기본 **ON**이다(BMM350 벤치 검증 완료, 자이로 단독은
+`YAW_DEADZONE` 이하 회전을 되돌릴 수단이 없다 → `docs/bmm350_yaw_bench_test.md`).
+stdin의 `mag on`/`mag off`가 선택을 바꾸고 드론에 즉시 `mag 1`/`mag 0`을
+보내며, 다음 시동에서도 지상국이 그 선택을 `start`보다 먼저 다시 보낸다.
+꺼진 상태로 시작하려면 `python scripts/control_dualsense.py --no-mag`를
+사용한다. `[STATUS]`의
 `Mag=`는 지상국 선택이 아니라 텔레메트리 `Mag_Enabled`이므로 명령 거부·유실도
 드러나며, 구형 패킷에서는 `-`다.
 무장 중 `[DIAG]` 줄의 `dG`는 세 body-frame gyro 축에서 계산한

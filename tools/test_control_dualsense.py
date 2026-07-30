@@ -1401,15 +1401,18 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         finally:
             sys.modules.pop(module_name, None)
 
-    def test_mag_cli_starts_with_mag_enabled_choice_on(self):
+    def test_no_mag_cli_starts_with_mag_enabled_choice_off(self):
         module_name = "_control_dualsense_mag_under_test"
         module, _fake_socket = self._load_module(
-            ("--mag",), module_name=module_name,
+            ("--no-mag",), module_name=module_name,
         )
         try:
-            self.assertTrue(module.mag_enabled_choice)
+            self.assertFalse(module.mag_enabled_choice)
         finally:
             sys.modules.pop(module_name, None)
+
+    def test_default_cli_selects_mag_fusion_on(self):
+        self.assertTrue(self.module.mag_enabled_choice)
 
     def test_default_cli_keeps_raw_capture_on_and_sends_no_raw_zero(self):
         self.assertTrue(self.module.raw_capture_enabled)
@@ -1610,7 +1613,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertTrue(self.module.is_streaming)
         self.assertEqual(self.module.current_throttle, 1100)
         self.assertEqual(self.module.throttle_f, 1100.0)
-        self.assertEqual(reliable_commands, ["mag 0", "start"])
+        self.assertEqual(reliable_commands, ["mag 1", "start"])
         self.assertEqual(
             direct_commands,
             [],
@@ -1924,7 +1927,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertTrue(self.module.is_armed)
         self.assertFalse(self.module.is_streaming)
 
-    def test_arm_defaults_mag_off_before_start_and_does_not_send_trim(self):
+    def test_arm_defaults_mag_on_before_start_and_does_not_send_trim(self):
         commands = []
         self.module.reliable_send = commands.append
         self.module.rc_seq = 73
@@ -1933,7 +1936,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
 
         self.module.arm()
 
-        self.assertEqual(commands, ["mag 0", "start"])
+        self.assertEqual(commands, ["mag 1", "start"])
         self.assertEqual(self.module.rc_seq, 73)
         self.assertTrue(self.module.is_armed)
         self.assertTrue(self.module.is_streaming)
@@ -1990,7 +1993,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertFalse(stop_raced_start)
         self.assertFalse(arm_thread.is_alive())
         self.assertFalse(disarm_thread.is_alive())
-        self.assertEqual(commands, ["mag 0", "start", "stop"])
+        self.assertEqual(commands, ["mag 1", "start", "stop"])
         self.assertFalse(self.module.is_armed)
         self.assertFalse(self.module.is_streaming)
 

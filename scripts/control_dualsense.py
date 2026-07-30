@@ -36,9 +36,9 @@ def _parse_cli_args(argv=None):
         help="disable the firmware raw stream and do not create IMU raw logs",
     )
     parser.add_argument(
-        "--mag",
+        "--no-mag",
         action="store_true",
-        help="start with magnetometer yaw fusion selected (default: off)",
+        help="start with magnetometer yaw fusion deselected (default: on)",
     )
     return parser.parse_args(argv)
 
@@ -95,7 +95,7 @@ raw_batch_count = 0
 raw_last_dropped = 0
 raw_last_receive_time = 0.0
 raw_capture_enabled = not cli_args.no_raw
-mag_enabled_choice = cli_args.mag
+mag_enabled_choice = not cli_args.no_mag
 
 # === 상태 변수 ===
 current_throttle = 1000
