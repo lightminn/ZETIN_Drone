@@ -1111,6 +1111,134 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertIn("Hover_Est=1423.6", diag_lines[0])
         self.assertIn("Hover_Valid=1", diag_lines[0])
 
+    def _trim_datagrams(self):
+        return [
+            data.decode() for data, _addr in self.module.sock.sent
+            if data.startswith(b"trim ")
+        ]
+
+    def test_send_trim_sends_once_without_blocking_the_rc_thread(self):
+        # send_trim은 rcr을 50Hz로 보내는 controller_thread에서 호출된다.
+        # reliable_send는 STOP_RETRIES회 sleep하므로 RC 업링크를 멈춘다.
+        self.module.sock = _FakeSocket()
+        self.module.trim_roll = 0.4
+        self.module.trim_pitch = -0.6
+        blocking = []
+        with (
+            mock.patch.object(
+                self.module, "reliable_send",
+                side_effect=lambda cmd: blocking.append(cmd),
+            ),
+            mock.patch.object(
+                self.module.time, "sleep",
+                side_effect=lambda s: blocking.append(f"sleep {s}"),
+            ),
+        ):
+            self.module.send_trim()
+
+        self.assertEqual([], blocking)
+        self.assertEqual(["trim 0.40 -0.60"], self._trim_datagrams())
+
+    def test_trim_is_resent_while_the_drone_still_disagrees(self):
+        self.module.trim_synced = True
+        self.module.trim_roll = 1.0
+        self.module.trim_pitch = -2.0
+        self.module.last_trim_resend = 0.0
+
+        self._run_telemetry([_telemetry_sample(Trim_Roll=0.0, Trim_Pitch=0.0)])
+
+        self.assertEqual(["trim 1.00 -2.00"], self._trim_datagrams())
+
+    def test_trim_is_not_resent_once_the_drone_agrees(self):
+        self.module.trim_synced = True
+        self.module.trim_roll = 1.0
+        self.module.trim_pitch = -2.0
+        self.module.last_trim_resend = 0.0
+
+        self._run_telemetry(
+            [_telemetry_sample(Trim_Roll=1.0, Trim_Pitch=-2.0)] * 4
+        )
+
+        self.assertEqual([], self._trim_datagrams())
+
+    def test_trim_resend_is_rate_limited(self):
+        self.module.trim_synced = True
+        self.module.trim_roll = 1.0
+        self.module.trim_pitch = 0.0
+        self.module.last_trim_resend = 0.0
+
+        # 20Hz 텔레메트리 8샘플은 TRIM_RESEND_PERIOD(0.2s) 안이다.
+        self._run_telemetry(
+            [_telemetry_sample(Trim_Roll=0.0, Trim_Pitch=0.0)] * 8
+        )
+
+        self.assertEqual(1, len(self._trim_datagrams()))
+
+    def test_trim_resend_skipped_when_drone_trim_is_unknown(self):
+        self.module.trim_synced = True
+        self.module.trim_roll = 1.0
+        self.module.trim_pitch = 0.0
+        self.module.last_trim_resend = 0.0
+
+        self._run_telemetry(
+            [_telemetry_sample(Trim_Roll=None, Trim_Pitch=None)] * 4
+        )
+
+        self.assertEqual([], self._trim_datagrams())
+
+    def test_initial_sync_still_adopts_the_drone_trim(self):
+        self.module.trim_synced = False
+        self.module.trim_roll = 0.0
+        self.module.trim_pitch = 0.0
+
+        self._run_telemetry([_telemetry_sample(Trim_Roll=1.4, Trim_Pitch=-0.8)])
+
+        self.assertTrue(self.module.trim_synced)
+        self.assertAlmostEqual(1.4, self.module.trim_roll)
+        self.assertAlmostEqual(-0.8, self.module.trim_pitch)
+        self.assertEqual([], self._trim_datagrams())
+
+    def test_armed_diag_trim_reports_the_drone_value_not_the_local_one(self):
+        self.module.is_armed = True
+        self.module.trim_synced = True
+        self.module.trim_roll = 9.9
+        self.module.trim_pitch = 9.9
+        self.module.last_trim_resend = self.module.time.monotonic()
+        sample = _telemetry_sample(
+            Failsafe_Phase=0, Trim_Roll=1.2, Trim_Pitch=-0.4,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("Trim=+1.2/-0.4!", diag)
+
+    def test_armed_diag_trim_has_no_marker_when_the_drone_agrees(self):
+        self.module.is_armed = True
+        self.module.trim_synced = True
+        self.module.trim_roll = 1.2
+        self.module.trim_pitch = -0.4
+        sample = _telemetry_sample(
+            Failsafe_Phase=0, Trim_Roll=1.2, Trim_Pitch=-0.4,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("Trim=+1.2/-0.4 ", diag)
+        self.assertNotIn("!", diag)
+
+    def test_armed_diag_trim_is_dash_when_unknown(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Failsafe_Phase=0, Trim_Roll=None, Trim_Pitch=None,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("Trim=-", diag)
+
     def test_armed_diag_line_reports_target_minus_measured_angle_errors(self):
         self.module.is_armed = True
         sample = _telemetry_sample(
@@ -2039,7 +2167,10 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
 
     def test_dpad_trim_is_clamped_to_firmware_limit(self):
         commands = []
-        self.module.reliable_send = commands.append
+        # send_trim은 블로킹하지 않는 send_cmd 경로를 쓴다.
+        self.module.send_cmd = lambda cmd: (
+            commands.append(cmd) if cmd.startswith('trim ') else None
+        )
         self.module.is_armed = True
         self.module.is_streaming = True
         self.module.trim_roll = 9.9
@@ -2056,7 +2187,10 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
 
     def test_trim_reset_button_is_edge_triggered(self):
         commands = []
-        self.module.reliable_send = commands.append
+        # send_trim은 블로킹하지 않는 send_cmd 경로를 쓴다.
+        self.module.send_cmd = lambda cmd: (
+            commands.append(cmd) if cmd.startswith('trim ') else None
+        )
         self.module.is_armed = True
         self.module.is_streaming = True
         self.module.trim_roll = 1.0

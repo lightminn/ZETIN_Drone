@@ -52,6 +52,8 @@ CTRL_LOOP_HZ  = 20          # 제어 루프 주기 (50ms)
 MAX_ANGLE     = 15.0
 YAW_RATE_MAX_DPS = 90.0     # 스틱 최대 편향 시 yaw 각속도 (dps). 조종감은 여기서 조정
 THROTTLE_RATE = 200.0        # 오른쪽 스틱 최대 편향 시 스로틀 변화율 (µs/s)
+TRIM_TOLERANCE      = 0.01   # 드론 트림과 일치로 볼 오차 (텔레메트리가 %.2f)
+TRIM_RESEND_PERIOD  = 0.2    # 불일치가 이어질 때 재전송 최소 간격 (초)
 TRIM_STEP     = 0.2
 TRIM_MAX_DEG  = 10.0
 STOP_RETRIES  = 5            # stop/start 재전송 횟수
@@ -103,6 +105,7 @@ throttle_f       = 1000.0   # 아날로그 스로틀 적분용 (µs, float)
 trim_roll        = 0.0
 trim_pitch       = 0.0
 trim_synced      = False
+last_trim_resend = 0.0
 is_armed         = False
 is_streaming     = False
 last_arm_time    = 0.0      # 드론 Armed 필드와 대조할 grace 기준 시각
@@ -182,9 +185,16 @@ def disarm(reason: str = "수동"):
 
 
 def send_trim():
-    """트림을 절대값으로 드론에 보낸다. 손실되면 자동착륙 방향이 틀어지므로
-    start/stop과 같은 급으로 반복 전송한다."""
-    reliable_send(f"trim {trim_roll:.2f} {trim_pitch:.2f}")
+    """트림을 절대값으로 드론에 한 번 보낸다.
+
+    reliable_send를 쓰면 안 된다. 그것은 STOP_RETRIES회 sleep하며 도는데,
+    이 함수는 rcr을 50Hz로 보내는 controller_thread에서 호출되므로 그 동안
+    RC 업링크가 통째로 멈춘다. 유실 대비는 블로킹 재시도가 아니라
+    텔레메트리의 Trim_Roll/Trim_Pitch와 비교해 다시 보내는 닫힌 루프로
+    처리한다(telemetry_thread). trim은 증분이 아니라 절대값 명령이라
+    재전송이 안전하다.
+    """
+    send_cmd(f"trim {trim_roll:.2f} {trim_pitch:.2f}")
 
 
 def stop_streaming_only(reason: str):
@@ -487,6 +497,23 @@ def _format_optional_float(value, decimal_places):
     return f"{numeric:.{decimal_places}f}"
 
 
+def _format_drone_trim(sample):
+    """드론이 실제로 들고 있는 트림. 지상국 값과 다르면 끝에 '!'를 붙인다.
+
+    지상국 변수를 표시하면 안 된다 — 그것은 조종자의 의도이지 드론의
+    상태가 아니므로, trim 패킷이 유실되거나 거부돼도 성공과 똑같이 보인다.
+    """
+    drone_roll = sample.get("Trim_Roll")
+    drone_pitch = sample.get("Trim_Pitch")
+    if drone_roll is None or drone_pitch is None:
+        return "-"
+    mismatch = (
+        abs(drone_roll - trim_roll) > TRIM_TOLERANCE
+        or abs(drone_pitch - trim_pitch) > TRIM_TOLERANCE
+    )
+    return f"{drone_roll:+.1f}/{drone_pitch:+.1f}{'!' if mismatch else ''}"
+
+
 def _format_angle_error(target, measured):
     try:
         error = float(target) - float(measured)
@@ -650,7 +677,7 @@ def telemetry_thread():
     global fault_rc_drone, fault_critical_drone
     global telem_total_pkts, telem_dropped_pkts
     global telem_failsafe_phase, telem_hover_est, telem_hover_valid
-    global trim_roll, trim_pitch, trim_synced
+    global trim_roll, trim_pitch, trim_synced, last_trim_resend
 
     print("[TELEM] 수신 스레드 시작")
     prev_fault_rc = False
@@ -725,6 +752,7 @@ def telemetry_thread():
             continue
 
         received_at = time.monotonic()
+        pending_trim_resend = None
         with telem_lock:
             telem_angle_x      = sample["Roll"]
             telem_angle_y      = sample["Pitch"]
@@ -737,13 +765,25 @@ def telemetry_thread():
             telem_hover_est = sample["Hover_Est"]
             telem_hover_valid = sample["Hover_Valid"] == 1
             last_telem_time    = received_at
+            received_trim_roll = sample["Trim_Roll"]
+            received_trim_pitch = sample["Trim_Pitch"]
             if not trim_synced:
-                received_trim_roll = sample["Trim_Roll"]
-                received_trim_pitch = sample["Trim_Pitch"]
+                # 조종자가 아직 트림을 건드리지 않았다: 드론이 권위다.
                 if received_trim_roll is not None and received_trim_pitch is not None:
                     trim_roll = received_trim_roll
                     trim_pitch = received_trim_pitch
                     trim_synced = True
+            elif received_trim_roll is not None and received_trim_pitch is not None:
+                # 조종자가 바꾼 뒤로는 지상국이 권위다. 드론이 아직 동의하지
+                # 않으면 다시 보낸다. 전송은 락 밖에서 한다.
+                if (abs(received_trim_roll - trim_roll) > TRIM_TOLERANCE
+                        or abs(received_trim_pitch - trim_pitch) > TRIM_TOLERANCE):
+                    pending_trim_resend = (trim_roll, trim_pitch)
+
+        if (pending_trim_resend is not None
+                and received_at - last_trim_resend >= TRIM_RESEND_PERIOD):
+            last_trim_resend = received_at
+            send_cmd(f"trim {pending_trim_resend[0]:.2f} {pending_trim_resend[1]:.2f}")
 
         if telemetry_lost:
             print("[OK] 텔레메트리 수신 복구")
@@ -791,6 +831,7 @@ def telemetry_thread():
                       f"eR={_format_angle_error(sample.get('TgtAngle_Roll'), sample.get('Roll'))} "
                       f"eP={_format_angle_error(sample.get('TgtAngle_Pitch'), sample.get('Pitch'))} "
                       f"gZ={gz:+6.1f} dG={_format_gyro_disagreement(sample)} "
+                      f"Trim={_format_drone_trim(sample)} "
                       f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
                       f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
                       f"th={sample['Throttle']} "
