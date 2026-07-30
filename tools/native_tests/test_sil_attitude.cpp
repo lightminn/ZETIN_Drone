@@ -387,6 +387,7 @@ void resetFirmwareState(const PlantState &initial) {
   targetAngleX = 0.0f;
   targetAngleY = 0.0f;
   targetAngleZ = 0.0f;
+  targetYawRate = 0.0f;
   angleX = static_cast<float>(initial.phi * kRadToDeg);
   angleY = static_cast<float>(initial.theta * kRadToDeg);
   angleZ = static_cast<float>(initial.psi * kRadToDeg);
@@ -1946,8 +1947,14 @@ int main() {
         kPlantParameters.thrust_per_us_n;
     const double disturbance_nm = yaw_torque_per_us * 1.50 * 20.0;
 
-    const RunResult result =
-        runSil(constantYawDisturbance(0.05f, disturbance_nm, 3000));
+    RunConfig config =
+        constantYawDisturbance(0.05f, disturbance_nm, 3000);
+    // heading hold는 외란으로 풀리지 않는다. 실제 스틱 명령으로 rate 모드에
+    // 진입시켜 이 테스트의 본래 목적(그 모드에서 yaw 적분 누적)을 검증한다.
+    config.state_for_tick = [](uint32_t, PlantState &) {
+      targetYawRate = 45.0f;
+    };
+    const RunResult result = runSil(config);
 
     std::size_t rate_mode_samples = 0;
     double max_i_yaw_rate_mode = 0.0;

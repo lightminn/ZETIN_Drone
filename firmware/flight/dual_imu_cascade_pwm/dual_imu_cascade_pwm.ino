@@ -1421,7 +1421,8 @@ void pid_task(void *pv) {
     // 매 tick 현재 heading으로 슬레이빙해 stale setpoint를 원천 차단한다.
     const YawOuter yawOuter = updateYawOuter(
         targetYawRate, bodyGz, angleZ, targetAngleZ,
-        yaw_hold_override, YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
+        yaw_hold_now, yaw_hold_override,
+        YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
     targetAngleZ = yawOuter.target_angle_deg;
     yaw_hold_now = yawOuter.hold;
 

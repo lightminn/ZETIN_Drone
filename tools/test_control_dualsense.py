@@ -232,7 +232,7 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         sys.path.remove(str(SCRIPTS_DIR))
 
     def setUp(self):
-        self.module, _ = self._load_module()
+        self.module, self.startup_socket = self._load_module()
         self.module.shutdown_event.clear()
         self.module.last_telem_time = self.module.time.monotonic()
 
@@ -1399,6 +1399,13 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
                 self.assertFalse(raw_path.exists())
         finally:
             sys.modules.pop(module_name, None)
+
+    def test_default_cli_keeps_raw_capture_on_and_sends_no_raw_zero(self):
+        self.assertTrue(self.module.raw_capture_enabled)
+        self.assertNotIn(
+            (b"raw 0", (self.module.UDP_IP, self.module.UDP_PORT)),
+            self.startup_socket.sent,
+        )
 
     def test_status_line_reports_raw_batch_and_producer_drop_counts(self):
         self.module.raw_batch_count = 1234

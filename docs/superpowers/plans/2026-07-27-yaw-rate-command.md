@@ -48,6 +48,12 @@
   `YawOuter updateYawOuter(float target_yaw_rate_dps, float body_gz_dps, float angle_z_deg, float prev_target_angle_deg, bool override_hold, float rate_deadzone_dps, float settle_dps)`,
   `float yawTargetRateDps(const YawOuter &s, float target_yaw_rate_dps, float angle_z_deg, float kp_angle_yaw, float max_rate_dps)`
 
+> **2026-07-30 개정:** hold는 latching으로 바뀌었고 `updateYawOuter`에
+> `prev_target_angle_deg` 바로 뒤 `bool prev_hold` 인자가 추가됐다. 직전 잠금
+> 상태 없이는 스틱을 놓은 뒤의 정착 대기와 잠금 중 외란을 구분할 수 없어,
+> `settled`는 새 잠금의 진입 게이트로만 사용하고 기존 잠금은 스틱 입력 전까지
+> 유지한다. 아래 내용은 2026-07-27 당시 계획 기록이므로 다시 쓰지 않는다.
+
 - [ ] **Step 1: 실패하는 테스트 작성**
 
 `tools/native_tests/test_yaw_command.cpp`:
