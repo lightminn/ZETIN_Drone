@@ -179,7 +179,7 @@ ar|at|ay <value>      # roll / pitch / yaw
 
 ## 드론 → 지상국
 
-텔레메트리는 다음 55개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
+텔레메트리는 다음 58개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
 
 ```text
 Roll, Pitch, Yaw,
@@ -202,14 +202,15 @@ Failsafe_Probe_Response_G,
 IMU1_Gyro_X, IMU1_Gyro_Y, IMU1_Gyro_Z,
 IMU1_Accel_X, IMU1_Accel_Y, IMU1_Accel_Z,
 IMU2_Gyro_X, IMU2_Gyro_Y, IMU2_Gyro_Z,
-IMU2_Accel_X, IMU2_Accel_Y, IMU2_Accel_Z
+IMU2_Accel_X, IMU2_Accel_Y, IMU2_Accel_Z,
+TgtAngle_Roll, TgtAngle_Pitch, TgtAngle_Yaw
 ```
 
 기존 21개 필드 뒤에 `Armed`(22), Tier 1 관측 필드(23~30), `MagHeading`(31),
 `Mag_X`/`Mag_Y`/`Mag_Z`(32~34), `Yaw_Hold`(35), `Failsafe_Phase`(36),
 `Trim_Roll`/`Trim_Pitch`(37~38), `Hover_Est`(39), `Hover_Valid`(40),
 프로브 진단(41~43), IMU1 gyro/accel(44~49), IMU2 gyro/accel(50~55)을
-차례로 append한다.
+차례로 append하고 목표 roll/pitch/yaw 각도(56~58)를 마지막에 append한다.
 
 - `Armed`는 펌웨어 safety lock의 반전값이다. `start`가 거부되거나
   펌웨어가 스스로 시동을 해제한 것을 지상국이 이 필드로 감지한다.
@@ -241,6 +242,19 @@ IMU2_Accel_X, IMU2_Accel_Y, IMU2_Accel_Z
 | 53 | `IMU2_Accel_X` | float | IMU2 body-frame X 가속도(g), 소프트웨어 LPF 없음 |
 | 54 | `IMU2_Accel_Y` | float | IMU2 body-frame Y 가속도(g), 소프트웨어 LPF 없음 |
 | 55 | `IMU2_Accel_Z` | float | IMU2 body-frame Z 가속도(g), 소프트웨어 LPF 없음 |
+| 56 | `TgtAngle_Roll` | float | 펌웨어가 사용하는 roll 목표 각도(deg) |
+| 57 | `TgtAngle_Pitch` | float | 펌웨어가 사용하는 pitch 목표 각도(deg) |
+| 58 | `TgtAngle_Yaw` | float | yaw outer loop의 목표 방위(deg) |
+
+목표 각도 필드는 다음처럼 해석해야 한다.
+
+- 일반 비행의 `TgtAngle_Roll`/`TgtAngle_Pitch`는
+  `constrain(command + trim, ...)` 결과이므로 트림이 이미 합산된 setpoint다.
+  `Trim_Roll`/`Trim_Pitch`를 다시 더하면 이중 계산이다.
+- 자동착륙(`Failsafe_Phase != 0`)에서는 `trim_roll`, `trim_pitch`,
+  `fs_hold_yaw`가 들어간다. 즉 하강 중 수평 setpoint와 유지 방위를 나타낸다.
+- `TgtAngle_Yaw`는 `yawOuter.target_angle_deg`다. `Yaw_Hold=1`이면 유지 중인
+  방위이고, `Yaw_Hold=0`이면 현재 heading에 슬레이빙된 값이다.
 
 `Yaw`(3번, 융합 결과)와 `MagHeading`(31번, mag heading)의 차이를 보면
 융합이 실제로 동작하는지 확인할 수 있다. `Mag_X`~`Mag_Z`는 모터 전류 간섭
@@ -289,9 +303,10 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 - 38필드 패킷은 `Trim_Pitch`에서 끝난다 (호버 추정 텔레메트리 도입 이전 펌웨어).
 - 40필드 패킷은 `Hover_Valid`에서 끝난다 (능동 프로브 진단 도입 이전 펌웨어).
 - 43필드 패킷은 `Failsafe_Probe_Response_G`에서 끝난다 (IMU별 텔레메트리 도입 이전 펌웨어).
+- 55필드 패킷은 `IMU2_Accel_Z`에서 끝난다 (목표 각도 텔레메트리 도입 이전 펌웨어).
 - 과거 패킷에 없는 값은 정규화된 CSV에서 빈 셀이 된다.
 - `Timestamp`는 드론이 보내지 않는다. 지상 도구가 CSV의 첫 열로 추가하므로
-  현행 CSV는 56개 열이 된다.
+  현행 CSV는 59개 열이 된다.
 
 공유 구현은
 [`telemetry_schema.py`](../scripts/telemetry_schema.py)에 있다.
@@ -348,7 +363,7 @@ raw 스트림이 켜져 있는 동안 1초에 한 번 보내는 60바이트 리�
 | 44 | `accel_scale` | `float` | 4 | `ACCEL_SCALE` |
 | 48 | `imu2_sign` | `float[3]` | 12 | `IMU2_SIGN_X/Y/Z` |
 
-`ZIMU`, `ZCAL`, 기존 55필드 ASCII 텔레메트리는 모두 **같은 UDP 포트
+`ZIMU`, `ZCAL`, 현행 58필드 ASCII 텔레메트리는 모두 **같은 UDP 포트
 4210, 같은 `laptopIP`/`laptopPort` 목적지**로 온다. 지상국은 UTF-8
 디코드보다 먼저 첫 4바이트를 검사해 `ZIMU`/`ZCAL`을 바이너리 로그로
 분기해야 한다. 그 외 데이터그램만 ASCII/`GAINS` 파서로 넘긴다.

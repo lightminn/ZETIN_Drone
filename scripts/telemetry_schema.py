@@ -20,6 +20,14 @@ the fused fields. Per-IMU gyro is sampled after its software LPF; per-IMU
 accel has no software LPF. When ``Active_IMUs == 2`` and
 ``Fault_Disagree == 0``, each fused gyro/accel axis equals the average of the
 corresponding IMU1 and IMU2 axes within floating-point rounding error.
+Fields 56-58 append the roll, pitch, and yaw target angles. In normal flight,
+``targetAngleX`` and ``targetAngleY`` are ``constrain(command + trim, ...)``,
+so these setpoints already include ``Trim_Roll``/``Trim_Pitch``; adding the
+trim again double-counts it. During auto-land (``Failsafe_Phase != 0``), the
+reported targets contain ``trim_roll``, ``trim_pitch``, and ``fs_hold_yaw``:
+the level descent setpoint and held heading. ``TgtAngle_Yaw`` is
+``yawOuter.target_angle_deg``; when ``Yaw_Hold == 1`` it is the held heading,
+and when ``Yaw_Hold == 0`` it is slaved to the current heading.
 """
 
 import math
@@ -81,6 +89,9 @@ TELEMETRY_FIELDS = (
     "IMU2_Accel_X",
     "IMU2_Accel_Y",
     "IMU2_Accel_Z",
+    "TgtAngle_Roll",
+    "TgtAngle_Pitch",
+    "TgtAngle_Yaw",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -139,6 +150,9 @@ TELEMETRY_FIELD_TYPES = {
     "IMU2_Accel_X": float,
     "IMU2_Accel_Y": float,
     "IMU2_Accel_Z": float,
+    "TgtAngle_Roll": float,
+    "TgtAngle_Pitch": float,
+    "TgtAngle_Yaw": float,
 }
 
 GAIN_FIELDS = (
@@ -175,11 +189,11 @@ def _parse_integer(raw, name):
 
 
 def parse_telemetry_packet(line):
-    """Parse a legacy or current (55-field) packet into a fixed-schema dict.
+    """Parse a legacy or current (58-field) packet into a fixed-schema dict.
 
     Fields unavailable in legacy packets are returned as ``None`` so CSV
     files retain the full header without inventing healthy/fault values. Extra
-    future fields are ignored after the known 55 fields. The first
+    future fields are ignored after the known 58 fields. The first
     ``REQUIRED_FIELD_COUNT`` fields must be non-empty: consumers format and
     do arithmetic on them, so a blank there is a malformed packet, not a
     legacy one.

@@ -455,6 +455,16 @@ def _format_optional_float(value, decimal_places):
     return f"{numeric:.{decimal_places}f}"
 
 
+def _format_angle_error(target, measured):
+    try:
+        error = float(target) - float(measured)
+    except (TypeError, ValueError):
+        return "-"
+    if not math.isfinite(error):
+        return "-"
+    return f"{error:+.1f}"
+
+
 def format_rc_timeout_fault(sample):
     """Describe the observed firmware action without guessing its cut reason."""
     phase_raw = sample.get("Failsafe_Phase")
@@ -743,6 +753,8 @@ def telemetry_thread():
                 print(f" [DIAG] M1(FL)={m[0]} M2(RR)={m[1]} M3(FR)={m[2]} M4(RL)={m[3]} "
                       f"[yaw축 CW-CCW={cw - ccw:+d}] | "
                       f"aX={sample['Roll']:+5.1f} aY={sample['Pitch']:+5.1f} aZ={az:+6.1f} | "
+                      f"eR={_format_angle_error(sample.get('TgtAngle_Roll'), sample.get('Roll'))} "
+                      f"eP={_format_angle_error(sample.get('TgtAngle_Pitch'), sample.get('Pitch'))} "
                       f"gZ={gz:+6.1f} dG={_format_gyro_disagreement(sample)} "
                       f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
                       f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "

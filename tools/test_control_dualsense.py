@@ -188,6 +188,9 @@ def _telemetry_sample(**overrides):
         "TgtRate_Roll": 0.0,
         "TgtRate_Pitch": 0.0,
         "TgtRate_Yaw": 0.0,
+        "TgtAngle_Roll": 0.0,
+        "TgtAngle_Pitch": 0.0,
+        "TgtAngle_Yaw": 0.0,
         "Yaw_Hold": 1,
         "Fault_RC": 0,
         "Fault_Critical": 0,
@@ -1102,6 +1105,39 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertIn("Hover_Est=1423.6", diag_lines[0])
         self.assertIn("Hover_Valid=1", diag_lines[0])
 
+    def test_armed_diag_line_reports_target_minus_measured_angle_errors(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Failsafe_Phase=0,
+            Roll=2.0,
+            Pitch=1.5,
+            TgtAngle_Roll=5.0,
+            TgtAngle_Pitch=-4.0,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag_lines = [line for line in output.splitlines() if "[DIAG]" in line]
+        self.assertEqual(1, len(diag_lines))
+        self.assertIn("eR=+3.0", diag_lines[0])
+        self.assertIn("eP=-5.5", diag_lines[0])
+
+    def test_armed_diag_line_formats_unknown_target_angles_as_dash(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Failsafe_Phase=0,
+            TgtAngle_Roll=None,
+            TgtAngle_Pitch=None,
+            TgtAngle_Yaw=None,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag_lines = [line for line in output.splitlines() if "[DIAG]" in line]
+        self.assertEqual(1, len(diag_lines))
+        self.assertIn("eR=-", diag_lines[0])
+        self.assertIn("eP=-", diag_lines[0])
+
     def test_armed_diag_line_reports_maximum_per_axis_gyro_difference(self):
         self.module.is_armed = True
         sample = _telemetry_sample(
@@ -1149,6 +1185,27 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertEqual(
             list(imu_values),
             [row[self.module.CSV_FIELDS.index(name)] for name in imu_names],
+        )
+
+    def test_58_field_telemetry_csv_row_keeps_all_target_angles(self):
+        target_names = (
+            "TgtAngle_Roll",
+            "TgtAngle_Pitch",
+            "TgtAngle_Yaw",
+        )
+        target_values = (5.25, -6.5, 179.75)
+        packet = ",".join(
+            ["1"] * 55 + [str(value) for value in target_values]
+        )
+
+        sample = self.module.parse_telemetry_packet(packet)
+        row = self.module.sample_to_csv_row("12:34:56.789", sample)
+
+        for name in target_names:
+            self.assertIn(name, self.module.CSV_FIELDS)
+        self.assertEqual(
+            list(target_values),
+            [row[self.module.CSV_FIELDS.index(name)] for name in target_names],
         )
 
     def test_raw_magic_routes_zimu_and_zcal_to_binary_before_utf8_decode(self):
@@ -1204,7 +1261,21 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(len(rows[0]), len(self.module.CSV_FIELDS))
         self.assertEqual(rows[0][1], 0.0)
-        self.assertEqual(rows[0][-1], 54.0)
+        self.assertEqual(
+            rows[0][self.module.CSV_FIELDS.index("IMU2_Accel_Z")],
+            54.0,
+        )
+        self.assertEqual(
+            [
+                rows[0][self.module.CSV_FIELDS.index(name)]
+                for name in (
+                    "TgtAngle_Roll",
+                    "TgtAngle_Pitch",
+                    "TgtAngle_Yaw",
+                )
+            ],
+            ["", "", ""],
+        )
 
     def test_session_without_raw_packet_does_not_create_binary_file(self):
         packet = ",".join(["0"] * 55).encode("ascii")

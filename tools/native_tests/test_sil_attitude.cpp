@@ -1390,7 +1390,7 @@ int main() {
         "implausible accel calibration did not emit the safety warning");
   });
 
-  runCase("telemetry: per-IMU body samples append after the 43-field prefix", [] {
+  runCase("telemetry: target angles append after the 55-field packet", [] {
     PlantState state;
     resetFirmwareState(state);
     connectionEstablished = true;
@@ -1404,6 +1404,9 @@ int main() {
         0.125f, -0.25f, 0.5f,
         -4.5f, 5.25f, -6.0f,
         -0.625f, 0.75f, -0.875f};
+    targetAngleX = 4.25f;
+    targetAngleY = -3.5f;
+    targetAngleZ = 172.75f;
 
     sendTelemetry();
 
@@ -1417,15 +1420,16 @@ int main() {
     const std::string expected_suffix =
         ",1337.50,1,3,2,0.013"
         ",1.25,-2.50,3.75,0.125,-0.250,0.500"
-        ",-4.50,5.25,-6.00,-0.625,0.750,-0.875";
+        ",-4.50,5.25,-6.00,-0.625,0.750,-0.875"
+        ",4.25,-3.50,172.75";
     detail << "actual field_count=" << field_count
            << ", packet_suffix="
            << packet.substr(
                   packet.size() > expected_suffix.size()
                       ? packet.size() - expected_suffix.size()
                       : 0U)
-           << "; expected field_count=55 and suffix " << expected_suffix;
-    CHECK_MSG(field_count == 55U, detail.str());
+           << "; expected field_count=58 and suffix " << expected_suffix;
+    CHECK_MSG(field_count == 58U, detail.str());
     CHECK_MSG(
         packet.size() >= expected_suffix.size() &&
             packet.compare(

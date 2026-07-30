@@ -51,6 +51,60 @@ IMU_TELEMETRY_NAMES = (
     "IMU2_Accel_Z",
 )
 
+TARGET_ANGLE_TELEMETRY_NAMES = (
+    "TgtAngle_Roll",
+    "TgtAngle_Pitch",
+    "TgtAngle_Yaw",
+)
+
+EXPECTED_TELEMETRY_FIELDS = (
+    "Roll",
+    "Pitch",
+    "Yaw",
+    "Gyro_X",
+    "Gyro_Y",
+    "Gyro_Z",
+    "Accel_X",
+    "Accel_Y",
+    "Accel_Z",
+    "Throttle",
+    "Fault_RC",
+    "Fault_Critical",
+    "RC_Total_Pkts",
+    "RC_Dropped_Pkts",
+    "Fault_IMU1",
+    "Fault_IMU2",
+    "Fault_Disagree",
+    "Active_IMUs",
+    "Mixer_Scaled",
+    "Fault_Attitude",
+    "Calibration_OK",
+    "Armed",
+    "Motor_M1",
+    "Motor_M2",
+    "Motor_M3",
+    "Motor_M4",
+    "PID_Loop_Hz",
+    "TgtRate_Roll",
+    "TgtRate_Pitch",
+    "TgtRate_Yaw",
+    "MagHeading",
+    "Mag_X",
+    "Mag_Y",
+    "Mag_Z",
+    "Yaw_Hold",
+    "Failsafe_Phase",
+    "Trim_Roll",
+    "Trim_Pitch",
+    "Hover_Est",
+    "Hover_Valid",
+    "Failsafe_Probe_State",
+    "Failsafe_Probe_NoResponse",
+    "Failsafe_Probe_Response_G",
+    *IMU_TELEMETRY_NAMES,
+    *TARGET_ANGLE_TELEMETRY_NAMES,
+)
+
 
 class TelemetryCompatibilityTest(unittest.TestCase):
     def test_10_field_packet_keeps_extended_values_unknown(self):
@@ -88,8 +142,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Failsafe_Probe_Response_G",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(55, len(TELEMETRY_FIELDS))
-        self.assertEqual(56, len(CSV_FIELDS))
+        self.assertEqual(58, len(TELEMETRY_FIELDS))
+        self.assertEqual(59, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -229,16 +283,39 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             self.assertEqual(expected, sample[name])
             self.assertIs(type(sample[name]), float)
 
+    def test_58_field_packet_appends_target_angles_with_float_values(self):
+        target_angles = (5.25, -6.5, 179.75)
+        current_packet = ",".join(
+            ["1"] * 55 + [str(value) for value in target_angles]
+        )
+
+        sample = parse_telemetry_packet(current_packet)
+
+        for name, expected in zip(TARGET_ANGLE_TELEMETRY_NAMES, target_angles):
+            self.assertIn(name, sample)
+            self.assertEqual(expected, sample[name])
+            self.assertIs(type(sample[name]), float)
+
+    def test_55_field_packet_leaves_target_angles_unknown(self):
+        sample = parse_telemetry_packet(",".join(["1"] * 55))
+
+        for name in TARGET_ANGLE_TELEMETRY_NAMES:
+            self.assertIn(name, sample)
+            self.assertIsNone(sample[name])
+
     def test_43_field_packet_leaves_per_imu_values_unknown(self):
         sample = parse_telemetry_packet(",".join(["1"] * 43))
 
-        for name in IMU_TELEMETRY_NAMES:
+        for name in IMU_TELEMETRY_NAMES + TARGET_ANGLE_TELEMETRY_NAMES:
             self.assertIn(name, sample)
             self.assertIsNone(sample[name])
 
     def test_per_imu_field_names_are_appended_in_exact_wire_order(self):
-        self.assertEqual(IMU_TELEMETRY_NAMES, TELEMETRY_FIELDS[43:])
-        self.assertEqual(55, len(TELEMETRY_FIELDS))
+        self.assertEqual(IMU_TELEMETRY_NAMES, TELEMETRY_FIELDS[43:55])
+
+    def test_field_names_and_order_match_the_58_field_wire_contract(self):
+        self.assertEqual(EXPECTED_TELEMETRY_FIELDS, TELEMETRY_FIELDS)
+        self.assertEqual(58, len(TELEMETRY_FIELDS))
 
     def test_35_field_packet_leaves_new_fields_none(self):
         packet = ",".join(["1"] * 35)
@@ -247,8 +324,8 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIsNone(sample["Trim_Roll"])
         self.assertIsNone(sample["Trim_Pitch"])
 
-    def test_csv_has_56_columns(self):
-        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 56)
+    def test_csv_has_59_columns(self):
+        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 59)
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in (
@@ -277,8 +354,9 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Hover_Est",
             "Failsafe_Probe_Response_G",
             *IMU_TELEMETRY_NAMES,
+            *TARGET_ANGLE_TELEMETRY_NAMES,
         ):
-            self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], float)
+            self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES.get(name), float)
 
     def test_short_packet_is_rejected(self):
         with self.assertRaises(ValueError):
