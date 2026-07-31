@@ -2244,9 +2244,11 @@ int main() {
     const auto e2 = eventWith(
         -600, 700, -800,
         900, -1000, 1100);
-    const ImuRawSample sample = makeImuRawSample(0x1234, e1, e2);
+    const ImuRawSample sample =
+        makeImuRawSample(0x1234, e1, e2, (uint8_t)FS_DESCENDING);
 
-    CHECK_EQ(sizeof(ImuRawSample), 26U);
+    CHECK_EQ(sizeof(ImuRawSample), 27U);
+    CHECK_EQ(sample.failsafe_phase, (uint8_t)FS_DESCENDING);
     CHECK_EQ(sample.imu1_gyro[0], 0x1357);
     CHECK_EQ(sample.imu1_gyro[1], -2);
     CHECK_EQ(sample.imu1_gyro[2], std::numeric_limits<int16_t>::min());
@@ -2257,13 +2259,13 @@ int main() {
     ImuRawDatagram datagram = {};
     const size_t packetSize = buildImuRawDatagram(
         datagram, 0x12345678U, 0xA1B2C3D4U, 0x01020304U, &sample, 1);
-    CHECK_EQ(packetSize, 46U);
+    CHECK_EQ(packetSize, 47U);
     const auto *bytes = reinterpret_cast<const uint8_t *>(&datagram);
     CHECK_EQ(bytes[0], static_cast<uint8_t>('Z'));
     CHECK_EQ(bytes[1], static_cast<uint8_t>('I'));
     CHECK_EQ(bytes[2], static_cast<uint8_t>('M'));
     CHECK_EQ(bytes[3], static_cast<uint8_t>('U'));
-    CHECK_EQ(bytes[4], 1U);
+    CHECK_EQ(bytes[4], IMU_RAW_VERSION);
     CHECK_EQ(bytes[5], 1U);
     CHECK_EQ(bytes[6], 0U);
     CHECK_EQ(bytes[7], 0U);
@@ -2287,6 +2289,8 @@ int main() {
     CHECK_EQ(bytes[25], 0xFFU);
     CHECK_EQ(bytes[26], 0x00U);
     CHECK_EQ(bytes[27], 0x80U);
+    // v2: failsafe_phase 는 샘플의 마지막 바이트다 (20 헤더 + 26 = 46).
+    CHECK_EQ(bytes[46], (uint8_t)FS_DESCENDING);
   });
 
   runCase("raw UDP command defaults on and raw zero disables production", [] {

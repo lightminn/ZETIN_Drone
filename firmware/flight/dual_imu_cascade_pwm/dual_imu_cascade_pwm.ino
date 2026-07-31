@@ -16,7 +16,8 @@
 static const uint32_t IMU_RAW_RING_SIZE = 512;
 static const uint32_t IMU_RAW_RING_MASK = IMU_RAW_RING_SIZE - 1;
 static const uint8_t IMU_RAW_BATCH_MAX = 50;
-static const uint8_t IMU_RAW_VERSION = 1;
+// v2: ImuRawSample 에 failsafe_phase 추가. 디코더는 v1 도 계속 읽는다.
+static const uint8_t IMU_RAW_VERSION = 2;
 
 struct __attribute__((packed)) ImuRawSample {
   uint16_t dt_us;
@@ -24,6 +25,10 @@ struct __attribute__((packed)) ImuRawSample {
   int16_t imu1_accel[3];
   int16_t imu2_gyro[3];
   int16_t imu2_accel[3];
+  // v2. 1kHz 로그를 자동착륙 위상으로 자를 수 있어야 오프라인에서 착지 판별식
+  // 후보를 평가할 수 있다. .bin 은 펌웨어 micros(), 20Hz CSV 는 PC 벽시계라
+  // 공통 키가 없어서 2026-08-01 분석이 여기서 막혔다.
+  uint8_t failsafe_phase;
 };
 
 struct __attribute__((packed)) ImuRawHeader {
@@ -54,10 +59,10 @@ struct __attribute__((packed)) ImuCalDatagram {
   float imu2_sign[3];
 };
 
-static_assert(sizeof(ImuRawSample) == 26, "ZIMU sample must be 26 bytes");
+static_assert(sizeof(ImuRawSample) == 27, "ZIMU v2 sample must be 27 bytes");
 static_assert(sizeof(ImuRawHeader) == 20, "ZIMU header must be 20 bytes");
-static_assert(sizeof(ImuRawDatagram) == 1320,
-              "maximum ZIMU datagram must be 1320 bytes");
+static_assert(sizeof(ImuRawDatagram) == 1370,
+              "maximum ZIMU v2 datagram must be 1370 bytes");
 static_assert(sizeof(ImuCalDatagram) == 60, "ZCAL datagram must be 60 bytes");
 
 struct ImuRawRing {
@@ -415,9 +420,10 @@ static inline bool imuRawRingPop(ImuRawRing &ring, ImuRawSample &sample) {
 
 static inline ImuRawSample makeImuRawSample(
     uint16_t dtUs, const inv_imu_sensor_event_t &e1,
-    const inv_imu_sensor_event_t &e2) {
+    const inv_imu_sensor_event_t &e2, uint8_t failsafePhase) {
   ImuRawSample sample = {};
   sample.dt_us = dtUs;
+  sample.failsafe_phase = failsafePhase;
   for (int axis = 0; axis < 3; axis++) {
     sample.imu1_gyro[axis] = e1.gyro[axis];
     sample.imu1_accel[axis] = e1.accel[axis];
@@ -793,7 +799,7 @@ static inline ImuTelemetrySample readImuSampleSnapshot() {
 
 static inline void publishImuRawRegisters(
     const inv_imu_sensor_event_t &e1, const inv_imu_sensor_event_t &e2,
-    uint32_t sampleUs) {
+    uint32_t sampleUs, uint8_t failsafePhase) {
   uint16_t dtUs = 0;
   if (rawProducerTimeValid) {
     const uint32_t elapsedUs = sampleUs - rawProducerLastUs;
@@ -801,7 +807,7 @@ static inline void publishImuRawRegisters(
         ? 0xFFFFU
         : static_cast<uint16_t>(elapsedUs);
   }
-  const ImuRawSample sample = makeImuRawSample(dtUs, e1, e2);
+  const ImuRawSample sample = makeImuRawSample(dtUs, e1, e2, failsafePhase);
   if (imuRawRingPush(imuRawRing, sample, sampleUs)) {
     rawProducerLastUs = sampleUs;
     rawProducerTimeValid = true;
@@ -1139,7 +1145,8 @@ void pid_task(void *pv) {
     // freeze 판정 직후, 부호/scale/bias/LPF/body 변환 전의 레지스터 원값을 게시한다.
     if (__atomic_load_n(&raw_stream_enabled, __ATOMIC_ACQUIRE)
         && connectionEstablished) {
-      publishImuRawRegisters(e1, e2, micros());
+      // fs_phase 는 이 함수보다 뒤에서 갱신되므로 직전 tick 값이다(1ms).
+      publishImuRawRegisters(e1, e2, micros(), (uint8_t)fs_phase);
     }
 
     // IMU1 sensor frame 기준 각속도 (IMU2 축 정렬 + 개별 bias 보정)

@@ -20,10 +20,16 @@ from typing import Optional, Sequence
 
 ZIMU_MAGIC = b"ZIMU"
 ZCAL_MAGIC = b"ZCAL"
-VERSION = 1
+# v1 = 26바이트 샘플, v2 = 27바이트 (failsafe_phase 추가).
+# v1 을 계속 읽는 것이 중요하다 — 2026-08-01 의 라벨된 두 비행이 v1 이고,
+# 착지 판별식 후보를 평가할 유일한 실측 데이터셋이다.
+VERSION = 2
+SUPPORTED_VERSIONS = (1, 2)
 MAX_SAMPLES = 50
 ZIMU_HEADER = struct.Struct("<4sBBHIII")
-ZIMU_SAMPLE = struct.Struct("<H12h")
+ZIMU_SAMPLE_V1 = struct.Struct("<H12h")
+ZIMU_SAMPLE_V2 = struct.Struct("<H12hB")
+ZIMU_SAMPLE_BY_VERSION = {1: ZIMU_SAMPLE_V1, 2: ZIMU_SAMPLE_V2}
 ZCAL_PACKET = struct.Struct("<4sB3x13f")
 
 RAW_COLUMNS = (
@@ -57,6 +63,7 @@ class DecodedSample:
     t_us: int
     raw: tuple[int, ...]
     calibration: Optional[Calibration]
+    failsafe_phase: Optional[int] = None
 
 
 @dataclasses.dataclass
@@ -161,7 +168,9 @@ def _parse_capture(data: bytes) -> tuple[list[DecodedSample], DecodeSummary]:
                 position = next_position
                 continue
             unpacked = ZCAL_PACKET.unpack_from(data, position)
-            if unpacked[1] != VERSION:
+            # ZCAL 레이아웃은 v1/v2 가 동일하다. ZIMU 버전 상향 때문에
+            # 예전 로그의 ZCAL 을 버리면 물리량 복원이 통째로 날아간다.
+            if unpacked[1] not in SUPPORTED_VERSIONS:
                 summary.unsupported_version_records += 1
             else:
                 current_calibration = _calibration_from_packet(unpacked[2:])
@@ -190,8 +199,18 @@ def _parse_capture(data: bytes) -> tuple[list[DecodedSample], DecodeSummary]:
                 break
             position = next_position
             continue
+        # 레코드 길이는 버전마다 다르므로(v1 26B, v2 27B) 버전을 먼저 본다.
+        # 모르는 버전은 길이를 알 수 없어 다음 매직까지 건너뛴다.
+        if version not in SUPPORTED_VERSIONS:
+            summary.unsupported_version_records += 1
+            next_position = _next_magic(data, position + 4)
+            if next_position < 0:
+                break
+            position = next_position
+            continue
+        sample_struct = ZIMU_SAMPLE_BY_VERSION[version]
         record_end = (
-            position + ZIMU_HEADER.size + n_samples * ZIMU_SAMPLE.size
+            position + ZIMU_HEADER.size + n_samples * sample_struct.size
         )
         next_position = _next_magic(data, position + 4)
         if record_end > len(data) or (
@@ -201,10 +220,6 @@ def _parse_capture(data: bytes) -> tuple[list[DecodedSample], DecodeSummary]:
             if next_position < 0:
                 break
             position = next_position
-            continue
-        if version != VERSION:
-            summary.unsupported_version_records += 1
-            position = record_end
             continue
 
         if previous_batch_seq is not None:
@@ -218,9 +233,12 @@ def _parse_capture(data: bytes) -> tuple[list[DecodedSample], DecodeSummary]:
         sample_position = position + ZIMU_HEADER.size
         sample_t_us = base_t_us
         for sample_in_batch in range(n_samples):
-            unpacked_sample = ZIMU_SAMPLE.unpack_from(data, sample_position)
+            unpacked_sample = sample_struct.unpack_from(data, sample_position)
             dt_us = unpacked_sample[0]
-            raw = tuple(unpacked_sample[1:])
+            raw = tuple(unpacked_sample[1:13])
+            failsafe_phase = (
+                unpacked_sample[13] if version >= 2 else None
+            )
             if sample_in_batch > 0:
                 sample_t_us = (sample_t_us + dt_us) & 0xFFFFFFFF
             if samples:
@@ -232,9 +250,10 @@ def _parse_capture(data: bytes) -> tuple[list[DecodedSample], DecodeSummary]:
                     t_us=sample_t_us,
                     raw=raw,
                     calibration=current_calibration,
+                    failsafe_phase=failsafe_phase,
                 )
             )
-            sample_position += ZIMU_SAMPLE.size
+            sample_position += sample_struct.size
 
         summary.total_samples += n_samples
         position = record_end
@@ -263,7 +282,9 @@ def _write_csv(
     samples: Sequence[DecodedSample],
     include_physical: bool,
 ) -> None:
-    columns = ["sample_idx", "t_us", *RAW_COLUMNS]
+    # v1 로그에는 failsafe_phase 가 없다. 컬럼은 항상 두되 값은 비워서,
+    # 예전 로그와 새 로그를 같은 스키마로 다룰 수 있게 한다.
+    columns = ["sample_idx", "t_us", "failsafe_phase", *RAW_COLUMNS]
     if include_physical:
         columns.extend(PHYSICAL_COLUMNS)
     with output_path.open("w", newline="", encoding="utf-8") as stream:
@@ -273,6 +294,7 @@ def _write_csv(
             row: list[object] = [
                 sample.sample_idx,
                 sample.t_us,
+                "" if sample.failsafe_phase is None else sample.failsafe_phase,
                 *sample.raw,
             ]
             if include_physical:

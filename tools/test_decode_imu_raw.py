@@ -163,7 +163,8 @@ class DecodeImuRawTests(unittest.TestCase):
         truncated = ZIMU_HEADER.pack(
             b"ZIMU", 1, 2, 0, 20, 10_000, 0
         ) + ZIMU_SAMPLE.pack(*sample)
-        unsupported = _zimu(21, 0, [sample], version=2)
+        # v2 는 이제 지원된다. 미지원 케이스는 알 수 없는 버전으로 만든다.
+        unsupported = _zimu(21, 0, [sample], version=3)
         valid = _zimu(22, 4, [sample])
 
         summary, rows, _, stderr = self._decode(
