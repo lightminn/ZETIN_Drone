@@ -1382,7 +1382,7 @@ int main() {
     CHECK_EQ(motorOut[0], 1000);
   });
 
-  runCase("자동착륙은 지상 무반응 FS_PROBE_CONFIRM_N회 뒤 LANDED로 간다", [] {
+  runCase("프로브는 판정하지 않는다: 지상 무반응이 쌓여도 백스톱까지 하강한다", [] {
     prepareFailsafeFlight(1360);
     uint32_t cut_tick = std::numeric_limits<uint32_t>::max();
     arduino_fake::pre_tick_hook = [&](uint32_t tick) {
@@ -1395,18 +1395,28 @@ int main() {
 
     // 확정 시각은 FS_PROBE_CONFIRM_N에서 유도한다. 상수를 바꿨을 때 이 테스트가
     // 조용히 어긋나지 않고 같이 따라오도록 숫자를 박지 않는다.
+    // 2026-08-01 실기에서 지면 응답(0.0590~0.1930g)이 공중(0.0070~0.1340g)보다
+    // 크다는 것이 확인되어 프로브를 판정에서 뺐다. 그러므로 완벽한 지상 무반응
+    // 신호를 계속 먹여도 CUT_LANDED 로 가면 안 되고, 백스톱까지 내려가야 한다.
     const uint32_t confirm_ms =
         FS_MIN_DESCEND_MS
         + FS_PROBE_PERIOD_MS * (uint32_t)FS_PROBE_CONFIRM_N
         + FS_PROBE_DIP_MS;
     runPidTicks(confirm_ms + 20U);
+
+    CHECK_EQ((int)fs_phase, (int)FS_DESCENDING);
+    CHECK(!safety_lock);
+    CHECK_EQ(cut_tick, std::numeric_limits<uint32_t>::max());
+    // 프로브 자체는 계속 돌아 텔레메트리를 채운다 — 다음 판별식 설계용 데이터다.
+    CHECK(fs_probe_no_response >= FS_PROBE_CONFIRM_N);
+
+    // 백스톱은 fs_enter_ms 기준이라 tick 수와 1:1이 아니다. 넉넉히 돌린다.
+    runPidTicks(FS_MAX_MS + 200U);
     arduino_fake::pre_tick_hook = nullptr;
 
-    CHECK_EQ((int)fs_phase, (int)FS_CUT_LANDED);
+    CHECK_EQ((int)fs_phase, (int)FS_CUT_TIMEOUT);
     CHECK(safety_lock);
     CHECK_EQ(motorOut[0], 1000);
-    CHECK(cut_tick >= confirm_ms - FS_PROBE_PERIOD_MS);
-    CHECK(cut_tick <= confirm_ms + 2U);
   });
 
   runCase("공중에서 매 딥이 반응하면 FS_MAX_MS에서 TIMEOUT으로 간다", [] {

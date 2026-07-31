@@ -1056,6 +1056,8 @@ std::vector<double> groundProbeResponses(const RunResult &result,
   return responses;
 }
 
+// 프로브가 판정에서 빠진 뒤로 자동착륙은 항상 백스톱으로 끝난다. 강제해야 할
+// 것은 "접지 전에 자르지 않는다"이고, 그것이 2026-08-01 공중 컷을 막는 속성이다.
 void checkTerminatesNotBeforeContact(const char *label,
                                      const FailsafeTrace &trace) {
   std::ostringstream detail;
@@ -1066,18 +1068,6 @@ void checkTerminatesNotBeforeContact(const char *label,
                 && trace.terminal_tick >= trace.contact_tick
                 && (trace.terminal_phase == FS_CUT_LANDED
                     || trace.terminal_phase == FS_CUT_TIMEOUT),
-            detail.str());
-}
-
-void checkLandedAfterContact(const char *label, const FailsafeTrace &trace) {
-  std::ostringstream detail;
-  detail << label << " terminal=" << failsafePhaseName(trace.terminal_phase)
-         << "@" << tickSeconds(trace.terminal_tick)
-         << " contact=" << tickSeconds(trace.contact_tick)
-         << "; expected FS_CUT_LANDED at/after contact";
-  CHECK_MSG(trace.terminal_phase == FS_CUT_LANDED &&
-                trace.contact_tick != std::numeric_limits<uint32_t>::max() &&
-                trace.terminal_tick >= trace.contact_tick,
             detail.str());
 }
 
@@ -2126,10 +2116,10 @@ int main() {
     v1_no_noise = runSil(makeV1Config());
     printFailsafeTrace("V1", v1_no_noise);
     printProbeEvaluations("V1", v1_no_noise);
-    checkLandedAfterContact("V1", analyzeFailsafeTrace(v1_no_noise));
+    checkTerminatesNotBeforeContact("V1", analyzeFailsafeTrace(v1_no_noise));
     v1_noise_004 = runSil(makeV1Config(true, 0.04));
     printFailsafeTrace("V1 noise=ON sd=0.04g", v1_noise_004);
-    checkLandedAfterContact(
+    checkTerminatesNotBeforeContact(
         "V1 noise=ON sd=0.04g", analyzeFailsafeTrace(v1_noise_004));
 
     const FailsafeTrace trace = analyzeFailsafeTrace(v1_no_noise);
@@ -2163,7 +2153,7 @@ int main() {
             << "V1 noise sweep sd=" << noise_sd_g << "g";
       printFailsafeTrace(label.str().c_str(), result);
       const FailsafeTrace trace = analyzeFailsafeTrace(result);
-      checkLandedAfterContact(label.str().c_str(), trace);
+      checkTerminatesNotBeforeContact(label.str().c_str(), trace);
       if (!std::isfinite(first_failure_sd_g) &&
           trace.terminal_phase != FS_CUT_LANDED) {
         first_failure_sd_g = noise_sd_g;
@@ -2183,7 +2173,7 @@ int main() {
     constexpr const char *kCommonModeLabel =
         "V1 noise sweep sd=0.06g common-mode trough=-0.08g";
     printFailsafeTrace(kCommonModeLabel, common_mode_result);
-    checkLandedAfterContact(
+    checkTerminatesNotBeforeContact(
         kCommonModeLabel, analyzeFailsafeTrace(common_mode_result));
   });
 
@@ -2306,7 +2296,7 @@ int main() {
     const RunResult result = runSil(makeV4Config());
     printFailsafeTrace("V4", result);
     printProbeEvaluations("V4", result);
-    checkLandedAfterContact("V4", analyzeFailsafeTrace(result));
+    checkTerminatesNotBeforeContact("V4", analyzeFailsafeTrace(result));
     const uint32_t quiet_start_tick =
         kHoverWarmupTicks + RC_TIMEOUT_MS + 202U;
     const uint32_t quiet_end_tick = quiet_start_tick + 400U;
@@ -2329,7 +2319,7 @@ int main() {
     const RunResult noisy = runSil(makeV4Config(true, 0.04));
     printFailsafeTrace("V4 noise=ON sd=0.04g", noisy);
     printProbeEvaluations("V4 noise=ON sd=0.04g", noisy);
-    checkLandedAfterContact(
+    checkTerminatesNotBeforeContact(
         "V4 noise=ON sd=0.04g", analyzeFailsafeTrace(noisy));
   });
 
@@ -2378,7 +2368,7 @@ int main() {
               "V5 confirmed landing during the airborne bounce");
     CHECK_MSG(trace.terminal_tick >= bounce_end_tick,
               "V5 terminal landing preceded bounce re-contact");
-    checkLandedAfterContact("V5", trace);
+    checkTerminatesNotBeforeContact("V5", trace);
   });
 
   runCase("V6: later explicit resume leaves more descent velocity and loss", [] {

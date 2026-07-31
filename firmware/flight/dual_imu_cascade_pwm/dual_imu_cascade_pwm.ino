@@ -1386,9 +1386,29 @@ void pid_task(void *pv) {
           (int)lroundf(hover_est), FS_DESCENT_DELTA_US);
 
       const uint32_t elapsed = nowMs - fs_enter_ms;
-      const bool landed = updateLandDetector(
+      // 프로브는 계속 돌리되 **착지 판정에는 쓰지 않는다.**
+      //
+      // 2026-08-01 실기에서 라벨된 두 분포를 처음으로 나란히 얻었다:
+      //   공중(자유낙하로 증명) 0.0070~0.1340g  중앙 0.0800
+      //   지면(접지 확인)       0.0590~0.1930g  중앙 0.1020
+      // 지면 응답이 공중보다 **더 크다** — 판별 방향이 반대이고, 어떤 임계를
+      // 잡아도 오분류가 9/18(동전 던지기)이다. 하강 추력이 호버의 79%라
+      // 발에 실리는 무게가 21%뿐이고, 기체가 다리 위에서 자유롭게 흔들리며
+      // collective 딥에 공중보다 크게 반응하기 때문이다. 즉 "접지하면 추력
+      // 딥에 반응이 없다"는 전제 자체가 이 기체에서 성립하지 않는다.
+      //
+      // 따라서 자동착륙은 **시간 기반 하강**이다: FS_MAX_MS 동안 내려간 뒤
+      // 백스톱이 자른다. 공중 오판 컷은 원리적으로 불가능해진다(2026-08-01
+      // 010251 에서 실제로 일어났던 실패 모드다). 대가는 접지 후 남은 시간만큼
+      // 프롭이 도는 것이며, 고도 센서가 없는 한 그쪽이 안전한 오차 방향이다.
+      //
+      // 프로브 자체는 남긴다 — 텔레메트리(41~43)로 계속 기록해야 다음 판별식을
+      // 오프라인 데이터로 설계할 수 있다. 분석은 docs/failsafe_land_research.md.
+      const bool probe_says_landed = updateLandDetector(
           landDet, accelMag, elapsed, descentThrottle,
           landProbeConfig);
+      (void)probe_says_landed;
+      const bool landed = false;
       fs_probe_state = landDet.probe_state;
       fs_probe_no_response = landDet.no_response_count;
       fs_probe_response_g = landDet.last_response_g;
