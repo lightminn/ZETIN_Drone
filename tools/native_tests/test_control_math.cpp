@@ -1436,7 +1436,9 @@ int main() {
     constexpr int hover_throttle = 1340;
     constexpr int descent_throttle =
         hover_throttle - FS_DESCENT_DELTA_US;
-    constexpr int probe_dip_us = 40;
+    // 딥 크기는 FS_PROBE_DIP_FRAC 에서 유도한다.
+    const int probe_dip_us = (int)lroundf(
+        (hover_throttle - 1000.0f) * FS_PROBE_DIP_FRAC);
 
     prepareFailsafeFlight(hover_throttle);
     const float saved_kp_roll = Kp_Rate_Roll;
@@ -1544,7 +1546,8 @@ int main() {
     constexpr int hover_throttle = 1442;
     constexpr int descent_throttle =
         hover_throttle - FS_DESCENT_DELTA_US;
-    constexpr int expected_probe_dip_us = 52;
+    const int expected_probe_dip_us = (int)lroundf(
+        (hover_throttle - 1000.0f) * FS_PROBE_DIP_FRAC);
     prepareFailsafeFlight(hover_throttle);
     arduino_fake::pre_tick_hook = [](uint32_t tick) {
       setFakeAccelMagnitude(

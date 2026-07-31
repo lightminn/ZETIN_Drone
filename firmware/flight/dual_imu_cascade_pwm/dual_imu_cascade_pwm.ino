@@ -233,11 +233,26 @@ constexpr float FS_LAND_LPF_ALPHA = 0.03f;   // 1kHz에서 약 5Hz
 // 보존한다. 질량이 달라져도 같은 추력 비율을 유지하도록 hover_est 기준으로
 // 매 자동착륙 진입 때 계산한다. 런타임 결과는 측정 가능한 20us 이상,
 // CTRL_MARGIN 미만으로 clamp하고 clamp 여부를 진입 로그로 공개한다.
+// 2026-08-01: 딥을 2배로 올려 공중 응답만 키우려 했으나 **이 기체에서는
+// 불가능**하다. 전달 가능한 딥의 상한은
+//     (hover_est - FS_DESCENT_DELTA_US) - CTRL_MARGIN - 1050
+// 이고 hover_est=1290 에서 그 값이 30us 인데 현재 딥이 이미 34us 다. 더 키우면
+// 믹서가 collective 를 밀어올려 전달률이 FS_PROBE_MIN_DELIVERY_FRAC(80%) 아래로
+// 떨어지고 BLOCKED 가 된다(2배면 44%). hover_est 1340 이상이면 여유가 생기지만
+// 우리 호버는 1290 이다. R13 회귀 시험이 이 한계를 잡아냈다.
+// 딥을 늘리려면 CTRL_MARGIN 이나 1050 하한을 먼저 손봐야 하며 둘 다 안전
+// 관련이라 별도 검토가 필요하다 → docs/failsafe_land_research.md
 constexpr float FS_PROBE_DIP_FRAC      = 0.118f;
 const int      FS_PROBE_DIP_MIN_US      = 20;
 const uint32_t FS_PROBE_PERIOD_MS       = 400;
 const uint32_t FS_PROBE_DIP_MS          = 120;
 const uint32_t FS_PROBE_SAMPLE_DELAY_MS = 30;
+// 0.06은 SIL 공중 응답 0.115의 절반으로 잡은 값이었는데, 비행 교란이 공중
+// 분포를 아래로 넓히자 **임계가 그 분포 안에 들어가** 2026-08-01 공중 오판을
+// 냈다(9회 중 4회). 지면 응답은 0.0010~0.0040으로 임계보다 15~60배 작아
+// 아래쪽 여유가 통째로 놀고 있었다. 넓어진 간격의 중앙으로 옮긴다.
+// 이 방향으로 틀리면 확정을 못 해 5초 백스톱 CUT_TIMEOUT — 프로브 도입 전
+// 동작이며 공중 컷보다 훨씬 싸다.
 constexpr float FS_PROBE_RESPONSE_G    = 0.06f;
 // 응답은 전달 딥에 비례한다. 기존 1.5배 명목 응답 보장에서 80%를 요구하면
 // 임계 대비 1.2배가 남지만, 50% 전달은 임계 아래라 판정 근거가 사라진다.

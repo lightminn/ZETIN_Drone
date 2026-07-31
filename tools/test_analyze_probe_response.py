@@ -174,6 +174,18 @@ class AnalyzeProbeResponseTests(unittest.TestCase):
             )
         return samples
 
+    def threshold(self):
+        """픽스처를 펌웨어 임계에 상대적으로 만든다.
+
+        예전에는 0.06 기준 절대값을 박아뒀는데, 2026-08-01 에 임계를 0.03 으로
+        내리자 '지면' 픽스처가 임계 위로 올라가 버렸다. 배수로 두면 임계를
+        바꿔도 시나리오의 의미(지면<임계<공중)가 유지된다.
+        """
+        analyzer = analyzer_module()
+        return analyzer.read_firmware_float_constant(
+            "FS_PROBE_RESPONSE_G", analyzer.FIRMWARE_PATH
+        )
+
     @staticmethod
     def range_values(start, stop, count=20):
         return [
@@ -359,19 +371,20 @@ class AnalyzeProbeResponseTests(unittest.TestCase):
         self.assertIn("1342.1µs", output)
 
     def test_clear_pass_when_air_minimum_has_one_point_five_margin(self):
+        t = self.threshold()
         with tempfile.TemporaryDirectory() as tmp_dir:
             ground = self.write_csv(
                 tmp_dir,
                 "ground.csv",
                 self.repeated_descent_samples(
-                    self.range_values(0.038, 0.051)
+                    self.range_values(0.6333 * t, 0.85 * t)
                 ),
             )
             air = self.write_csv(
                 tmp_dir,
                 "air.csv",
                 self.repeated_descent_samples(
-                    self.range_values(0.108, 0.130)
+                    self.range_values(1.8 * t, 2.1667 * t)
                 ),
             )
             return_code, output = self.run_main(
@@ -385,19 +398,20 @@ class AnalyzeProbeResponseTests(unittest.TestCase):
         self.assertIn("최종 판정: 통과", output)
 
     def test_air_between_one_and_one_point_five_is_margin_short_not_pass(self):
+        t = self.threshold()
         with tempfile.TemporaryDirectory() as tmp_dir:
             ground = self.write_csv(
                 tmp_dir,
                 "ground.csv",
                 self.repeated_descent_samples(
-                    self.range_values(0.038, 0.051)
+                    self.range_values(0.6333 * t, 0.85 * t)
                 ),
             )
             air = self.write_csv(
                 tmp_dir,
                 "air.csv",
                 self.repeated_descent_samples(
-                    self.range_values(0.062, 0.074)
+                    self.range_values(1.0333 * t, 1.2333 * t)
                 ),
             )
             return_code, output = self.run_main(
@@ -410,19 +424,20 @@ class AnalyzeProbeResponseTests(unittest.TestCase):
         self.assertNotIn("최종 판정: 통과", output)
 
     def test_overlap_fails_and_calculates_dip_fraction_suggestion(self):
+        t = self.threshold()
         with tempfile.TemporaryDirectory() as tmp_dir:
             ground = self.write_csv(
                 tmp_dir,
                 "ground.csv",
                 self.repeated_descent_samples(
-                    self.range_values(0.038, 0.051)
+                    self.range_values(0.6333 * t, 0.85 * t)
                 ),
             )
             air = self.write_csv(
                 tmp_dir,
                 "air.csv",
                 self.repeated_descent_samples(
-                    self.range_values(0.044, 0.061)
+                    self.range_values(0.7333 * t, 1.0167 * t)
                 ),
             )
             return_code, output = self.run_main(
@@ -455,8 +470,12 @@ class AnalyzeProbeResponseTests(unittest.TestCase):
 
     def test_reads_current_firmware_constants_and_fails_clearly_when_missing(self):
         analyzer = analyzer_module()
+        import re as _re
+        expected = float(_re.search(
+            r"FS_PROBE_RESPONSE_G\s*=\s*([0-9.]+)f",
+            analyzer.FIRMWARE_PATH.read_text(encoding="utf-8")).group(1))
         self.assertAlmostEqual(
-            0.06,
+            expected,
             analyzer.read_firmware_float_constant(
                 "FS_PROBE_RESPONSE_G",
                 analyzer.FIRMWARE_PATH,

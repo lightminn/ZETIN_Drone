@@ -339,10 +339,19 @@ int main() {
     CHECK(firmware_det.last_response_g > 1.5f * config.response_g);
     CHECK(firmware_det.no_response_count == 0);
 
+    // 진짜 불변식은 "alpha 를 낮추면 프로브 감도도 같이 낮아진다"이지
+    // "특정 alpha 에서 임계 아래로 떨어진다"가 아니다. 후자는 임계를 바꾸면
+    // (2026-08-01: 0.06 -> 0.03) 의미가 흔들린다. 단조성으로 고정한다.
     config.lpf_alpha = 0.005f;
     const LandDetector low_alpha_det = run_first_probe(config);
-    CHECK(low_alpha_det.last_response_g < config.response_g);
-    CHECK(low_alpha_det.no_response_count == 1);
+    CHECK(low_alpha_det.last_response_g < 0.5f * firmware_det.last_response_g);
+
+    // 임계 아래로 떨어지는 분기도 계속 덮는다. 응답은 대략
+    // dip_frac*(1-exp(-dip_ms*alpha)) 이므로 alpha 를 더 낮추면 도달한다.
+    config.lpf_alpha = 0.002f;
+    const LandDetector tiny_alpha_det = run_first_probe(config);
+    CHECK(tiny_alpha_det.last_response_g < config.response_g);
+    CHECK(tiny_alpha_det.no_response_count == 1);
   });
 
   runCase("failsafeStep: 착지가 timeout보다 우선한다", [] {
