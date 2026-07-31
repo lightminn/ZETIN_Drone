@@ -2125,8 +2125,12 @@ int main() {
     const FailsafeTrace trace = analyzeFailsafeTrace(v1_no_noise);
     const std::vector<double> responses =
         groundProbeResponses(v1_no_noise, trace.contact_tick);
-    CHECK_MSG(responses.size() >= FS_PROBE_CONFIRM_N,
-              "V1 did not record enough settled-ground probe responses");
+    // 프로브가 판정에서 빠진 뒤로 필요한 개수는 CONFIRM_N 과 무관하다. 확인할
+    // 것은 "지면에서도 프로브가 계속 돌며 텔레메트리를 채운다"는 것뿐이고,
+    // 그 기록이 다음 판별식 설계의 입력이다. FS_MAX_MS 를 3s 로 줄이면서
+    // 접지 후 남는 프로브 수도 줄었다.
+    CHECK_MSG(responses.size() >= 2,
+              "V1 did not record settled-ground probe responses");
     const double max_ground_response =
         *std::max_element(responses.begin(), responses.end());
     std::cout << "[SIL] V1 ground probe responses=";

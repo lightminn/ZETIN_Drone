@@ -283,7 +283,20 @@ const float    FS_LAND_ACCEL_TOL_G      = 0.10f;
 // 나온다. 4로 올리면 오판 2연속(≈19%)이 4연속(≈4%)이 되지만 이는 완화일 뿐
 // 판별력 자체를 회복시키지 못한다. 근본 대책은 docs/failsafe_land_research.md.
 const uint8_t  FS_PROBE_CONFIRM_N       = 4;
-const uint32_t FS_MAX_MS           = 5000;
+// 프로브가 판정에서 빠진 뒤로 이 값은 **하강 예산 그 자체**다. 자동착륙을
+// 거는 최대 고도를 커버하되, 접지 후 프롭이 도는 시간이 그만큼 길어진다.
+//
+// 2026-08-01 실측 (접지 충격 임펄스 적분으로 접지 속도를 재고 등가속 모델
+// v=a·t, h=½a·t² 로 역산):
+//   023021  t=0.80s v=0.76m/s → a=0.95   h=0.30m
+//   023226  t=0.82s v=1.30m/s → a=1.59   h=0.53m
+//   023904  t=1.76s v=2.11m/s → a=1.20   h=1.86m   ← 환경상 최고 고도
+// 평균 a≈1.24 m/s² (추력 부족 60/290=21%=2.06 m/s² 에서 항력만큼 감소).
+// 하강은 등속이 아니라 가속이므로 커버 고도는 시간의 제곱으로 늘어난다:
+//   2.0s→2.49m  2.5s→3.89m  3.0s→5.60m  3.5s→7.62m
+// 3.0s 는 최고 시험 고도의 3배를 덮고, 아래 static_assert 하한(2720ms)보다
+// 크다 — 2.5s 는 컴파일되지 않는다.
+const uint32_t FS_MAX_MS           = 3000;
 const uint32_t FS_RESUME_MAX_MS    = 3U * FS_MAX_MS;
 static_assert(FS_PROBE_DIP_MIN_US < CTRL_MARGIN,
               "FS_PROBE_DIP_MIN_US must be less than CTRL_MARGIN");
