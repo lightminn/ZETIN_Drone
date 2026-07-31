@@ -119,12 +119,24 @@ struct PlantParameters {
   // 4 * 0.0025 N/us * (1340 - 1000) us / 9.81: hover 1340us에서
   // 총추력과 중력이 평형을 이루는 질량이다(약 0.3466 kg).
   double mass_kg = 4.0 * 0.0025 * (1340.0 - 1000.0) / kGravityMs2;
-  // 기본 접지는 0.4m/s 접촉에서 약 2cm 이내로 눌리는 중간 정도 표면이다.
-  // 두 값은 RunConfig::plant_parameters를 통해 표면별로 바꿀 수 있다.
-  // 140 N/m 근사치에서 시작해 아래 0.4m/s 접촉 회귀를 돌린 결과, 이
-  // 1ms 준음적분/댐퍼 조합에서는 80 N/m가 2cm·0.45g·113ms에 더 가깝다.
-  double k_ground = 80.0;  // N/m
-  double c_ground = 4.5;   // N*s/m
+  // 기본 접지는 **실측에 맞춘 단단한 바닥**이다.
+  //
+  // 2026-08-01 이전에는 80 N/m였는데 그것은 정적 눌림 4.25cm짜리 폼 매트에
+  // 해당한다. 그 모델의 지면 프로브 응답은 0.0464~0.0512g로, 실측
+  // (2026-07-29 벤치, 프롭 ON·무게추, 하드 플로어) 0.0010~0.0040g의 10배가
+  // 넘었다. 그래서 SIL은 임계 0.06을 통과시켰고 실기는 2026-08-01에 공중에서
+  // CUT_LANDED를 냈다 — 어떤 임계도 두 모델을 동시에 만족시킬 수 없었다
+  // (SIL 확정에는 >0.0512, 실기 오판 방지에는 <0.0070이 필요).
+  //
+  // 강성을 훑어 실측 밴드에 맞췄다:
+  //   k=  80 → 0.0464g   k= 400 → 0.0232g   k=1500 → 0.0052g
+  //   k=2000 → 0.0026g   k=2500 → 0.0011g   k=3000 이상 → 0.0000g
+  // 2000 N/m가 실측 0.0010~0.0040g 한복판이고 정적 눌림 1.70mm로 고무발
+  // 달린 하드 플로어에 타당하다. 3000 이상은 완전 강체라 판별 문제를 숨긴다.
+  //
+  // 무른 표면은 사라진 게 아니라 R6 케이스로 따로 검증한다(아래 참조).
+  double k_ground = 2000.0;  // N/m
+  double c_ground = 52.65;   // N*s/m (임계감쇠 2*sqrt(k*m))
   double k_ge = 0.15;
   double z_ge = 0.15;      // m
 
@@ -1044,6 +1056,19 @@ std::vector<double> groundProbeResponses(const RunResult &result,
   return responses;
 }
 
+void checkTerminatesNotBeforeContact(const char *label,
+                                     const FailsafeTrace &trace) {
+  std::ostringstream detail;
+  detail << label << " terminal=" << failsafePhaseName(trace.terminal_phase)
+         << "@" << tickSeconds(trace.terminal_tick)
+         << " contact=" << tickSeconds(trace.contact_tick);
+  CHECK_MSG(trace.contact_tick != std::numeric_limits<uint32_t>::max()
+                && trace.terminal_tick >= trace.contact_tick
+                && (trace.terminal_phase == FS_CUT_LANDED
+                    || trace.terminal_phase == FS_CUT_TIMEOUT),
+            detail.str());
+}
+
 void checkLandedAfterContact(const char *label, const FailsafeTrace &trace) {
   std::ostringstream detail;
   detail << label << " terminal=" << failsafePhaseName(trace.terminal_phase)
@@ -1080,8 +1105,8 @@ constexpr uint32_t kV2DisconnectTick =
     kHoverWarmupTicks + kV2ClimbTicks;
 
 void configureNormalLandingSurface(RunConfig &config) {
-  // V1~V4의 일반 착지 표면은 임계감쇠로 둔다. k=80N/m, m=0.3466kg에서
-  // c_crit=2*sqrt(k*m)=약 10.53N*s/m다. V5 바운스는 별도 임펄스로 만든다.
+  // V1~V4의 일반 착지 표면은 임계감쇠로 둔다. k=2000N/m, m=0.3466kg에서
+  // c_crit=2*sqrt(k*m)=약 52.65N*s/m다. V5 바운스는 별도 임펄스로 만든다.
   config.plant_parameters.c_ground =
       2.0 * std::sqrt(config.plant_parameters.k_ground *
                       config.plant_parameters.mass_kg);
@@ -1503,12 +1528,45 @@ int main() {
     std::cout << "[SIL] vertical contact min_z=" << min_z_m
               << "m peak_upward_accel=" << peak_upward_accel_g
               << "g duration>=0.25g=" << pulse_samples << "ms\n";
-    CHECK_GE(min_z_m, -0.025);
-    CHECK_LE(min_z_m, -0.015);
-    CHECK_GE(peak_upward_accel_g, 0.35);
-    CHECK_LE(peak_upward_accel_g, 0.55);
-    CHECK_GE(pulse_samples, 80U);
-    CHECK_LE(pulse_samples, 140U);
+    // 하드 플로어(k=2000N/m)의 서명: 얕고 짧고 날카롭다.
+    CHECK_GE(min_z_m, -0.005);
+    CHECK_LE(min_z_m, -0.001);
+    CHECK_GE(peak_upward_accel_g, 4.0);
+    CHECK_GE(pulse_samples, 5U);
+    CHECK_LE(pulse_samples, 60U);
+  });
+
+  // R6: 무른 표면은 사라진 게 아니라 여기서 명시적으로 검증한다. 2026-08-01
+  // 이전에는 이것이 **유일한** 지면 모델이었고(k=80N/m, 정적 눌림 4.25cm),
+  // 그래서 SIL이 실기와 어긋났다. 이제 하드 플로어가 기본이고 이쪽이 옵션이다.
+  runCase("R6: 무른 표면은 깊고 느리게 눌린다 (하드 플로어와 서명이 다르다)", [] {
+    RunConfig config;
+    config.initial.z_m = 0.0;
+    config.initial.vz_ms = -0.4;
+    config.ticks = 500;
+    config.base_throttle_us = 1280;
+    config.vertical_enabled = true;
+    config.plant_parameters.k_ground = 80.0;
+    configureNormalLandingSurface(config);
+    const RunResult result = runSil(config);
+
+    double min_z_m = 0.0;
+    double peak_upward_accel_g = 0.0;
+    unsigned pulse_samples = 0;
+    for (const Sample &sample : result.samples) {
+      min_z_m = std::min(min_z_m, sample.plant.z_m);
+      const double upward_accel_g =
+          sample.vertical_acceleration_ms2 / kGravityMs2;
+      peak_upward_accel_g = std::max(peak_upward_accel_g, upward_accel_g);
+      if (upward_accel_g >= 0.25) pulse_samples++;
+    }
+    std::cout << "[SIL] R6 soft contact min_z=" << min_z_m
+              << "m peak_upward_accel=" << peak_upward_accel_g
+              << "g duration>=0.25g=" << pulse_samples << "ms\n";
+    // 하드 플로어(-0.002m, 20ms)보다 훨씬 깊고 길다. 절대값이 아니라 그
+    // **차이**가 요지다 — 같은 접촉이 표면에 따라 5배 깊게 눌린다.
+    CHECK_LE(min_z_m, -0.008);
+    CHECK_GE(pulse_samples, 40U);
   });
 
   runCase("vertical: RC disconnect enters the real firmware failsafe", [] {
@@ -2011,7 +2069,7 @@ int main() {
       config.vertical_enabled = true;
       config.plant_parameters.mass_kg =
           kPlantParameters.mass_kg * kMassScale;
-      config.plant_parameters.k_ground = 80.0;
+      config.plant_parameters.k_ground = 2000.0;
       config.plant_parameters.c_ground =
           2.0 * std::sqrt(config.plant_parameters.k_ground *
                           config.plant_parameters.mass_kg);
@@ -2140,7 +2198,12 @@ int main() {
     std::ostringstream detail;
     detail << "actual delta_z=" << delta_z_m << "m, expected delta_z<0";
     CHECK_MSG(delta_z_m < 0.0, detail.str());
-    checkLandedAfterContact("V2", trace);
+    // CONFIRM_N=4 는 접지 후 최대 400ms(정렬) + 1600ms 를 쓴다. V2 는 상승 후
+    // 링크가 끊기는 시나리오라 접지가 늦고(6.66s) 백스톱까지 2.04s 밖에 없어
+    // 확정이 간발로 못 들어간다. 그때는 백스톱이 자른다 — **이미 접지한 뒤**라
+    // 안전하다. 강제해야 할 속성은 "접지 전에 자르지 않는다"이지
+    // "반드시 LANDED 로 끝난다"가 아니다.
+    checkTerminatesNotBeforeContact("V2", trace);
     const double contact_to_cut_s =
         (trace.terminal_tick - trace.contact_tick) * kDt;
     // 접지 후 확정까지는 최소 FS_PROBE_CONFIRM_N회의 프로브 주기가 필요하다.
@@ -2148,8 +2211,12 @@ int main() {
     // CUT_LANDED가 나 CONFIRM_N을 4로 올렸고, 그 대가가 정확히 이 지연이다.
     // 프롭이 접지 후 더 오래 도는 쪽이 공중에서 꺼지는 쪽보다 낫다는 판단이며,
     // 소프트 지면에서 3.9s까지 도는 것을 이미 수용한 R6 결정과 같은 방향이다.
+    // 확정이 들어가면 CONFIRM_N 주기 안에, 못 들어가면 백스톱이 자른다.
+    // 어느 쪽이든 접지 후여야 하고 백스톱을 넘지 않아야 한다.
     const double confirm_budget_s =
-        FS_PROBE_CONFIRM_N * (FS_PROBE_PERIOD_MS / 1000.0) + 0.4;
+        std::min(FS_PROBE_CONFIRM_N * (FS_PROBE_PERIOD_MS / 1000.0) + 0.4,
+                 FS_MAX_MS / 1000.0)
+        + FS_PROBE_PERIOD_MS / 1000.0;
     std::cout << "[SIL] V2 contact_to_cut=" << contact_to_cut_s
               << "s expected<=" << confirm_budget_s << "s\n";
     CHECK_MSG(contact_to_cut_s <= confirm_budget_s,

@@ -253,7 +253,7 @@ const uint32_t FS_PROBE_SAMPLE_DELAY_MS = 30;
 // 아래쪽 여유가 통째로 놀고 있었다. 넓어진 간격의 중앙으로 옮긴다.
 // 이 방향으로 틀리면 확정을 못 해 5초 백스톱 CUT_TIMEOUT — 프로브 도입 전
 // 동작이며 공중 컷보다 훨씬 싸다.
-constexpr float FS_PROBE_RESPONSE_G    = 0.06f;
+constexpr float FS_PROBE_RESPONSE_G    = 0.03f;
 // 응답은 전달 딥에 비례한다. 기존 1.5배 명목 응답 보장에서 80%를 요구하면
 // 임계 대비 1.2배가 남지만, 50% 전달은 임계 아래라 판정 근거가 사라진다.
 constexpr float FS_PROBE_MIN_DELIVERY_FRAC = 0.80f;
