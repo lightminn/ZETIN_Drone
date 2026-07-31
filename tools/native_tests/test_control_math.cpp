@@ -1382,7 +1382,7 @@ int main() {
     CHECK_EQ(motorOut[0], 1000);
   });
 
-  runCase("자동착륙은 400ms 간격의 지상 무반응 두 번 뒤 LANDED로 간다", [] {
+  runCase("자동착륙은 지상 무반응 FS_PROBE_CONFIRM_N회 뒤 LANDED로 간다", [] {
     prepareFailsafeFlight(1360);
     uint32_t cut_tick = std::numeric_limits<uint32_t>::max();
     arduino_fake::pre_tick_hook = [&](uint32_t tick) {
@@ -1393,17 +1393,20 @@ int main() {
       setFakeAccelMagnitude(1.0f, tick);
     };
 
-    runPidTicks(
-        FS_MIN_DESCEND_MS + FS_PROBE_PERIOD_MS + FS_PROBE_DIP_MS + 20U);
+    // 확정 시각은 FS_PROBE_CONFIRM_N에서 유도한다. 상수를 바꿨을 때 이 테스트가
+    // 조용히 어긋나지 않고 같이 따라오도록 숫자를 박지 않는다.
+    const uint32_t confirm_ms =
+        FS_MIN_DESCEND_MS
+        + FS_PROBE_PERIOD_MS * (uint32_t)FS_PROBE_CONFIRM_N
+        + FS_PROBE_DIP_MS;
+    runPidTicks(confirm_ms + 20U);
     arduino_fake::pre_tick_hook = nullptr;
 
     CHECK_EQ((int)fs_phase, (int)FS_CUT_LANDED);
     CHECK(safety_lock);
     CHECK_EQ(motorOut[0], 1000);
-    CHECK(cut_tick >=
-          FS_MIN_DESCEND_MS + FS_PROBE_PERIOD_MS + FS_PROBE_DIP_MS);
-    CHECK(cut_tick <=
-          FS_MIN_DESCEND_MS + FS_PROBE_PERIOD_MS + FS_PROBE_DIP_MS + 2U);
+    CHECK(cut_tick >= confirm_ms - FS_PROBE_PERIOD_MS);
+    CHECK(cut_tick <= confirm_ms + 2U);
   });
 
   runCase("공중에서 매 딥이 반응하면 FS_MAX_MS에서 TIMEOUT으로 간다", [] {

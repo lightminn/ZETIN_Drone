@@ -2143,9 +2143,16 @@ int main() {
     checkLandedAfterContact("V2", trace);
     const double contact_to_cut_s =
         (trace.terminal_tick - trace.contact_tick) * kDt;
+    // 접지 후 확정까지는 최소 FS_PROBE_CONFIRM_N회의 프로브 주기가 필요하다.
+    // 이 한계는 상수에서 유도한다 — 2026-08-01 실비행에서 공중 오판 2연속으로
+    // CUT_LANDED가 나 CONFIRM_N을 4로 올렸고, 그 대가가 정확히 이 지연이다.
+    // 프롭이 접지 후 더 오래 도는 쪽이 공중에서 꺼지는 쪽보다 낫다는 판단이며,
+    // 소프트 지면에서 3.9s까지 도는 것을 이미 수용한 R6 결정과 같은 방향이다.
+    const double confirm_budget_s =
+        FS_PROBE_CONFIRM_N * (FS_PROBE_PERIOD_MS / 1000.0) + 0.4;
     std::cout << "[SIL] V2 contact_to_cut=" << contact_to_cut_s
-              << "s expected<=1.0000s\n";
-    CHECK_MSG(contact_to_cut_s <= 1.0,
+              << "s expected<=" << confirm_budget_s << "s\n";
+    CHECK_MSG(contact_to_cut_s <= confirm_budget_s,
               "V2 contact-to-cut delay did not materially beat timeout");
   });
 

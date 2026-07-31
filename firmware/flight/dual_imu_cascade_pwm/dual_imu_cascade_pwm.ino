@@ -256,7 +256,13 @@ static_assert(
         > 1.2f * FS_PROBE_RESPONSE_G,
     "minimum delivered probe must preserve the response margin");
 const float    FS_LAND_ACCEL_TOL_G      = 0.10f;
-const uint8_t  FS_PROBE_CONFIRM_N       = 2;
+// 2026-08-01 실비행: 하강 8회 판정이 전부 공중이었는데 3회가 "지면"으로 나왔고,
+// 2연속이 걸려 공중에서 CUT_LANDED가 났다(컷 직후 |accel| 0.714g → 1.392g 충격).
+// 1kHz 로그로 펌웨어 LPF를 재현해 보니 딥이 없어도 120ms 창의 |accel| 낙폭이
+// 호버에서 p95 0.0904g로 임계 0.06g보다 크다 — 교란만으로 프로브 신호 전체가
+// 나온다. 4로 올리면 오판 2연속(≈19%)이 4연속(≈4%)이 되지만 이는 완화일 뿐
+// 판별력 자체를 회복시키지 못한다. 근본 대책은 docs/failsafe_land_research.md.
+const uint8_t  FS_PROBE_CONFIRM_N       = 4;
 const uint32_t FS_MAX_MS           = 5000;
 const uint32_t FS_RESUME_MAX_MS    = 3U * FS_MAX_MS;
 static_assert(FS_PROBE_DIP_MIN_US < CTRL_MARGIN,
