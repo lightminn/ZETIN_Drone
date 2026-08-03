@@ -12,6 +12,7 @@
 #include "mag_yaw_fusion.h"
 #include "yaw_command.h"
 #include "failsafe_land.h"
+#include "msp_sensor.h"
 
 static const uint32_t IMU_RAW_RING_SIZE = 512;
 static const uint32_t IMU_RAW_RING_MASK = IMU_RAW_RING_SIZE - 1;
@@ -177,6 +178,19 @@ const int pinM3   = 6;   // FR
 const int pinM4   = 7;   // RL
 const int SPI_CS1 = 10;  // IMU1
 const int SPI_CS2 = 9;   // IMU2
+// Matek 3901-L0X (광류+라이다). 모듈 TX -> 이 핀, 3.3V 로직이라 직결한다.
+// 모듈 RX 는 연결하지 않는다 — 우리는 보낼 것이 없고 수신 전용이다.
+// 19/20 은 USB D-/D+ 라 피했고 스트래핑 핀도 피했다.
+const int MSP_SENSOR_RX_PIN = 16;
+const uint32_t MSP_SENSOR_BAUD = 115200;
+// 이보다 오래 프레임이 없으면 quality 를 -1 로 보고한다. 얼어붙은 센서가
+// 마지막 값으로 유효해 보이면 안 된다(MAG_STALE_MS 와 같은 이유).
+const uint32_t MSP_SENSOR_STALE_MS = 500;
+// udp_task 한 반복에서 처리할 바이트 상한. BMM350 의 블로킹 I2C 가 RC
+// 수신큐를 넘치게 했던 전례가 있어 이 경로는 절대 블로킹하지 않는다.
+// 실제 유량은 20Hz x ~15B = 300B/s 라 이 상한에 닿을 일이 없다.
+const int MSP_SENSOR_MAX_BYTES_PER_TICK = 64;
+
 const int BMM_SDA = 35;
 const int BMM_SCL = 36;
 const int LDO_SHD = 38;
@@ -606,6 +620,16 @@ volatile float fs_probe_response_g = 0.0f;
 // 실제로 Core 1에서 arm 전이될 때만 초기화한다.
 volatile uint32_t fs_first_enter_ms = 0;
 volatile bool fs_first_enter_valid = false;
+// 3901-L0X 상태. udp_task 만 쓰고 sendTelemetry 가 읽는다(같은 코어).
+MspSensorParser mspSensor;
+volatile int32_t msp_range_mm = 0;
+volatile int     msp_range_quality = -1;   // -1 = 신선한 프레임 없음
+volatile int32_t msp_flow_x = 0, msp_flow_y = 0;
+volatile int     msp_flow_quality = -1;
+uint32_t msp_last_range_ms = 0;
+uint32_t msp_last_flow_ms = 0;
+uint16_t msp_reported_unknown = 0;         // 같은 ID 를 반복해 찍지 않기 위해
+
 volatile float hover_est = 0.0f;       // 추정 호버 collective (us)
 // hover_valid는 만료시키지 않는다. false는 RC 끊김 시 즉시 컷을 뜻하므로
 // 공중에서 freshness 만료로 false가 되면 추락한다. 낡은 추정치가 덜 위험하다.
@@ -1750,7 +1774,7 @@ static void sendTelemetry() {
   const float probeResponseSnapshot = fs_probe_response_g;
   const ImuTelemetrySample imuSample = readImuSampleSnapshot();
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d,%ld,%d,%ld,%ld,%d",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1771,7 +1795,9 @@ static void sendTelemetry() {
              imuSample.imu1AccelX, imuSample.imu1AccelY, imuSample.imu1AccelZ,
              imuSample.imu2GyroX, imuSample.imu2GyroY, imuSample.imu2GyroZ,
              imuSample.imu2AccelX, imuSample.imu2AccelY, imuSample.imu2AccelZ,
-             targetAngleX, targetAngleY, targetAngleZ, (int)mag_enabled);
+             targetAngleX, targetAngleY, targetAngleZ, (int)mag_enabled,
+             (long)msp_range_mm, msp_range_quality,
+             (long)msp_flow_x, (long)msp_flow_y, msp_flow_quality);
   udp.endPacket();
 }
 
@@ -1829,6 +1855,40 @@ static bool sendImuCalibration() {
             sizeof(imuCalDatagram));
   udp.endPacket();
   return true;
+}
+
+// 3901-L0X UART 폴링. **논블로킹**: available() 만큼만, 반복당 상한까지.
+// 어떤 것도 제어하지 않는다 — 텔레메트리 기록 전용이다.
+static void pollMspSensor(uint32_t nowMs) {
+  int budget = MSP_SENSOR_MAX_BYTES_PER_TICK;
+  while (budget-- > 0 && Serial1.available() > 0) {
+    const MspParseResult result =
+        mspSensorParseByte(mspSensor, (uint8_t)Serial1.read());
+    if (result == MSP_PARSE_RANGEFINDER) {
+      msp_range_mm = mspSensor.range.distance_mm;
+      msp_range_quality = (int)mspSensor.range.quality;
+      msp_last_range_ms = nowMs;
+    } else if (result == MSP_PARSE_OPTIC_FLOW) {
+      msp_flow_x = mspSensor.flow.motion_x;
+      msp_flow_y = mspSensor.flow.motion_y;
+      msp_flow_quality = (int)mspSensor.flow.quality;
+      msp_last_flow_ms = nowMs;
+    } else if (result == MSP_PARSE_UNKNOWN &&
+               mspSensor.last_unknown_cmd != msp_reported_unknown) {
+      // function 상수가 틀렸다면 "값이 안 나온다"가 아니라 이 줄로 드러난다.
+      msp_reported_unknown = mspSensor.last_unknown_cmd;
+      Serial.printf("[MSP] unknown function 0x%04X\n",
+                    mspSensor.last_unknown_cmd);
+    }
+  }
+  // 신선하지 않으면 quality 를 -1 로. 값 자체는 건드리지 않는다 —
+  // distance_mm 는 모듈이 범위 밖에서 음수를 쓰므로 센티넬로 못 쓴다.
+  if ((int32_t)(nowMs - msp_last_range_ms) > (int32_t)MSP_SENSOR_STALE_MS) {
+    msp_range_quality = -1;
+  }
+  if ((int32_t)(nowMs - msp_last_flow_ms) > (int32_t)MSP_SENSOR_STALE_MS) {
+    msp_flow_quality = -1;
+  }
 }
 
 void udp_task(void *pv) {
@@ -2064,6 +2124,7 @@ void udp_task(void *pv) {
 
     uint32_t now = millis();
     if (mag_enabled || mag_calibrating) sampleMagnetometer(now);
+    pollMspSensor(now);
     bool sentImuPacket = false;
     if (now - lastRawCheck >= 10U) {
       lastRawCheck = now;
@@ -2117,6 +2178,9 @@ void setup() {
   WiFi.setSleep(false);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
   udp.begin(UDP_PORT);
+
+  // 3901-L0X 수신 전용 UART. TX 핀 -1 로 두어 핀 하나만 점유한다.
+  Serial1.begin(MSP_SENSOR_BAUD, SERIAL_8N1, MSP_SENSOR_RX_PIN, -1);
 
   SPI.begin(12, 13, 11, -1);   // SCK, MISO, MOSI; CS는 각 IMU 객체가 관리
 

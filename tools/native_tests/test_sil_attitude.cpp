@@ -1406,7 +1406,7 @@ int main() {
         "implausible accel calibration did not emit the safety warning");
   });
 
-  runCase("telemetry: target angles and mag state append after field 55", [] {
+  runCase("telemetry: target angles, mag state and 3901-L0X append after field 55", [] {
     PlantState state;
     resetFirmwareState(state);
     connectionEstablished = true;
@@ -1434,19 +1434,22 @@ int main() {
             : 1U + static_cast<std::size_t>(
                        std::count(packet.begin(), packet.end(), ','));
     std::ostringstream detail;
+    // 3901-L0X 가 없는 SIL 에서는 Range/Flow 가 기본값이고 quality 는 -1 —
+    // "신선한 프레임 없음"이 그대로 드러나야 한다.
     const std::string expected_suffix =
         ",1337.50,1,3,2,0.013"
         ",1.25,-2.50,3.75,0.125,-0.250,0.500"
         ",-4.50,5.25,-6.00,-0.625,0.750,-0.875"
-        ",4.25,-3.50,172.75,1";
+        ",4.25,-3.50,172.75,1"
+        ",0,-1,0,0,-1";
     detail << "actual field_count=" << field_count
            << ", packet_suffix="
            << packet.substr(
                   packet.size() > expected_suffix.size()
                       ? packet.size() - expected_suffix.size()
                       : 0U)
-           << "; expected field_count=59 and suffix " << expected_suffix;
-    CHECK_MSG(field_count == 59U, detail.str());
+           << "; expected field_count=64 and suffix " << expected_suffix;
+    CHECK_MSG(field_count == 64U, detail.str());
     CHECK_MSG(
         packet.size() >= expected_suffix.size() &&
             packet.compare(

@@ -184,7 +184,7 @@ ar|at|ay <value>      # roll / pitch / yaw
 
 ## 드론 → 지상국
 
-텔레메트리는 다음 59개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
+텔레메트리는 다음 64개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
 
 ```text
 Roll, Pitch, Yaw,
@@ -252,7 +252,35 @@ Mag_Enabled
 | 56 | `TgtAngle_Roll` | float | 펌웨어가 사용하는 roll 목표 각도(deg) |
 | 57 | `TgtAngle_Pitch` | float | 펌웨어가 사용하는 pitch 목표 각도(deg) |
 | 58 | `TgtAngle_Yaw` | float | yaw outer loop의 목표 방위(deg) |
+| 60 | `Range_MM` | int | 3901-L0X 거리계 원값(mm). **범위 밖이면 음수** |
+| 61 | `Range_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
+| 62 | `Flow_X` | int | 광류 motionX |
+| 63 | `Flow_Y` | int | 광류 motionY |
+| 64 | `Flow_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
 | 59 | `Mag_Enabled` | int | 펌웨어가 실제 적용 중인 BMM350 yaw 융합 상태. 0=OFF, 1=ON |
+| 60 | `Range_MM` | int | Matek 3901-L0X 거리계 **원값**(mm) |
+| 61 | `Range_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
+| 62 | `Flow_X` | int | 광류 `motionX` |
+| 63 | `Flow_Y` | int | 광류 `motionY` |
+| 64 | `Flow_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
+
+### 3901-L0X 필드 해석 (필드 60~64)
+
+`Range_MM`은 모듈이 보낸 값 그대로다. **작동 범위가 80~2000mm 이고 그 밖이면
+음수**인데, iNav 구조체 주석이 `Negative value for out of range` 하나뿐이라
+**너무 가까울 때와 너무 멀 때가 같은 음수**다. 부호만으로 위/아래를 구분할 수
+없으므로, 접지 판정은 직전 유효값이 커지던 중인지 작아지던 중인지를 봐야 한다.
+
+`*_Quality`가 **−1이면 신선한 프레임이 없다**는 뜻이다(펌웨어
+`MSP_SENSOR_STALE_MS`). 거리 값 자체를 센티넬로 못 쓰기 때문에 신선도는 반드시
+quality로 판단한다 — 얼어붙은 센서가 마지막 값으로 유효해 보이면 안 된다.
+
+프로토콜은 INAV MSPv2다. `'$' 'X' <dir>` 뒤에 `flags(u8) cmd(u16 LE)
+size(u16 LE) payload crc8`이 오고, **CRC(crc8_dvb_s2, 다항식 0xD5, 초기값 0)는
+방향 바이트 다음부터** 적용된다. `MSP2_SENSOR_RANGEFINDER=0x1F01`
+(`u8 quality; i32 distanceMm`), `MSP2_SENSOR_OPTIC_FLOW=0x1F02`
+(`u8 quality; i32 motionX; i32 motionY`). 배선은 모듈 TX → ESP32 GPIO16
+(수신 전용, 3.3V 직결), 전원은 **반드시 5V**다(3.3V로 주면 측정거리가 줄어든다).
 
 목표 각도 필드는 다음처럼 해석해야 한다.
 
@@ -315,6 +343,7 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 - 43필드 패킷은 `Failsafe_Probe_Response_G`에서 끝난다 (IMU별 텔레메트리 도입 이전 펌웨어).
 - 55필드 패킷은 `IMU2_Accel_Z`에서 끝난다 (목표 각도 텔레메트리 도입 이전 펌웨어).
 - 58필드 패킷은 `TgtAngle_Yaw`에서 끝난다 (mag 상태 텔레메트리 도입 이전 펌웨어).
+- 59필드 패킷은 `Mag_Enabled`에서 끝난다 (3901-L0X 텔레메트리 도입 이전 펌웨어).
 - 과거 패킷에 없는 값은 정규화된 CSV에서 빈 셀이 된다.
 - `Timestamp`는 드론이 보내지 않는다. 지상 도구가 CSV의 첫 열로 추가하므로
   현행 CSV는 60개 열이 된다.

@@ -104,6 +104,11 @@ EXPECTED_TELEMETRY_FIELDS = (
     *IMU_TELEMETRY_NAMES,
     *TARGET_ANGLE_TELEMETRY_NAMES,
     "Mag_Enabled",
+    "Range_MM",
+    "Range_Quality",
+    "Flow_X",
+    "Flow_Y",
+    "Flow_Quality",
 )
 
 
@@ -143,8 +148,9 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Failsafe_Probe_Response_G",
         ):
             self.assertIsNone(sample[name])
-        self.assertEqual(59, len(TELEMETRY_FIELDS))
-        self.assertEqual(60, len(CSV_FIELDS))
+        # CSV 는 필드 + Timestamp 다. 개수를 박으면 필드를 추가할 때마다
+        # 무관한 이유로 깨지므로 관계로 고정한다.
+        self.assertEqual(len(TELEMETRY_FIELDS) + 1, len(CSV_FIELDS))
 
     def test_22_field_packet_populates_armed(self):
         sample = parse_telemetry_packet(packet(22))
@@ -324,9 +330,10 @@ class TelemetryCompatibilityTest(unittest.TestCase):
     def test_per_imu_field_names_are_appended_in_exact_wire_order(self):
         self.assertEqual(IMU_TELEMETRY_NAMES, TELEMETRY_FIELDS[43:55])
 
-    def test_field_names_and_order_match_the_59_field_wire_contract(self):
+    def test_field_names_and_order_match_the_wire_contract(self):
+        # 이름과 순서가 계약이다. 개수는 그 목록에서 유도한다.
         self.assertEqual(EXPECTED_TELEMETRY_FIELDS, TELEMETRY_FIELDS)
-        self.assertEqual(59, len(TELEMETRY_FIELDS))
+        self.assertEqual(len(EXPECTED_TELEMETRY_FIELDS), len(TELEMETRY_FIELDS))
 
     def test_35_field_packet_leaves_new_fields_none(self):
         packet = ",".join(["1"] * 35)
@@ -335,8 +342,12 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertIsNone(sample["Trim_Roll"])
         self.assertIsNone(sample["Trim_Pitch"])
 
-    def test_csv_has_60_columns(self):
-        self.assertEqual(len(telemetry_schema.CSV_FIELDS), 60)
+    def test_csv_is_timestamp_plus_every_telemetry_field(self):
+        self.assertEqual(
+            len(telemetry_schema.CSV_FIELDS),
+            len(telemetry_schema.TELEMETRY_FIELDS) + 1,
+        )
+        self.assertEqual("Timestamp", telemetry_schema.CSV_FIELDS[0])
 
     def test_explicit_type_map_covers_new_field_types(self):
         for name in (

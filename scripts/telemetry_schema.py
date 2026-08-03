@@ -28,7 +28,14 @@ reported targets contain ``trim_roll``, ``trim_pitch``, and ``fs_hold_yaw``:
 the level descent setpoint and held heading. ``TgtAngle_Yaw`` is
 ``yawOuter.target_angle_deg``; when ``Yaw_Hold == 1`` it is the held heading,
 and when ``Yaw_Hold == 0`` it is slaved to the current heading.
-Field 59 reports the firmware's actual ``Mag_Enabled`` fusion state.
+Field 59 reports the firmware's actual ``Mag_Enabled`` fusion state. Fields
+60-64 append the Matek 3901-L0X readings: ``Range_MM`` is the module's raw
+distance and is **negative when out of range** -- its working range is
+80-2000 mm, so a value below the near limit is negative too and the sign
+alone cannot say whether the ground is too close or too far. ``Range_Quality``
+and ``Flow_Quality`` are 0-255 from the module, or **-1 when no fresh frame
+has arrived**, which is the only way to tell a frozen sensor from a valid
+reading.
 ``MagHeading`` (field 31) retains its last value while magnetic fusion is off,
 so it cannot establish whether fusion is active; ``Mag_Enabled`` is the sole
 source of truth for that state.
@@ -97,6 +104,11 @@ TELEMETRY_FIELDS = (
     "TgtAngle_Pitch",
     "TgtAngle_Yaw",
     "Mag_Enabled",
+    "Range_MM",
+    "Range_Quality",
+    "Flow_X",
+    "Flow_Y",
+    "Flow_Quality",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -159,6 +171,11 @@ TELEMETRY_FIELD_TYPES = {
     "TgtAngle_Pitch": float,
     "TgtAngle_Yaw": float,
     "Mag_Enabled": int,
+    "Range_MM": int,
+    "Range_Quality": int,
+    "Flow_X": int,
+    "Flow_Y": int,
+    "Flow_Quality": int,
 }
 
 GAIN_FIELDS = (

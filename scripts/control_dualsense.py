@@ -497,6 +497,23 @@ def _format_optional_float(value, decimal_places):
     return f"{numeric:.{decimal_places}f}"
 
 
+def _format_agl(sample):
+    """3901-L0X 거리계. 신선하지 않으면 '-', 범위 밖이면 'OOR'.
+
+    Range_MM 은 모듈 원값이라 범위 밖에서 음수다(8cm 미만도 음수). 그래서
+    거리 숫자로 그대로 보여주면 안 되고, Range_Quality 로 신선도를 먼저 본다.
+    """
+    quality = sample.get("Range_Quality")
+    distance = sample.get("Range_MM")
+    if quality is None or distance is None:
+        return "-"
+    if quality < 0:
+        return "-"
+    if distance < 0:
+        return f"OOR/q{quality}"
+    return f"{distance / 1000.0:.2f}m/q{quality}"
+
+
 def _format_drone_trim(sample):
     """드론이 실제로 들고 있는 트림. 지상국 값과 다르면 끝에 '!'를 붙인다.
 
@@ -624,6 +641,7 @@ def format_status_telemetry(sample):
         f"Yaw={_format_optional_float(sample.get('Yaw'), 2)} "
         f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
         f"Mag={_format_binary_flag(sample.get('Mag_Enabled'))} "
+        f"AGL={_format_agl(sample)} "
         f"Throttle={_format_optional_int(sample.get('Throttle'))} "
         f"Armed={_format_binary_flag(sample.get('Armed'))} "
         f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
@@ -832,6 +850,7 @@ def telemetry_thread():
                       f"eP={_format_angle_error(sample.get('TgtAngle_Pitch'), sample.get('Pitch'))} "
                       f"gZ={gz:+6.1f} dG={_format_gyro_disagreement(sample)} "
                       f"Trim={_format_drone_trim(sample)} "
+                      f"AGL={_format_agl(sample)} "
                       f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
                       f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
                       f"th={sample['Throttle']} "

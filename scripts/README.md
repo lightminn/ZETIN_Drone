@@ -19,7 +19,7 @@ python scripts/test_dualsense_input.py
 수신 내용을 `logs/`에 기록한다. 두 도구는
 [`telemetry_schema.py`](telemetry_schema.py)의 동일한 필드 정의와 파서를
 공유하므로 10개, 14개, 21개, 22개, 30개, 31개 필드 레거시 텔레메트리와 현재
-59개 필드 패킷을 같은 방식으로 해석한다. 필드 44~55는
+64개 필드 패킷을 같은 방식으로 해석한다. 필드 44~55는
 body frame의 `IMU1_Gyro_X/Y/Z`, `IMU1_Accel_X/Y/Z`,
 `IMU2_Gyro_X/Y/Z`, `IMU2_Accel_X/Y/Z`다. gyro는 소프트웨어 LPF 적용
 후 값이고 accel에는 소프트웨어 LPF가 없다. 마지막 3개 필드는
@@ -30,8 +30,10 @@ body frame의 `IMU1_Gyro_X/Y/Z`, `IMU1_Accel_X/Y/Z`,
 패킷으로 수락하며, `Failsafe_Probe_Response_G`에서 끝나는 43필드는 IMU별
 텔레메트리 도입 전 패킷으로 수락한다. `IMU2_Accel_Z`에서 끝나는 55필드도
 목표 각도 텔레메트리 도입 전 패킷으로 수락하고, `TgtAngle_Yaw`에서 끝나는
-58필드는 mag 상태 텔레메트리 도입 전 패킷으로 수락한다. CSV에는 PC 수신
-시각까지 포함해 60개 열을 쓴다.
+58필드는 mag 상태 텔레메트리 도입 전 패킷으로 수락하며, `Mag_Enabled`에서
+끝나는 59필드는 3901-L0X 텔레메트리 도입 전 패킷으로 수락한다. 필드 60~64는
+`Range_MM`, `Range_Quality`, `Flow_X`, `Flow_Y`, `Flow_Quality`다. CSV에는
+PC 수신 시각까지 포함해 65개 열을 쓴다.
 
 `analyze_probe_response.py`는 Stage E-4a용으로 프로브 판정 이벤트와
 `Hover_Est` 일관성을 확인하고, 지면/공중 응답 분포 및 1.5배 여유를 판정한다.
@@ -52,6 +54,9 @@ stdin의 `mag on`/`mag off`가 선택을 바꾸고 드론에 즉시 `mag 1`/`mag
 사용한다. `[STATUS]`의
 `Mag=`는 지상국 선택이 아니라 텔레메트리 `Mag_Enabled`이므로 명령 거부·유실도
 드러나며, 구형 패킷에서는 `-`다.
+`AGL=`은 Matek 3901-L0X 거리계다. `1.23m/q200` 형식이고, 범위 밖이면
+`OOR/q<품질>`, 신선한 프레임이 없으면 `-`다. 거리 원값이 범위 밖에서 음수라
+숫자를 그대로 보여주면 오해를 만들기 때문에 품질로 신선도를 먼저 판단한다.
 무장 중 `[DIAG]` 줄의 `dG`는 세 body-frame gyro 축에서 계산한
 `max(|IMU1 − IMU2|)`를 소수 한 자리로 표시한다. 구형 패킷처럼 IMU별
 12필드 중 하나라도 없으면 `dG=-`로 표시하며, CSV에는 수신한 12개 원본값을

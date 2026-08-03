@@ -2147,6 +2147,39 @@ int main() {
     CHECK_NEAR(filter.last, 0.0f, 1e-6f);
   });
 
+  runCase("3901-L0X: UART 프레임이 텔레메트리 상태까지 도달한다", [] {
+    // 파서 단위 시험은 test_msp_sensor.cpp 가 한다. 여기서 확인하는 것은
+    // **배선**이다 — Serial1 -> pollMspSensor -> msp_* 전역.
+    arduino_fake::reset();
+    mspSensor = MspSensorParser{};
+    msp_range_quality = -1;
+    msp_flow_quality = -1;
+    msp_last_range_ms = 0;
+    msp_last_flow_ms = 0;
+
+    auto push = [](std::initializer_list<uint8_t> bytes) {
+      for (uint8_t b : bytes) arduino_fake::serial1_rx.push_back(b);
+    };
+    // MSP2_SENSOR_RANGEFINDER, quality=200, distance=1500mm
+    uint8_t frame[] = {'$', 'X', '<', 0x00, 0x01, 0x1F, 0x05, 0x00,
+                       200, 0xDC, 0x05, 0x00, 0x00};
+    uint8_t crc = 0;
+    for (int i = 3; i < 13; i++) crc = mspCrc8DvbS2(crc, frame[i]);
+    for (uint8_t b : frame) arduino_fake::serial1_rx.push_back(b);
+    arduino_fake::serial1_rx.push_back(crc);
+    (void)push;
+
+    pollMspSensor(1000);
+    CHECK_EQ((long)msp_range_mm, 1500L);
+    CHECK_EQ(msp_range_quality, 200);
+
+    // 신선도: STALE 시간이 지나면 quality 가 -1 이 되어야 한다. 값 자체는
+    // 건드리지 않는다 — 모듈이 범위 밖에 음수를 쓰므로 센티넬로 못 쓴다.
+    pollMspSensor(1000 + MSP_SENSOR_STALE_MS + 1);
+    CHECK_EQ(msp_range_quality, -1);
+    CHECK_EQ((long)msp_range_mm, 1500L);
+  });
+
   runCase("per-IMU telemetry uses the fused body-frame axis and sign contract", [] {
     const float g1[3] = {11.0f, -22.0f, 33.0f};
     const float a1[3] = {2048.0f, -4096.0f, 1024.0f};

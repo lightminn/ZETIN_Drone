@@ -10,6 +10,7 @@
 #include <cstring>
 #include <functional>
 #include <sstream>
+#include <deque>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -43,6 +44,9 @@ inline constexpr portMUX_TYPE portMUX_INITIALIZER_UNLOCKED = {};
 namespace arduino_fake {
 
 inline std::string serial_output;
+// Serial1 은 3901-L0X 수신 전용이다. 테스트가 여기에 바이트를 넣어두면
+// 펌웨어의 pollMspSensor 가 읽어간다.
+inline std::deque<uint8_t> serial1_rx;
 inline uint32_t millis_value = 0;
 inline uint32_t micros_value = 0;
 inline uint32_t us_per_tick = 0;
@@ -60,6 +64,7 @@ struct TaskDelayExit {};
 
 inline void reset() {
   serial_output.clear();
+  serial1_rx.clear();
   millis_value = 0;
   micros_value = 0;
   us_per_tick = 0;
@@ -119,6 +124,24 @@ public:
 };
 
 inline FakeSerial Serial;
+
+#define SERIAL_8N1 0x800001c
+
+// 수신 전용 UART shim. begin() 은 아무것도 하지 않고, available()/read() 가
+// arduino_fake::serial1_rx 를 소비한다.
+class FakeSerial1 {
+ public:
+  void begin(unsigned long, int = 0, int = -1, int = -1) {}
+  int available() { return (int)arduino_fake::serial1_rx.size(); }
+  int read() {
+    if (arduino_fake::serial1_rx.empty()) return -1;
+    const uint8_t value = arduino_fake::serial1_rx.front();
+    arduino_fake::serial1_rx.pop_front();
+    return (int)value;
+  }
+};
+
+inline FakeSerial1 Serial1;
 
 inline uint32_t millis() { return arduino_fake::millis_value; }
 inline uint32_t micros() { return arduino_fake::micros_value; }
