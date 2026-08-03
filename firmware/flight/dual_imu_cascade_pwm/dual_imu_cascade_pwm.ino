@@ -160,9 +160,12 @@ const int MAG_THROTTLE_REF_US = 1000;   // 보정 기준(모터 off 근처)
 // 모터 전류 간섭 보정: body-frame ΔB(µT)는 base_throttle에 비례. raw mag에서 뺀다.
 // mag.x -= mag_comp_x*(base_throttle-REF) 등. µT/µs. 런타임 `magc x y z`. 0=off.
 // 벤치 특성화 2026-07-27 (log 023805, 검증 024330): throttle 간섭 +3.64→+0.02°/100µs.
-volatile float mag_comp_x =  0.007497f;  // µT/µs
-volatile float mag_comp_y = -0.001218f;
-volatile float mag_comp_z = -0.000640f;
+// 2026-08-04: soft-iron 행렬 도입으로 이 계수가 사는 좌표계가 바뀌었다. 간섭은
+// raw 축의 물리적 ΔB이고 보정은 선형이므로 새 계수 = W @ 기존계수로 환산했다.
+// ⚠️ 환산은 수학적으로만 정확하다 — 벤치 4단계(모터 간섭) 실측 재검증 미실시.
+volatile float mag_comp_x =  0.007467272f;  // µT/µs
+volatile float mag_comp_y = -0.001149868f;
+volatile float mag_comp_z = -0.000526263f;
 
 // ==========================================================
 // 2. 시스템 상수
@@ -216,11 +219,19 @@ const float K_MAG = 0.001f;
 const uint32_t MAG_SAMPLE_PERIOD_MS = 20;    // BMM350 read = 50Hz, core 0 only
 const uint32_t MAG_STALE_MS = 100;
 
-// magcal 출력값을 아래 세 상수에 붙여 넣는다. 보정은 raw - offset.
-// 2026-07-24 벤치 캘리브 (magcal, samples=3454).
-const float MAG_HARD_IRON_OFFSET_X = -1.831376f;
-const float MAG_HARD_IRON_OFFSET_Y = 9.318241f;
-const float MAG_HARD_IRON_OFFSET_Z = -12.517762f;
+// scripts/magcal_fit.py 출력값을 아래 두 상수에 붙여 넣는다.
+// 2026-08-04 캘리브 (log flight_log_2026-08-04_023840.csv, 1255샘플 중 inlier
+// 1119, 커버리지비 2.08). 이전 min/max offset은 여기서 6.79µT 벗어나 있었고
+// 그것은 수평성분 32.2µT 대비 최대 ±12.2° heading 오차였다.
+// 교차검증: 무작위 절반 분할 8회의 중심 차이 중앙값 0.29µT (시간 분할은
+// 후반 커버리지비가 39.6이라 b_z를 구속하지 못하므로 쓰면 안 된다).
+// 물리 정합성: 피팅 반경 50.10µT vs 한국 총강도 실측 ~50.4µT (오차 0.6%).
+const float MAG_HARD_IRON[3] = {-3.457566904f, 4.794903225f, -17.307261041f};
+const float MAG_SOFT_IRON[3][3] = {
+  {0.998555071f, 0.005825468f, 0.018437852f},
+  {0.005825468f, 0.976739944f, 0.006050833f},
+  {0.018437852f, 0.006050833f, 1.026752877f},
+};
 
 // BMM350 축이 기체 축과 다르면 벤치 sign test 뒤 여기만 바꾼다.
 const float MAG_BODY_SIGN_X = 1.0f;
@@ -882,7 +893,7 @@ static void startMagCalibration() {
   magCalMax[1] = -FLT_MAX;
   magCalMax[2] = -FLT_MAX;
   magCalSampleCount = 0;
-  Serial.println("[MAGCAL] rotate drone; send 'magcal 0' when finished");
+  Serial.println("[MAGCAL] logging raw XYZ; rotate drone, then send 'magcal 0'");
 }
 
 static void stopMagCalibration() {
@@ -891,13 +902,33 @@ static void stopMagCalibration() {
     Serial.println("[MAGCAL] no samples");
     return;
   }
-  const float offset_x = 0.5f * (magCalMax[0] + magCalMin[0]);
-  const float offset_y = 0.5f * (magCalMax[1] + magCalMin[1]);
-  const float offset_z = 0.5f * (magCalMax[2] + magCalMin[2]);
   Serial.printf("[MAGCAL] samples=%lu\n", (unsigned long)magCalSampleCount);
-  Serial.printf("const float MAG_HARD_IRON_OFFSET_X = %.6ff;\n", offset_x);
-  Serial.printf("const float MAG_HARD_IRON_OFFSET_Y = %.6ff;\n", offset_y);
-  Serial.printf("const float MAG_HARD_IRON_OFFSET_Z = %.6ff;\n", offset_z);
+  Serial.printf("[MAGCAL] span X=%.6f uT Y=%.6f uT Z=%.6f uT\n",
+                magCalMax[0] - magCalMin[0],
+                magCalMax[1] - magCalMin[1],
+                magCalMax[2] - magCalMin[2]);
+  Serial.println(
+      "[MAGCAL] save the telemetry CSV and run scripts/magcal_fit.py <flight_log.csv>");
+}
+
+static inline void applyMagCalibration(
+    const float raw[3], const float hard_iron[3],
+    const float soft_iron[3][3], float out[3]) {
+  const float centered[3] = {
+    raw[0] - hard_iron[0],
+    raw[1] - hard_iron[1],
+    raw[2] - hard_iron[2],
+  };
+  const float body_sign[3] = {
+    MAG_BODY_SIGN_X, MAG_BODY_SIGN_Y, MAG_BODY_SIGN_Z,
+  };
+  for (int axis = 0; axis < 3; axis++) {
+    float transformed = 0.0f;
+    for (int source = 0; source < 3; source++) {
+      transformed += soft_iron[axis][source] * centered[source];
+    }
+    out[axis] = body_sign[axis] * transformed;
+  }
 }
 
 static void sampleMagnetometer(uint32_t now_ms) {
@@ -910,6 +941,11 @@ static void sampleMagnetometer(uint32_t now_ms) {
   if (!isfinite(raw[0]) || !isfinite(raw[1]) || !isfinite(raw[2])) return;
 
   if (mag_calibrating) {
+    // mag_enabled=false throughout calibration, so Core 1 cannot race this
+    // raw-telemetry writer with its compensated-vector telemetry writer.
+    magTelemX = raw[0];
+    magTelemY = raw[1];
+    magTelemZ = raw[2];
     for (int axis = 0; axis < 3; axis++) {
       if (raw[axis] < magCalMin[axis]) magCalMin[axis] = raw[axis];
       if (raw[axis] > magCalMax[axis]) magCalMax[axis] = raw[axis];
@@ -917,11 +953,9 @@ static void sampleMagnetometer(uint32_t now_ms) {
     magCalSampleCount++;
   }
 
-  publishMagSample(
-      MAG_BODY_SIGN_X * (raw[0] - MAG_HARD_IRON_OFFSET_X),
-      MAG_BODY_SIGN_Y * (raw[1] - MAG_HARD_IRON_OFFSET_Y),
-      MAG_BODY_SIGN_Z * (raw[2] - MAG_HARD_IRON_OFFSET_Z),
-      now_ms);
+  float calibrated[3];
+  applyMagCalibration(raw, MAG_HARD_IRON, MAG_SOFT_IRON, calibrated);
+  publishMagSample(calibrated[0], calibrated[1], calibrated[2], now_ms);
 }
 
 // ==========================================================
@@ -1762,8 +1796,9 @@ static void handleGainCommand(const char *buf) {
 // calibration_ok,armed. 그 뒤 Tier1 8개와 MagHeading, Mag_X/Y/Z, Yaw_Hold,
 // Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid와 프로브 상태/연속
 // 무반응/최근 차분 반응, IMU1 gyro/accel XYZ, IMU2 gyro/accel XYZ를
-// 보낸 뒤 목표 roll/pitch/yaw 각도와 필드 59 Mag_Enabled를 append-only로
-// 보낸다. IMU별 값은 융합값과 같은 body frame이다.
+// 보낸 뒤 목표 roll/pitch/yaw 각도와 필드 59 Mag_Enabled, 3901-L0X 5개
+// 필드, 필드 65 Mag_Cal_Active를 append-only로 보낸다. IMU별 값은 융합값과
+// 같은 body frame이다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
@@ -1774,7 +1809,7 @@ static void sendTelemetry() {
   const float probeResponseSnapshot = fs_probe_response_g;
   const ImuTelemetrySample imuSample = readImuSampleSnapshot();
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d,%ld,%d,%ld,%ld,%d",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d,%ld,%d,%ld,%ld,%d,%d",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1797,7 +1832,8 @@ static void sendTelemetry() {
              imuSample.imu2AccelX, imuSample.imu2AccelY, imuSample.imu2AccelZ,
              targetAngleX, targetAngleY, targetAngleZ, (int)mag_enabled,
              (long)msp_range_mm, msp_range_quality,
-             (long)msp_flow_x, (long)msp_flow_y, msp_flow_quality);
+             (long)msp_flow_x, (long)msp_flow_y, msp_flow_quality,
+             (int)mag_calibrating);
   udp.endPacket();
 }
 

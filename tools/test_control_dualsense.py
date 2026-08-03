@@ -1411,6 +1411,23 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
             ["", "", ""],
         )
 
+    def test_65_field_magcal_raw_xyz_and_active_state_reach_csv(self):
+        fields = ["0"] * 65
+        fields[31:34] = ["12.5", "-7.25", "33.75"]
+        fields[64] = "1"
+        rows = []
+
+        self._run_datagrams([",".join(fields).encode("ascii")], rows)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(
+            [
+                rows[0][self.module.CSV_FIELDS.index(name)]
+                for name in ("Mag_X", "Mag_Y", "Mag_Z", "Mag_Cal_Active")
+            ],
+            [12.5, -7.25, 33.75, 1],
+        )
+
     def test_session_without_raw_packet_does_not_create_binary_file(self):
         packet = ",".join(["0"] * 55).encode("ascii")
         with tempfile.TemporaryDirectory() as temp_dir:

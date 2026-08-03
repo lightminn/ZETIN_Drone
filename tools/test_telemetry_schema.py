@@ -109,6 +109,7 @@ EXPECTED_TELEMETRY_FIELDS = (
     "Flow_X",
     "Flow_Y",
     "Flow_Quality",
+    "Mag_Cal_Active",
 )
 
 
@@ -313,6 +314,23 @@ class TelemetryCompatibilityTest(unittest.TestCase):
         self.assertEqual(0, sample["Mag_Enabled"])
         self.assertIs(type(sample["Mag_Enabled"]), int)
 
+    def test_64_field_packet_leaves_mag_cal_active_unknown(self):
+        current_packet = ",".join(["1"] * 64)
+
+        sample = parse_telemetry_packet(current_packet)
+
+        self.assertIsNone(sample["Mag_Cal_Active"])
+
+    def test_65_field_packet_appends_mag_cal_active_as_integer(self):
+        for raw, expected in (("0", 0), ("1", 1)):
+            with self.subTest(raw=raw):
+                current_packet = ",".join(["1"] * 64 + [raw])
+
+                sample = parse_telemetry_packet(current_packet)
+
+                self.assertEqual(expected, sample["Mag_Cal_Active"])
+                self.assertIs(type(sample["Mag_Cal_Active"]), int)
+
     def test_55_field_packet_leaves_target_angles_unknown(self):
         sample = parse_telemetry_packet(",".join(["1"] * 55))
 
@@ -362,6 +380,7 @@ class TelemetryCompatibilityTest(unittest.TestCase):
             "Failsafe_Probe_State",
             "Failsafe_Probe_NoResponse",
             "Mag_Enabled",
+            "Mag_Cal_Active",
         ):
             self.assertIs(telemetry_schema.TELEMETRY_FIELD_TYPES[name], int)
         for name in (

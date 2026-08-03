@@ -35,7 +35,9 @@ distance and is **negative when out of range** -- its working range is
 alone cannot say whether the ground is too close or too far. ``Range_Quality``
 and ``Flow_Quality`` are 0-255 from the module, or **-1 when no fresh frame
 has arrived**, which is the only way to tell a frozen sensor from a valid
-reading.
+reading. Field 65 appends ``Mag_Cal_Active``. While it is 1, ``Mag_X/Y/Z``
+are the uncalibrated BMM350 raw µT values selected by ``magcal_fit.py``;
+otherwise those three fields retain their corrected-domain flight meaning.
 ``MagHeading`` (field 31) retains its last value while magnetic fusion is off,
 so it cannot establish whether fusion is active; ``Mag_Enabled`` is the sole
 source of truth for that state.
@@ -109,6 +111,7 @@ TELEMETRY_FIELDS = (
     "Flow_X",
     "Flow_Y",
     "Flow_Quality",
+    "Mag_Cal_Active",
 )
 
 TELEMETRY_FIELD_TYPES = {
@@ -176,6 +179,7 @@ TELEMETRY_FIELD_TYPES = {
     "Flow_X": int,
     "Flow_Y": int,
     "Flow_Quality": int,
+    "Mag_Cal_Active": int,
 }
 
 GAIN_FIELDS = (
@@ -212,11 +216,11 @@ def _parse_integer(raw, name):
 
 
 def parse_telemetry_packet(line):
-    """Parse a legacy or current (59-field) packet into a fixed-schema dict.
+    """Parse a legacy or current (65-field) packet into a fixed-schema dict.
 
     Fields unavailable in legacy packets are returned as ``None`` so CSV
     files retain the full header without inventing healthy/fault values. Extra
-    future fields are ignored after the known 59 fields. The first
+    future fields are ignored after the known 65 fields. The first
     ``REQUIRED_FIELD_COUNT`` fields must be non-empty: consumers format and
     do arithmetic on them, so a blank there is a malformed packet, not a
     legacy one.

@@ -35,7 +35,7 @@ th <microseconds>
 trim <roll_deg> <pitch_deg>          # 절대 트림(도), 각 축 ±10°로 클램프
 yaw <0|1>
 mag <0|1>                # 자기계 yaw 드리프트 보정 ON/OFF (기본 OFF)
-magcal <0|1>             # 하드아이언 캘리브레이션 시작/종료 (시동 해제 상태에서만)
+magcal <0|1>             # raw 캘리브레이션 캡처 시작/종료 (시동 해제 상태에서만)
 magc <x> <y> <z>         # 모터 전류 간섭 보정 계수(µT/µs) 3축. "0 0 0" = 보정 off
 raw <0|1>                # 1kHz dual-IMU 원시 배치 스트림 ON/OFF (기본 ON)
 gains                    # 현재 PID 게인 12개를 1회 응답
@@ -154,10 +154,13 @@ ar|at|ay <value>      # roll / pitch / yaw
   루프에서 시정수 약 4초로 천천히 끌어당긴다. `magcal` 진행 중에는 거부된다.
   `control_dualsense.py` stdin에서는 `mag on`/`mag off`로 선택하며, 다음
   `start` 직전에 선택값을 `mag 1`/`mag 0`으로 다시 전송한다.
-- `magcal 1`은 하드아이언 캘리브레이션을 시작한다(시동 상태에서는 거부).
-  기체를 모든 방향으로 회전시킨 뒤 `magcal 0`을 보내면 축별 offset 상수
-  3줄이 시리얼로 출력된다. 이 값을 펌웨어의 `MAG_HARD_IRON_OFFSET_*`에
-  붙여 넣고 재빌드·재플래시해야 적용된다. 전체 절차와 통과 기준은
+- `magcal 1`은 hard/soft-iron 캘리브레이션용 raw 캡처를 시작한다(시동
+  상태에서는 거부). 진행 중에는 `Mag_Cal_Active=1`이고 `Mag_X/Y/Z`가 보정 전
+  BMM350 raw µT이므로 지상국 CSV에 회전 전체가 남는다. 모든 방향으로 회전한 뒤
+  `magcal 0`을 보내면 시리얼에는 샘플 수와 축별 span만 출력된다. CSV에
+  `scripts/magcal_fit.py`를 실행해 Li & Griffiths 제약 타원체 + MAD 클리핑으로
+  `MAG_HARD_IRON`/`MAG_SOFT_IRON`과 재환산 `mag_comp`를 얻는다. 전체 절차와
+  통과 기준은
   [`bmm350_yaw_bench_test.md`](bmm350_yaw_bench_test.md)를 따른다.
 - `magc x y z`는 모터 전류가 만드는 body-frame 자기 간섭을 보정하는 3축
   계수(µT/µs)를 런타임 설정한다. `mag.{x,y,z} -= k·(base_throttle − 1000)`을
@@ -184,7 +187,7 @@ ar|at|ay <value>      # roll / pitch / yaw
 
 ## 드론 → 지상국
 
-텔레메트리는 다음 64개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
+텔레메트리는 다음 65개 필드를 정확한 순서로 담은 쉼표 구분 데이터그램이다.
 
 ```text
 Roll, Pitch, Yaw,
@@ -209,15 +212,17 @@ IMU1_Accel_X, IMU1_Accel_Y, IMU1_Accel_Z,
 IMU2_Gyro_X, IMU2_Gyro_Y, IMU2_Gyro_Z,
 IMU2_Accel_X, IMU2_Accel_Y, IMU2_Accel_Z,
 TgtAngle_Roll, TgtAngle_Pitch, TgtAngle_Yaw,
-Mag_Enabled
+Mag_Enabled,
+Range_MM, Range_Quality, Flow_X, Flow_Y, Flow_Quality,
+Mag_Cal_Active
 ```
 
 기존 21개 필드 뒤에 `Armed`(22), Tier 1 관측 필드(23~30), `MagHeading`(31),
 `Mag_X`/`Mag_Y`/`Mag_Z`(32~34), `Yaw_Hold`(35), `Failsafe_Phase`(36),
 `Trim_Roll`/`Trim_Pitch`(37~38), `Hover_Est`(39), `Hover_Valid`(40),
 프로브 진단(41~43), IMU1 gyro/accel(44~49), IMU2 gyro/accel(50~55)을
-차례로 append하고 목표 roll/pitch/yaw 각도(56~58), 실제 mag 융합 상태(59)를
-순서대로 append한다.
+차례로 append하고 목표 roll/pitch/yaw 각도(56~58), 실제 mag 융합 상태(59),
+3901-L0X 상태(60~64), 캘리브레이션 활성 상태(65)를 순서대로 append한다.
 
 - `Armed`는 펌웨어 safety lock의 반전값이다. `start`가 거부되거나
   펌웨어가 스스로 시동을 해제한 것을 지상국이 이 필드로 감지한다.
@@ -228,7 +233,7 @@ Mag_Enabled
 | 27 | `PID_Loop_Hz` | int | `pid_task`의 실측 루프 주파수(Hz) |
 | 28~30 | `TgtRate_Roll`, `TgtRate_Pitch`, `TgtRate_Yaw` | float | 바깥 각도 루프가 만든 목표 각속도(dps) |
 | 31 | `MagHeading` | float | BMM350 틸트보정 heading(deg). throttle 간섭 보정 적용값. `mag 0`이면 갱신되지 않는다 |
-| 32~34 | `Mag_X`, `Mag_Y`, `Mag_Z` | float | 하드아이언·throttle 간섭 보정 후 자기장 성분(µT). `magc` 계수 0이면 raw(=보정 전) |
+| 32~34 | `Mag_X`, `Mag_Y`, `Mag_Z` | float | 평상시 hard/soft-iron·throttle 간섭 보정 후 자기장 성분(µT). `Mag_Cal_Active=1` 동안에는 보정 전 BMM350 raw µT |
 | 35 | `Yaw_Hold` | int | 0=각속도 모드, 1=heading 잠금 |
 | 36 | `Failsafe_Phase` | int | 0=정상, 1=하강 중, 2=착지컷, 3=백스톱컷, 4=중단컷 |
 | 37~38 | `Trim_Roll`, `Trim_Pitch` | float | 드론이 적용 중인 roll·pitch 트림(도) |
@@ -252,17 +257,13 @@ Mag_Enabled
 | 56 | `TgtAngle_Roll` | float | 펌웨어가 사용하는 roll 목표 각도(deg) |
 | 57 | `TgtAngle_Pitch` | float | 펌웨어가 사용하는 pitch 목표 각도(deg) |
 | 58 | `TgtAngle_Yaw` | float | yaw outer loop의 목표 방위(deg) |
-| 60 | `Range_MM` | int | 3901-L0X 거리계 원값(mm). **범위 밖이면 음수** |
-| 61 | `Range_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
-| 62 | `Flow_X` | int | 광류 motionX |
-| 63 | `Flow_Y` | int | 광류 motionY |
-| 64 | `Flow_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
 | 59 | `Mag_Enabled` | int | 펌웨어가 실제 적용 중인 BMM350 yaw 융합 상태. 0=OFF, 1=ON |
 | 60 | `Range_MM` | int | Matek 3901-L0X 거리계 **원값**(mm) |
 | 61 | `Range_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
 | 62 | `Flow_X` | int | 광류 `motionX` |
 | 63 | `Flow_Y` | int | 광류 `motionY` |
 | 64 | `Flow_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
+| 65 | `Mag_Cal_Active` | int | 0=평상시, 1=`magcal` raw 캡처 중. 1일 때 32~34번은 보정 전 raw |
 
 ### 3901-L0X 필드 해석 (필드 60~64)
 
@@ -344,9 +345,10 @@ Kd_Rate_Roll, Kd_Rate_Pitch, Kd_Rate_Yaw
 - 55필드 패킷은 `IMU2_Accel_Z`에서 끝난다 (목표 각도 텔레메트리 도입 이전 펌웨어).
 - 58필드 패킷은 `TgtAngle_Yaw`에서 끝난다 (mag 상태 텔레메트리 도입 이전 펌웨어).
 - 59필드 패킷은 `Mag_Enabled`에서 끝난다 (3901-L0X 텔레메트리 도입 이전 펌웨어).
+- 64필드 패킷은 `Flow_Quality`에서 끝난다 (`Mag_Cal_Active` 도입 이전 펌웨어).
 - 과거 패킷에 없는 값은 정규화된 CSV에서 빈 셀이 된다.
 - `Timestamp`는 드론이 보내지 않는다. 지상 도구가 CSV의 첫 열로 추가하므로
-  현행 CSV는 60개 열이 된다.
+  현행 CSV는 66개 열이 된다.
 
 공유 구현은
 [`telemetry_schema.py`](../scripts/telemetry_schema.py)에 있다.
@@ -413,7 +415,7 @@ raw 스트림이 켜져 있는 동안 1초에 한 번 보내는 60바이트 리�
 | 44 | `accel_scale` | `float` | 4 | `ACCEL_SCALE` |
 | 48 | `imu2_sign` | `float[3]` | 12 | `IMU2_SIGN_X/Y/Z` |
 
-`ZIMU`, `ZCAL`, 현행 59필드 ASCII 텔레메트리는 모두 **같은 UDP 포트
+`ZIMU`, `ZCAL`, 현행 65필드 ASCII 텔레메트리는 모두 **같은 UDP 포트
 4210, 같은 `laptopIP`/`laptopPort` 목적지**로 온다. 지상국은 UTF-8
 디코드보다 먼저 첫 4바이트를 검사해 `ZIMU`/`ZCAL`을 바이너리 로그로
 분기해야 한다. 그 외 데이터그램만 ASCII/`GAINS` 파서로 넘긴다.

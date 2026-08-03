@@ -2003,21 +2003,22 @@ int main() {
     CHECK_NEAR(mag_comp_z, 0.5f, 1e-6f);
   });
 
-  runCase("magcal collects extrema and prints hard-iron offsets", [] {
+  runCase("magcal reports sample spans and delegates fitting to the host", [] {
     safety_lock = true;
     mag_enabled = false;
     mag_ready = false;
     mag_calibrating = false;
     bmm.begin_result = 0;
+    bmm.next_data.float_x = 10.0f;
+    bmm.next_data.float_y = -4.0f;
+    bmm.next_data.float_z = 8.0f;
     arduino_fake::serial_output.clear();
 
     sendUdpCommandOnce("magcal 1");
     CHECK(mag_calibrating);
     CHECK(!mag_enabled);
 
-    bmm.next_data.float_x = 10.0f;
-    bmm.next_data.float_y = -4.0f;
-    bmm.next_data.float_z = 8.0f;
+    // magcal 1을 처리한 udp_task 반복 끝에서 첫 값이 이미 한 번 읽힌다.
     sampleMagnetometer(20U);
     bmm.next_data.float_x = -2.0f;
     bmm.next_data.float_y = 8.0f;
@@ -2028,11 +2029,17 @@ int main() {
     sendUdpCommandOnce("magcal 0");
     CHECK(!mag_calibrating);
     CHECK(arduino_fake::serial_output.find(
-              "MAG_HARD_IRON_OFFSET_X = 4.000000f") != std::string::npos);
+              "[MAGCAL] samples=3") != std::string::npos);
     CHECK(arduino_fake::serial_output.find(
-              "MAG_HARD_IRON_OFFSET_Y = 2.000000f") != std::string::npos);
+              "span X=12.000000 uT") != std::string::npos);
     CHECK(arduino_fake::serial_output.find(
-              "MAG_HARD_IRON_OFFSET_Z = 1.000000f") != std::string::npos);
+              "Y=12.000000 uT") != std::string::npos);
+    CHECK(arduino_fake::serial_output.find(
+              "Z=14.000000 uT") != std::string::npos);
+    CHECK(arduino_fake::serial_output.find(
+              "scripts/magcal_fit.py") != std::string::npos);
+    CHECK(arduino_fake::serial_output.find(
+              "MAG_HARD_IRON_OFFSET_") == std::string::npos);
   });
 
   runCase("magcal is refused while armed", [] {

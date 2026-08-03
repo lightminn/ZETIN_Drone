@@ -121,6 +121,9 @@ void resetCommonFirmwareState(float roll_deg, float pitch_deg, float yaw_deg) {
   magTelemX = 0.0f;
   magTelemY = 0.0f;
   magTelemZ = 0.0f;
+  mag_calibrating = false;
+  connectionEstablished = false;
+  lastMagReadMs = 0;
   iTermRoll = 0.0f;
   iTermPitch = 0.0f;
   iTermYaw = 0.0f;
@@ -313,6 +316,90 @@ std::string errorDetail(const char *label, float fused_error,
 
 int runFusionTests() {
   std::cout << std::fixed << std::setprecision(4);
+
+  // 단위행렬이면 offset만 빼던 옛 동작과 같아야 한다. 이것은 함수의 성질이므로
+  // 굽혀진 비행 상수를 쓰면 안 된다 — 캘리브를 다시 할 때마다 깨진다.
+  runCase("identity soft iron preserves the legacy hard-iron transform", [] {
+    const float raw[3] = {17.25f, -8.5f, 41.75f};
+    const float hard_iron[3] = {-1.831376f, 9.318241f, -12.517762f};
+    const float identity[3][3] = {
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+    };
+    float calibrated[3] = {};
+
+    applyMagCalibration(raw, hard_iron, identity, calibrated);
+
+    CHECK_NEAR(calibrated[0],
+               MAG_BODY_SIGN_X * (raw[0] - hard_iron[0]), 1e-6f);
+    CHECK_NEAR(calibrated[1],
+               MAG_BODY_SIGN_Y * (raw[1] - hard_iron[1]), 1e-6f);
+    CHECK_NEAR(calibrated[2],
+               MAG_BODY_SIGN_Z * (raw[2] - hard_iron[2]), 1e-6f);
+  });
+
+  // 실제로 굽혀진 상수도 최소한 물리적으로 말이 되는지 본다(수치는 고정하지 않는다).
+  runCase("baked flight constants are a usable calibration", [] {
+    const float raw[3] = {17.25f, -8.5f, 41.75f};
+    float calibrated[3] = {};
+
+    applyMagCalibration(raw, MAG_HARD_IRON, MAG_SOFT_IRON, calibrated);
+
+    for (int axis = 0; axis < 3; axis++) {
+      CHECK(std::isfinite(calibrated[axis]));
+      CHECK(std::isfinite(MAG_HARD_IRON[axis]));
+    }
+    // soft iron은 대각 우세여야 한다. 축이 뒤바뀐 행렬이 구워지면 heading이 돈다.
+    for (int row = 0; row < 3; row++) {
+      CHECK(MAG_SOFT_IRON[row][row] > 0.0f);
+      for (int col = 0; col < 3; col++) {
+        if (row == col) continue;
+        CHECK(std::fabs(MAG_SOFT_IRON[row][col]) <
+              MAG_SOFT_IRON[row][row]);
+      }
+    }
+  });
+
+  runCase("non-diagonal soft iron applies W times raw minus b by rows", [] {
+    const float raw[3] = {4.0f, -4.0f, 8.0f};
+    const float hard_iron[3] = {1.0f, -2.0f, 3.0f};
+    const float soft_iron[3][3] = {
+        {1.1f, 0.2f, -0.1f},
+        {0.05f, 0.9f, 0.3f},
+        {-0.2f, 0.1f, 1.2f},
+    };
+    float calibrated[3] = {};
+
+    applyMagCalibration(raw, hard_iron, soft_iron, calibrated);
+
+    CHECK_NEAR(calibrated[0], MAG_BODY_SIGN_X * 2.4f, 1e-6f);
+    CHECK_NEAR(calibrated[1], MAG_BODY_SIGN_Y * -0.15f, 1e-6f);
+    CHECK_NEAR(calibrated[2], MAG_BODY_SIGN_Z * 5.2f, 1e-6f);
+  });
+
+  runCase("magcal publishes raw XYZ and appends active state to telemetry", [] {
+    resetCommonFirmwareState(0.0f, 0.0f, 0.0f);
+    mag_ready = true;
+    mag_enabled = false;
+    mag_calibrating = true;
+    bmm.next_data.float_x = 12.5f;
+    bmm.next_data.float_y = -7.25f;
+    bmm.next_data.float_z = 33.75f;
+
+    sampleMagnetometer(20U);
+
+    CHECK_NEAR(magTelemX, 12.5f, 1e-6f);
+    CHECK_NEAR(magTelemY, -7.25f, 1e-6f);
+    CHECK_NEAR(magTelemZ, 33.75f, 1e-6f);
+    connectionEstablished = true;
+    sendTelemetry();
+    const std::string &packet = wifi_udp_fake::telemetry_output;
+    CHECK(std::count(packet.begin(), packet.end(), ',') + 1U == 65U);
+    const std::size_t last_comma = packet.rfind(',');
+    CHECK(last_comma != std::string::npos);
+    CHECK(packet.substr(last_comma + 1U) == "1");
+  });
 
   runCase("convergence on a rotating heading", [] {
     const YawRun result =
