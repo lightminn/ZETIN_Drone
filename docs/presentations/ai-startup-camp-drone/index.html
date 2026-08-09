@@ -841,51 +841,7 @@
     </x-import>
   </section>
 
-  <section data-label="방위 융합 속도" data-screen-label="32" data-speaker-notes="방위 융합은 1kHz α 값을 직접 쓰지 않습니다. 250Hz에서 오차의 0.1%를 더해 약 4초의 시간상수를 만듭니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="방위 융합의 실제 보정 속도">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
-        <div style="display:flex;flex-direction:column;gap:24px">
-          <div style="font-size:32px;font-weight:700;line-height:1.3">"몇 초에 걸쳐 기준으로 돌아올 것인가"를 먼저 정합니다.</div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);text-align:center;font-family:ui-monospace,monospace">새 Yaw = 이전 Yaw + K × 방위 오차</div>
-            <div style="font-size:20px;line-height:1.5">현행 구현은 250Hz에서 K = 0.001, 즉 한 번에 오차의 0.1%만 반영합니다.</div>
-          </div>
-          <div style="font-size:20px;line-height:1.55"><strong>시간상수 τ</strong> — 지자기 기준으로 누적 오차를 대략 <strong>63%</strong> 줄이는 데 걸리는 시간. 0.004초 간격과 K=0.001이면 약 4초입니다.</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:20px">
-          <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
-            <thead>
-              <tr>
-                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">구현 요소</th>
-                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">현행 값</th>
-                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">의미</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">지자기 읽기</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">50Hz</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">BMM350 새 표본 수신</td>
-              </tr>
-              <tr style="background:var(--uos-surface)">
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">Yaw 보정</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">250Hz · K=0.001</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">회당 오차 0.1% 반영</td>
-              </tr>
-              <tr>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">시간상수</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">약 4초</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">노이즈를 천천히 흡수</td>
-              </tr>
-            </tbody>
-          </table>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:20px;line-height:1.55">1kHz에서 α=0.99975를 쓰는 계산과 시간상수는 비슷하지만, <strong>실제 코드의 주기와 계수는 250Hz·K=0.001</strong>입니다.</div>
-        </div>
-      </div>
-    </x-import>
-  </section>
-
-  <section data-label="적응형 필터" data-screen-label="33" data-speaker-notes="가속도계를 믿을 수 있는 순간과 믿을 수 없는 순간을 구분하는 장치입니다. 판단 기준은 가속도의 크기." style="background:#fff">
+  <section data-label="적응형 필터" data-screen-label="32" data-speaker-notes="가속도계를 믿을 수 있는 순간과 믿을 수 없는 순간을 구분하는 장치입니다. 판단 기준은 가속도의 크기." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="적응형 상보필터 — 신뢰도를 상황에 따라 바꾼다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">가속도계는 <strong>중력만 걸려 있을 때</strong> 정확합니다. 지금 그런 상황인지 판단할 방법이 필요합니다.</div>
@@ -906,7 +862,7 @@
     </x-import>
   </section>
 
-  <section data-label="[실습] 알파 계산" data-screen-label="34" data-speaker-notes="2분 드립니다. 계산기 대신 암산으로도 대략 나옵니다. 답은 각각 0.998, 0.9998, 그리고 τ가 클수록 1에 가까워진다는 것." style="background:#fff">
+  <section data-label="[실습] 알파 계산" data-screen-label="33" data-speaker-notes="2분 드립니다. 계산기 대신 암산으로도 대략 나옵니다. 답은 각각 0.998, 0.9998, 그리고 τ가 클수록 1에 가까워진다는 것." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="[실습 1] 알파 값 계산해보기 · 3분">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:24px">
@@ -930,7 +886,7 @@
     </x-import>
   </section>
 
-  <section data-label="문제 1 부호 반전" data-screen-label="35" data-speaker-notes="증상은 엉뚱했습니다. 기울이지도 않았는데 과도 기울기 경보가 떴습니다. 원인은 두 센서의 부호가 반대여서 평균이 0이 된 것." style="background:#fff">
+  <section data-label="문제 1 부호 반전" data-screen-label="34" data-speaker-notes="증상은 엉뚱했습니다. 기울이지도 않았는데 과도 기울기 경보가 떴습니다. 원인은 두 센서의 부호가 반대여서 평균이 0이 된 것." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 1 — 두 IMU의 축 부호가 반대였다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
@@ -955,7 +911,7 @@
     </x-import>
   </section>
 
-  <section data-label="문제 2 바이어스" data-screen-label="36" data-speaker-notes="정지해 있어도 자이로는 0을 내놓지 않습니다. 그 작은 값이 적분되면서 각도가 흘러갑니다." style="background:#fff">
+  <section data-label="문제 2 바이어스" data-screen-label="35" data-speaker-notes="정지해 있어도 자이로는 0을 내놓지 않습니다. 그 작은 값이 적분되면서 각도가 흘러갑니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 2 — 정지 상태에서도 남는 고정 오차">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -974,7 +930,7 @@
     </x-import>
   </section>
 
-  <section data-label="문제 3 축 변환" data-screen-label="37" data-speaker-notes="센서가 읽는 축과 기체의 축은 다릅니다. 변환식에서 가속도는 맞았는데 자이로만 부호가 뒤집혀 있었습니다." style="background:#fff">
+  <section data-label="문제 3 축 변환" data-screen-label="36" data-speaker-notes="센서가 읽는 축과 기체의 축은 다릅니다. 변환식에서 가속도는 맞았는데 자이로만 부호가 뒤집혀 있었습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 3 — 센서축에서 기체축으로 옮기는 과정의 부호 오류">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -990,7 +946,7 @@
     </x-import>
   </section>
 
-  <section data-label="세 버그의 공통점" data-screen-label="38" data-speaker-notes="세 사고 모두 계산식이 아니라 '방향 약속'의 문제였습니다. 코드만 읽어서는 찾기 어렵습니다." style="background:#fff">
+  <section data-label="세 버그의 공통점" data-screen-label="37" data-speaker-notes="세 사고 모두 계산식이 아니라 '방향 약속'의 문제였습니다. 코드만 읽어서는 찾기 어렵습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="세 버그의 공통점">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">세 번 모두 계산식이 아니라 <strong>방향에 대한 약속</strong>이 어긋난 문제였습니다.</div>
@@ -1013,7 +969,7 @@
     </x-import>
   </section>
 
-  <section data-label="실기 튜닝의 위험" data-screen-label="39" data-speaker-notes="게인을 모르는 상태로 띄우는 것은 실패를 기체로 지불하는 방식입니다." style="background:#fff">
+  <section data-label="실기 튜닝의 위험" data-screen-label="38" data-speaker-notes="게인을 모르는 상태로 띄우는 것은 실패를 기체로 지불하는 방식입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="게인을 실기로 찾는 것의 문제">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:24px">
@@ -1033,7 +989,7 @@
     </x-import>
   </section>
 
-  <section data-label="SIL이란" data-screen-label="40" data-speaker-notes="핵심은 제어 코드를 베끼지 않고 그대로 가져왔다는 점입니다. 물리 계산만 새로 씁니다." style="background:#fff">
+  <section data-label="SIL이란" data-screen-label="39" data-speaker-notes="핵심은 제어 코드를 베끼지 않고 그대로 가져왔다는 점입니다. 물리 계산만 새로 씁니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="SIL — 컴퓨터 안에 기체를 만든다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
@@ -1065,7 +1021,7 @@
     </x-import>
   </section>
 
-  <section data-label="SIL 물리 흐름" data-screen-label="41" data-speaker-notes="가상 기체는 정답을 알고 있습니다. 그 정답에서 가짜 센서값을 만들어 제어 코드에 넣습니다." style="background:#fff">
+  <section data-label="SIL 물리 흐름" data-screen-label="40" data-speaker-notes="가상 기체는 정답을 알고 있습니다. 그 정답에서 가짜 센서값을 만들어 제어 코드에 넣습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="SIL의 계산 흐름">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:22px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
@@ -1100,7 +1056,7 @@
     </x-import>
   </section>
 
-  <section data-label="[퀴즈] 부호 반전" data-screen-label="42" data-speaker-notes="손 들어 보게 하세요. 정답은 다음 장. 실제 측정값은 1292도입니다." style="background:#fff">
+  <section data-label="[퀴즈] 부호 반전" data-screen-label="41" data-speaker-notes="손 들어 보게 하세요. 정답은 다음 장. 실제 측정값은 1292도입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="[퀴즈 1] 부호를 일부러 뒤집으면 어떻게 될까?">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:28px">
         <div style="background:var(--uos-surface);border-radius:4px;padding:28px;font-size:24px;line-height:1.5">시뮬레이션 안에서 좌우 기울기(roll)의 <strong>부호를 일부러 반대로</strong> 만들어 보겠습니다. 제어기는 기울기를 줄이려 하지만, 실제로는 키우는 방향으로 모터를 조작하게 됩니다. 30초 뒤 기체의 기울기는 어떻게 되어 있을까요?</div>
@@ -1126,7 +1082,7 @@
     </x-import>
   </section>
 
-  <section data-label="퀴즈 1 정답" data-screen-label="43" data-speaker-notes="정답 D. 1292도. 중요한 건 이 숫자가 아니라, 하니스가 이 버그를 반드시 잡아낸다는 사실을 증명했다는 점입니다." style="background:#fff">
+  <section data-label="퀴즈 1 정답" data-screen-label="42" data-speaker-notes="정답 D. 1292도. 중요한 건 이 숫자가 아니라, 하니스가 이 버그를 반드시 잡아낸다는 사실을 증명했다는 점입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="정답 — 하니스를 검증하는 하니스">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1152,7 +1108,7 @@
     </x-import>
   </section>
 
-  <section data-label="P항의 한계" data-screen-label="44" data-speaker-notes="바람이 부는 상황을 예로 씁니다. P만 쓰면 반드시 조금 기울어진 채로 평형을 이룹니다." style="background:#fff">
+  <section data-label="P항의 한계" data-screen-label="43" data-speaker-notes="바람이 부는 상황을 예로 씁니다. P만 쓰면 반드시 조금 기울어진 채로 평형을 이룹니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="P 항이 남기는 오차">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1172,7 +1128,7 @@
     </x-import>
   </section>
 
-  <section data-label="I항의 역할" data-screen-label="45" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해줍니다." style="background:#fff">
+  <section data-label="I항의 역할" data-screen-label="44" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해줍니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="I 항의 역할 — 남은 오차를 기억한다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.14fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1189,7 +1145,7 @@
     </x-import>
   </section>
 
-  <section data-label="Ki 튜닝" data-screen-label="46" data-speaker-notes="측정해보니 I항이 클램프의 1.4%만 쓰고 있었습니다. 사실상 꺼져 있던 셈입니다." style="background:#fff">
+  <section data-label="Ki 튜닝" data-screen-label="45" data-speaker-notes="측정해보니 I항이 클램프의 1.4%만 쓰고 있었습니다. 사실상 꺼져 있던 셈입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="Ki 게인 튜닝 — 측정하고 나서 올렸다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
@@ -1223,7 +1179,7 @@
     </x-import>
   </section>
 
-  <section data-label="캐스케이드 구조" data-screen-label="47" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있습니다." style="background:#fff">
+  <section data-label="캐스케이드 구조" data-screen-label="46" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 겹으로 겹친 제어 루프">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.16fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1245,7 +1201,7 @@
     </x-import>
   </section>
 
-  <section data-label="게인 설정값" data-screen-label="48" data-speaker-notes="현재 펌웨어에 들어 있는 값입니다. 지상국에서 gains 명령으로 읽어 확인합니다." style="background:#fff">
+  <section data-label="게인 설정값" data-screen-label="47" data-speaker-notes="현재 펌웨어에 들어 있는 값입니다. 지상국에서 gains 명령으로 읽어 확인합니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 게인 설정값">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
@@ -1301,7 +1257,7 @@
     </x-import>
   </section>
 
-  <section data-label="Yaw 기준점" data-screen-label="49" data-speaker-notes="롤과 피치는 중력이라는 절대 기준이 있습니다. 좌우 회전만 없습니다." style="background:#fff">
+  <section data-label="Yaw 기준점" data-screen-label="48" data-speaker-notes="롤과 피치는 중력이라는 절대 기준이 있습니다. 좌우 회전만 없습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="좌우 회전(Yaw)만 기준점이 없다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
@@ -1332,7 +1288,7 @@
     </x-import>
   </section>
 
-  <section data-label="헤딩 고정" data-screen-label="50" data-speaker-notes="지자기센서는 나침반입니다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞습니다." style="background:#fff">
+  <section data-label="헤딩 고정" data-screen-label="49" data-speaker-notes="지자기센서는 나침반입니다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지자기센서로 헤딩 고정">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.12fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1344,6 +1300,50 @@
           <div style="background:var(--uos-surface);border-radius:4px;padding:23px;font-size:20px;line-height:1.5"><strong>50Hz 측정</strong> · Yaw 기준점으로 사용</div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:23px;font-size:20px;line-height:1.5"><strong>250Hz 보정 · K=0.001</strong> · 약 4초에 걸쳐 완만하게 융합</div>
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:23px;font-size:20px;line-height:1.5">목적은 자북 항법이 아니라, <strong>지금 향한 방향을 유지</strong>하는 것입니다.</div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="방위 융합 속도" data-screen-label="50" data-speaker-notes="앞 장에서 지자기 기준을 천천히 섞는다고 했습니다. 실제 코드는 1kHz 상보필터 α를 재사용하지 않고, 250Hz에서 방위 오차의 0.1%를 더해 약 4초의 시간상수를 만듭니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="방위 융합의 실제 보정 속도">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <div style="font-size:32px;font-weight:700;line-height:1.3">"몇 초에 걸쳐 기준으로 돌아올 것인가"를 먼저 정합니다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);text-align:center;font-family:ui-monospace,monospace">새 Yaw = 이전 Yaw + K × 방위 오차</div>
+            <div style="font-size:20px;line-height:1.5">현행 구현은 250Hz에서 K = 0.001, 즉 한 번에 오차의 0.1%만 반영합니다.</div>
+          </div>
+          <div style="font-size:20px;line-height:1.55"><strong>시간상수 τ</strong> — 지자기 기준으로 누적 오차를 대략 <strong>63%</strong> 줄이는 데 걸리는 시간. 0.004초 간격과 K=0.001이면 약 4초입니다.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
+            <thead>
+              <tr>
+                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">구현 요소</th>
+                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">현행 값</th>
+                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">의미</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">지자기 읽기</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">50Hz</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">BMM350 새 표본 수신</td>
+              </tr>
+              <tr style="background:var(--uos-surface)">
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">Yaw 보정</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">250Hz · K=0.001</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">회당 오차 0.1% 반영</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">시간상수</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">약 4초</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">노이즈를 천천히 흡수</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:20px;line-height:1.55">1kHz에서 α=0.99975를 쓰는 계산과 시간상수는 비슷하지만, <strong>실제 코드의 주기와 계수는 250Hz·K=0.001</strong>입니다.</div>
         </div>
       </div>
     </x-import>

@@ -8,10 +8,10 @@
 |---|---|---|---|
 | 1, 11, 12, 23, 76, 77 | 기술 중심 발표 방향, 교육 아이템 맥락, PCB 주문·납땜·부품 납기 상태, 다중 드론 확장 목표 | [`BRIEF.md`](BRIEF.md) | 2026-08-10 사용자 제공 발표 준비 정리. 발표 방향과 실행 현황이며 비행 검증 증거가 아님 |
 | 27, 72 | 상태 텔레메트리 65개 필드, 별도 1kHz 원시 IMU | [`udp_protocol.md`](../../udp_protocol.md), [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) | 현행 프로토콜. CSV는 수신 시각까지 66열 |
-| 31, 33, 48 | Roll·Pitch 적응형 α = 0.999 / 0.9995 / 0.9998 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `ALPHA_STATIC`, `ALPHA_NORMAL`, `ALPHA_DYN`, `compute_alpha` | 현행 펌웨어 |
-| 32, 48, 50 | Yaw 보정 250Hz, K=0.001, 시정수 약 4초 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `K_MAG`, `magFusionCnt` | 현행 펌웨어. 1kHz α 값은 설명용 등가식일 뿐 구현값이 아님 |
-| 37 | 기체축 자이로 +Y/−X/−Z, 가속도 +Y/−X/+Z | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `bodyGx`~`bodyAz` | 현행 펌웨어 변환식 |
-| 49, 52 | 2026-07-27 자기계 오차·전류 간섭 벤치 결과 | [`bmm350_yaw_bench_test.md`](../../bmm350_yaw_bench_test.md) | 역사적 min/max 보정 결과. 현행 보정 방식이 아님 |
+| 31, 32, 47 | Roll·Pitch 적응형 α = 0.999 / 0.9995 / 0.9998 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `ALPHA_STATIC`, `ALPHA_NORMAL`, `ALPHA_DYN`, `compute_alpha` | 현행 펌웨어 |
+| 47, 49, 50 | Yaw 보정 250Hz, K=0.001, 시정수 약 4초 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `K_MAG`, `magFusionCnt` | 현행 펌웨어. 1kHz α 값은 설명용 등가식일 뿐 구현값이 아님 |
+| 36 | 기체축 자이로 +Y/−X/−Z, 가속도 +Y/−X/+Z | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `bodyGx`~`bodyAz` | 현행 펌웨어 변환식 |
+| 48, 52 | 2026-07-27 자기계 오차·전류 간섭 벤치 결과 | [`bmm350_yaw_bench_test.md`](../../bmm350_yaw_bench_test.md) | 역사적 min/max 보정 결과. 현행 보정 방식이 아님 |
 | 51~53 | 제약 타원체 hard/soft-iron 보정과 보드·상하행 램프 재검증 | [`bmm350_yaw_bench_test.md`](../../bmm350_yaw_bench_test.md), [`magcal_fit.py`](../../../scripts/magcal_fit.py), [`control_dualsense.py`](../../../scripts/control_dualsense.py), [캘리브레이션 설계](../../superpowers/specs/2026-08-04-magnetometer-calibration-design.md) | 2026-08-04 실측. 정상 지상국 운용은 Mag ON, 펌웨어 부팅값은 OFF |
 | 57~61 | 프로브는 기록 전용, `landed=false`, 3초 시간 기반 하강 | [`failsafe_land_research.md`](../../failsafe_land_research.md), [`failsafe_land.h`](../../../firmware/flight/dual_imu_cascade_pwm/failsafe_land.h), [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) | 2026-08-01 정정 이후 현행 상태. 공중 프로브 분포 미측정 |
 | 58, 61, 75, 76 | 3901-L0X 거리·광류는 필드 60~64에 기록되지만 제어에는 미사용 | [`udp_protocol.md`](../../udp_protocol.md), [`msp_sensor.h`](../../../firmware/flight/dual_imu_cascade_pwm/msp_sensor.h), [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) | 수신·신선도 표시는 구현됨. 착지·고도·위치 제어 검증은 아직 없음 |
