@@ -372,7 +372,7 @@
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:20px;font-weight:700">지상국 · 노트북</div>
-            <div style="font-size:20px;line-height:1.5;color:var(--uos-ink-muted)">WiFi UDP · 조종 명령을 올려보내고 34개 항목의 상태를 받아 기록</div>
+            <div style="font-size:20px;line-height:1.5;color:var(--uos-ink-muted)">WiFi UDP · 조종 명령을 올리고 65개 상태 필드와 1kHz 원시 IMU를 분리 기록</div>
           </div>
         </div>
         <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">힘은 왼쪽에서 오른쪽으로, 정보는 아래에서 위로 흐릅니다. 이 그림에서 우리가 만들지 않은 것은 모터·ESC·배터리뿐입니다.</div>
@@ -739,7 +739,7 @@
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:18px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:20px;font-weight:700">밖으로 나가는 기록</div>
-            <div style="font-size:18.667px;line-height:1.5;color:var(--uos-ink-muted)">34개 항목을 초당 20번 노트북으로 보내 CSV로 남깁니다</div>
+            <div style="font-size:18.667px;line-height:1.5;color:var(--uos-ink-muted)">65개 상태 필드는 초당 20번 CSV로, 원시 듀얼 IMU는 별도 1kHz 스트림으로 기록</div>
           </div>
         </div>
       </div>
@@ -831,12 +831,12 @@
     </x-import>
   </section>
 
-  <section data-label="상보필터" data-screen-label="31" data-speaker-notes="식은 이 한 줄이 전부입니다. 98%는 자이로가 만든 값, 2%는 가속도계가 만든 값." style="background:#fff">
+  <section data-label="상보필터" data-screen-label="31" data-speaker-notes="식은 한 줄이지만 α는 고정값이 아닙니다. 현재 펌웨어는 가속도 크기가 1g에서 얼마나 벗어났는지에 따라 0.999, 0.9995, 0.9998을 고릅니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="상보필터의 원리">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:28px">
         <div style="background:var(--uos-surface);border-radius:4px;padding:32px;display:flex;flex-direction:column;gap:16px">
           <div style="font-size:32px;font-weight:700;line-height:1.4;text-align:center">각도 = <span style="color:var(--uos-blue)">α</span> × (직전 각도 + 자이로로 구한 변화량) + <span style="color:var(--uos-blue)">(1−α)</span> × (가속도계로 구한 각도)</div>
-          <div style="font-size:20px;color:var(--uos-ink-muted);text-align:center">현재 사용값 — α = 0.98 (자이로 98%) / 1−α = 0.02 (가속도계 2%)</div>
+          <div style="font-size:20px;color:var(--uos-ink-muted);text-align:center">현재 사용값 — α = 0.999 / 0.9995 / 0.9998 · 가속도 크기의 신뢰도에 따라 자동 선택</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
           <div style="display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--uos-blue);padding-top:20px">
@@ -845,57 +845,57 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--uos-blue);padding-top:20px">
             <div style="font-size:20px;font-weight:700">가속도계 쪽이 하는 일</div>
-            <div style="font-size:20px;line-height:1.5">매 순간 2%씩 "중력 기준의 정답"을 섞어 넣어, 누적된 오차를 서서히 끌어당깁니다.</div>
+            <div style="font-size:20px;line-height:1.5">매 tick 0.1% 이하의 작은 비율로 "중력 기준"을 섞어, 누적된 오차를 서서히 끌어당깁니다.</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--uos-blue);padding-top:20px">
             <div style="font-size:20px;font-weight:700">α가 크면</div>
             <div style="font-size:20px;line-height:1.5">반응이 빠르고 노이즈에 강하지만, 누적 오차를 교정하는 속도는 느려집니다.</div>
           </div>
         </div>
-        <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">이 2%가 하는 일이 핵심입니다. 자이로만 쓰면 각도가 서서히 흘러가고, 가속도계만 쓰면 값이 요동칩니다.</div>
+        <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">핵심은 비율을 고정하지 않는 것입니다. 정지에 가까우면 중력 기준을 더 빨리 반영하고, 급기동·진동 중에는 자이로를 더 오래 믿습니다.</div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="알파 정하기" data-screen-label="32" data-speaker-notes="α를 감으로 정하지 않았습니다. 시간상수를 먼저 정하고 역산했습니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="알파 값을 정하는 방법">
+  <section data-label="방위 융합 속도" data-screen-label="32" data-speaker-notes="방위 융합은 1kHz α 값을 직접 쓰지 않습니다. 250Hz에서 오차의 0.1%를 더해 약 4초의 시간상수를 만듭니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="방위 융합의 실제 보정 속도">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:24px">
-          <div style="font-size:32px;font-weight:700;line-height:1.3">"몇 초짜리로 만들고 싶은가"를 먼저 정하고, α를 역산합니다.</div>
+          <div style="font-size:32px;font-weight:700;line-height:1.3">"몇 초에 걸쳐 기준으로 돌아올 것인가"를 먼저 정합니다.</div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);text-align:center;font-family:ui-monospace,monospace">α ≈ τ / (τ + dt)</div>
-            <div style="font-size:20px;line-height:1.5">τ는 시간상수, dt는 한 번 계산하는 간격(0.001초)입니다.</div>
+            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);text-align:center;font-family:ui-monospace,monospace">새 Yaw = 이전 Yaw + K × 방위 오차</div>
+            <div style="font-size:20px;line-height:1.5">현행 구현은 250Hz에서 K = 0.001, 즉 한 번에 오차의 0.1%만 반영합니다.</div>
           </div>
-          <div style="font-size:20px;line-height:1.55"><strong>시간상수 τ</strong> — 가속도계 기준으로 누적 오차를 대략 <strong>63%</strong>만큼 줄이는 데 걸리는 시간. 우리는 4초를 기준으로 잡았습니다.</div>
+          <div style="font-size:20px;line-height:1.55"><strong>시간상수 τ</strong> — 지자기 기준으로 누적 오차를 대략 <strong>63%</strong> 줄이는 데 걸리는 시간. 0.004초 간격과 K=0.001이면 약 4초입니다.</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:20px">
           <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
             <thead>
               <tr>
-                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">원하는 τ</th>
-                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">α (dt=0.001s)</th>
-                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">성격</th>
+                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">구현 요소</th>
+                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">현행 값</th>
+                <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">의미</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">0.5초</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">0.998</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">교정 빠름 · 노이즈도 빨리 들어옴</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">지자기 읽기</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">50Hz</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">BMM350 새 표본 수신</td>
               </tr>
               <tr style="background:var(--uos-surface)">
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">4초</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">0.99975</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">현재 방위 융합에 사용</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">Yaw 보정</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">250Hz · K=0.001</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">회당 오차 0.1% 반영</td>
               </tr>
               <tr>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">5초</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">0.9998</td>
-                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">노이즈에 둔감 · 교정 느림</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">시간상수</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">약 4초</td>
+                <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">노이즈를 천천히 흡수</td>
               </tr>
             </tbody>
           </table>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:20px;line-height:1.55">중요한 것은 숫자 자체가 아니라, <strong>숫자에 근거가 있다</strong>는 점입니다. τ는 나중에 다시 조정할 수 있는 값으로 남겨두었습니다.</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:20px;line-height:1.55">1kHz에서 α=0.99975를 쓰는 계산과 시간상수는 비슷하지만, <strong>실제 코드의 주기와 계수는 250Hz·K=0.001</strong>입니다.</div>
         </div>
       </div>
     </x-import>
@@ -998,7 +998,7 @@
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.05fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:20px">
           <div style="font-size:20px;line-height:1.55">센서가 읽는 x·y·z 축은 기체의 앞·옆·아래 축과 일치하지 않습니다. 보드를 어떻게 올렸느냐에 따라 <strong>축을 바꾸고 부호를 뒤집는 변환</strong>이 필요합니다.</div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-family:ui-monospace,monospace;font-size:18.667px;line-height:1.9">기체 roll 각속도 = − 센서 Y<br />기체 pitch 각속도 = + 센서 X<br />기체 yaw 각속도 = − 센서 Z<br /><br />기체 가속도 X = + 센서 Y<br />기체 가속도 Y = − 센서 X<br />기체 가속도 Z = + 센서 Z</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-family:ui-monospace,monospace;font-size:18.667px;line-height:1.9">기체 roll 각속도 = + 센서 Y<br />기체 pitch 각속도 = − 센서 X<br />기체 yaw 각속도 = − 센서 Z<br /><br />기체 가속도 X = + 센서 Y<br />기체 가속도 Y = − 센서 X<br />기체 가속도 Z = + 센서 Z</div>
           <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">현재 검증된 변환식 — 이 여섯 줄이 하드웨어와 소프트웨어의 실제 접점입니다</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1323,10 +1323,10 @@
             </tr>
             <tr>
               <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">상보필터 α</td>
-              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule);text-align:right">0.98</td>
-              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule);text-align:right">0.98</td>
-              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule);text-align:right">—</td>
-              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">급기동 시 0.9998까지 자동 상향</td>
+              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule);text-align:right">0.999~0.9998</td>
+              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule);text-align:right">0.999~0.9998</td>
+              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule);text-align:right">K=0.001</td>
+              <td style="padding:14px 20px;border-bottom:1px solid var(--uos-rule)">Roll/Pitch 적응형 · Yaw 250Hz</td>
             </tr>
           </tbody>
         </table>
@@ -1360,7 +1360,7 @@
             <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">2.4°</div>
             <div style="font-size:18.667px;color:var(--uos-ink-muted)">지자기센서 융합</div>
           </div>
-          <div style="font-size:20px;line-height:1.5;flex:1">같은 벤치 조건에서 측정한 방위 드리프트. 기준점을 하나 붙이는 것만으로 오차가 8분의 1 이하로 줄었습니다.</div>
+          <div style="font-size:20px;line-height:1.5;flex:1">2026-07-27 같은 벤치 조건에서 측정한 역사적 결과. 기준점을 하나 붙이는 것만으로 오차가 8분의 1 이하로 줄었습니다.</div>
         </div>
       </div>
     </x-import>
@@ -1404,7 +1404,7 @@
             <div style="font-size:20px;line-height:1.55">원시 자기장 값에서 <strong>전류에 의한 오염 예상치를 빼줍니다</strong>. 예상치는 출력에 따른 오차 기울기를 미리 측정해 구합니다.</div>
           </div>
         </div>
-        <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">보정 계수는 두 번의 벤치 로그(하나는 계수 산출용, 하나는 검증용)로 결정했습니다. <strong>추측이 아니라 측정으로 정한 값</strong>이라는 점이 중요합니다.</div>
+        <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">2026-08-04에는 min/max 대신 <strong>제약 타원체 hard/soft-iron 보정</strong>으로 교체했습니다. 독립 캡처와 보드 출력으로 과적합 없이 자기장 크기가 안정되는지 다시 확인했습니다.</div>
       </div>
     </x-import>
   </section>
@@ -1416,7 +1416,7 @@
           <div style="flex:1;background:#fff;border:1px solid var(--uos-rule);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
             <img src="assets/chart_mag.png" alt="스로틀에 따른 헤딩 오차 — 보정 전후 비교" style="max-width:100%;max-height:100%;object-fit:contain" />
           </div>
-          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">벤치 로그 2회 · 가로축 스로틀(µs), 세로축 헤딩 오차(°)</figcaption>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">2026-07-27 벤치 로그 · 가로축 스로틀(µs), 세로축 헤딩 오차(°)</figcaption>
         </figure>
         <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
           <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:8px">
@@ -1429,24 +1429,24 @@
             <div style="font-size:32px;font-weight:700;line-height:1.1">+0.02° / 100µs</div>
             <div style="font-size:20px;line-height:1.5">같은 조건에서 잔차 ±2.4° 이내</div>
           </div>
-          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">180배 이상 줄었습니다. 이 결과가 있어야 헤딩 고정 기능을 신뢰할 수 있습니다.</div>
+          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">2026-08-04 타원체 재보정 뒤 재시험도 −0.067°/100µs로 같은 수준을 확인했습니다.</div>
         </div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="기본값 OFF" data-screen-label="53" data-speaker-notes="기능을 만들고도 기본값을 꺼둔 이유. 검증된 호버 경로를 건드리지 않는 것이 우선입니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="만들어 두고 기본값은 OFF로 둔 이유">
+  <section data-label="운용 기본값 ON" data-screen-label="53" data-speaker-notes="펌웨어 변수는 안전하게 OFF로 시작하지만, 현재 지상국은 시동 전에 검증된 기본 선택인 ON을 보냅니다. 끄는 선택도 조종자에게 남겨둡니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 운용 기본값은 ON">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:22px">
-          <div style="font-size:32px;font-weight:700;line-height:1.3">기능이 작동한다는 것과, 지금 켜야 한다는 것은 다른 판단입니다.</div>
+          <div style="font-size:32px;font-weight:700;line-height:1.3">부팅 안전값과 실제 운용 기본값을 분리했습니다.</div>
           <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
-            <li>이미 검증된 호버 빌드와 제어 경로를 <strong>바이트 단위로 동일하게</strong> 유지하기 위해</li>
-            <li>실제로 호버링을 다듬는 과정에서 이 기능이 방해가 된 적이 있어서</li>
-            <li>필요할 때만 실행 중에 <strong>mag 1</strong> 명령으로 켤 수 있게 했습니다</li>
+            <li>펌웨어 내부 변수는 재부팅 직후 <strong>OFF</strong>로 시작합니다</li>
+            <li>지상국은 시동 전에 조종자의 기본 선택인 <strong>mag 1</strong>을 보내며, 현재 검증된 운용값은 ON입니다</li>
+            <li>비교 시험이 필요할 때만 <strong>--no-mag</strong> 또는 <strong>mag off</strong>로 끕니다</li>
           </ul>
         </div>
-        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:32px;font-size:24px;line-height:1.5">새 기능을 기본값으로 켜면, 다음 비행에서 문제가 생겼을 때 <strong>원인 후보가 하나 늘어납니다</strong>. 한 번에 하나씩만 바꾸는 것이 검증의 기본 규칙입니다.</div>
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:32px;font-size:24px;line-height:1.5">첫 실비행 무장 구간에서 <strong>Mag_Enabled=1이 100%</strong>였고 Yaw와 MagHeading이 함께 움직였습니다. 그래서 ON을 정상 경로로 유지합니다.</div>
       </div>
     </x-import>
   </section>
