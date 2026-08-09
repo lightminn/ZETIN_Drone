@@ -24,7 +24,7 @@
 <x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1280" height="720" hint-size="100%,100%">
 
   <section data-label="표지" data-screen-label="01" data-speaker-notes="오늘은 드론을 직접 만든 이야기를 합니다. 로봇을 전혀 모르셔도 따라올 수 있게 구성했습니다. 세 시간 중 한 시간은 직접 보고 만져보는 시간입니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="2026.07" subtitle="AI 창업 캠프 · 기술 교안 · 3시간 과정" title="ZETIN Drone
+    <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="2026.08" subtitle="AI 창업 캠프 · 기술 교안 · 3시간 과정" title="ZETIN Drone
 비행 제어 시스템
 직접 만들기"></x-import>
   </section>
@@ -251,7 +251,7 @@
             <div style="font-size:18.667px;line-height:1.5;color:var(--uos-ink-muted)">신호가 끊겼을 때 추락 대신 내려앉기</div>
           </div>
         </div>
-        <div style="font-size:18.667px;color:var(--uos-ink-muted)">2026.05 → 2026.07 · 커밋 기록 기준</div>
+        <div style="font-size:18.667px;color:var(--uos-ink-muted)">2026.05 → 2026.08 · 커밋 기록 기준</div>
       </div>
     </x-import>
   </section>
@@ -1779,14 +1779,14 @@
     </x-import>
   </section>
 
-  <section data-label="자세 유지 성능" data-screen-label="68" data-speaker-notes="106초 동안 중단 없이 유지된 구간입니다. 파형이 거친 것은 텔레메트리 샘플링이 20Hz라서입니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="자세 유지 성능 — 106초 연속 실측">
+  <section data-label="자세 유지 성능" data-screen-label="68" data-speaker-notes="2026년 7월 27일 테더 세션에서 잘라낸 106.4초 구간입니다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아닙니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="테더 구간의 자세 기록 — 106.4초">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">
           <div style="flex:1;background:#fff;border:1px solid var(--uos-rule);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
-            <img src="assets/chart_attitude.png" alt="좌우·앞뒤 기울기 106초 실측 파형" style="max-width:100%;max-height:100%;object-fit:contain" />
+            <img src="assets/chart_attitude.png" alt="좌우·앞뒤 기울기 106.4초 테더 실측 파형" style="max-width:100%;max-height:100%;object-fit:contain" />
           </div>
-          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">2026-07-27 04:10 세션 · 텔레메트리 20Hz 기록</figcaption>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">2026-07-27 04:10 세션 · 테더 구간 · 텔레메트리 20Hz 기록</figcaption>
         </figure>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
           <div style="background:var(--uos-surface);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:6px">
@@ -1798,33 +1798,33 @@
             <div style="font-size:18.667px;line-height:1.4">앞뒤 기울기 표준편차</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:6px">
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">106초</div>
-            <div style="font-size:18.667px;line-height:1.4">중단 없이 유지한 시간</div>
+            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">106.4초</div>
+            <div style="font-size:18.667px;line-height:1.4">분석한 테더 구간</div>
           </div>
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:6px">
             <div style="font-size:32px;font-weight:700;line-height:1.1">1kHz</div>
-            <div style="font-size:18.667px;line-height:1.4">제어 루프 속도 (흔들림 없음)</div>
+            <div style="font-size:18.667px;line-height:1.4">제어 루프 속도 · 안정 비행 증명과는 별개</div>
           </div>
         </div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="모터 차동" data-screen-label="69" data-speaker-notes="M1과 M3은 좌우 차동 쌍입니다. 27µs의 상시 차이는 무게 중심이 한쪽으로 치우쳤다는 뜻입니다." style="background:#fff">
+  <section data-label="모터 차동" data-screen-label="69" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았습니다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 출력에 남아 있는 상시 차동">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.5fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
           <div style="flex:1;background:#fff;border:1px solid var(--uos-rule);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
-            <img src="assets/chart_motor.png" alt="M1과 M3 모터 출력 106초 실측" style="max-width:100%;max-height:100%;object-fit:contain" />
+            <img src="assets/chart_motor.png" alt="M1과 M3 모터 출력 106.4초 테더 실측" style="max-width:100%;max-height:100%;object-fit:contain" />
           </div>
-          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">같은 세션의 M1(전-좌)과 M3(전-우) 출력</figcaption>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">같은 106.4초 구간 · 전체 2,135행의 M1(전-좌)·M3(전-우) 출력</figcaption>
         </figure>
         <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
           <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:8px">
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">27µs</div>
-            <div style="font-size:20px;line-height:1.5">M1 평균 1338µs, M3 평균 1365µs — 두 모터가 계속 다른 출력으로 돌고 있습니다.</div>
+            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">약 26µs</div>
+            <div style="font-size:20px;line-height:1.5">M1 평균 <strong>1334.2µs</strong>, M3 평균 <strong>1360.0µs</strong> — 전체 구간에서 지속 차동이 남았습니다.</div>
           </div>
-          <div style="font-size:20px;line-height:1.55">이 차이는 오류가 아닙니다. <strong>무게 중심이 한쪽으로 치우쳐 있고, 제어기가 그것을 상시로 보정하고 있다</strong>는 증거입니다.</div>
+          <div style="font-size:20px;line-height:1.55">이 차이는 제어기가 <strong>지속적인 비대칭을 보정했다</strong>는 증거입니다. 원인은 질량 분포뿐 아니라 모터·프로펠러 추력차, 테더, 프레임, 공력 비대칭일 수 있습니다.</div>
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:20px;line-height:1.55">앞에서 본 <strong>I 항의 역할</strong>이 여기 나타납니다. 기울기가 계속 한쪽으로 남으면, 적분항이 그만큼 힘을 더해 평형을 만듭니다.</div>
         </div>
       </div>
@@ -1901,11 +1901,11 @@
     </x-import>
   </section>
 
-  <section data-label="[실습] 로그 읽기" data-screen-label="72" data-speaker-notes="실제 로그 한 줄입니다. 세 질문의 답: M3가 더 세게 돌고 있다 / 무게중심이 오른쪽에 치우침 / 정상." style="background:#fff">
+  <section data-label="[실습] 로그 읽기" data-screen-label="72" data-speaker-notes="실제 로그 한 줄입니다. M3가 더 높고 제어기가 비대칭을 보정하고 있다는 것은 읽을 수 있지만, 한 줄만으로 무게중심이 원인이라고 확정할 수는 없습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="[실습 2] 실제 로그 한 줄 읽어보기 · 5분">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:16px">
-          <div style="font-size:18.667px;color:var(--uos-ink-muted)">호버 중 기록된 텔레메트리 (34개 항목 중 일부)</div>
+          <div style="font-size:18.667px;color:var(--uos-ink-muted)">호버 중 기록된 텔레메트리 (65개 필드 중 일부)</div>
           <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
             <thead>
               <tr>
@@ -1957,10 +1957,10 @@
           <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">세 가지 질문</div>
           <ol style="margin:0;padding-left:32px;font-size:20px;line-height:1.6;display:flex;flex-direction:column;gap:18px">
             <li>네 모터 중 어느 쪽이 더 세게 돌고 있나요?</li>
-            <li>기체는 거의 수평인데(−1.8°) 모터 출력이 다릅니다. 무엇을 뜻할까요?</li>
-            <li>이 상태는 고쳐야 할 문제일까요, 정상 동작일까요?</li>
+            <li>기체는 거의 수평인데(−1.8°) 모터 출력이 다릅니다. 제어기는 무엇을 하고 있을까요?</li>
+            <li>이 한 줄만으로 원인을 무게중심이라고 확정할 수 있을까요?</li>
           </ol>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:20px;line-height:1.5;margin-top:12px">힌트 — 앞에서 본 <strong>27µs 차동</strong>과 <strong>I 항</strong>을 떠올려 보세요.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:20px;line-height:1.5;margin-top:12px">힌트 — <strong>약 26µs 차동</strong>은 결과입니다. 질량·추력계·테더·프레임·공력 중 원인은 추가 실험으로 분리해야 합니다.</div>
         </div>
       </div>
     </x-import>
@@ -1983,7 +1983,7 @@
         </div>
         <div style="display:flex;gap:22px;align-items:baseline">
           <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1;flex:none">Q4</div>
-          <div style="font-size:24px;line-height:1.45">착지를 판정할 때, 가만히 기다리는 대신 무엇을 했는가?</div>
+          <div style="font-size:24px;line-height:1.45">능동 프로브를 현재 착지 판정에 쓰지 않는 이유는?</div>
         </div>
         <div style="display:flex;gap:22px;align-items:baseline">
           <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1;flex:none">Q5</div>
@@ -2010,7 +2010,7 @@
         </div>
         <div style="display:flex;gap:20px;align-items:baseline;border-bottom:1px solid var(--uos-rule);padding-bottom:16px">
           <div style="font-size:24px;font-weight:700;color:var(--uos-blue);line-height:1.2;flex:none;width:70px">A4</div>
-          <div style="font-size:20px;line-height:1.5">출력을 <strong>일부러 조금 낮춰보고 반응을 관찰</strong>했습니다. 지면에 닿아 있으면 반응이 없고, 공중이면 요동칩니다.</div>
+          <div style="font-size:20px;line-height:1.5">지면에서도 반응이 남았고 <strong>공중 분포는 미측정</strong>이기 때문입니다. 프로브는 기록만 하고, 현재 정지는 3초 타이머가 결정합니다.</div>
         </div>
         <div style="display:flex;gap:20px;align-items:baseline">
           <div style="font-size:24px;font-weight:700;color:var(--uos-blue);line-height:1.2;flex:none;width:70px">A5</div>
@@ -2020,35 +2020,36 @@
     </x-import>
   </section>
 
-  <section data-label="검증 현황" data-screen-label="75" data-speaker-notes="일부러 정직하게 적었습니다. 모터가 돌고 값이 읽힌다는 것이 안정 비행을 뜻하지는 않습니다." style="background:#fff">
+  <section data-label="검증 현황" data-screen-label="75" data-speaker-notes="8월 1일 첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었습니다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지금까지 검증된 것과 아직 아닌 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
         <div style="display:flex;flex-direction:column;gap:16px">
           <div style="height:6px;background:var(--uos-blue)"></div>
           <div style="font-size:24px;font-weight:700;color:var(--uos-blue)">검증 완료</div>
           <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.5;display:flex;flex-direction:column;gap:12px;list-style-type:disc">
-            <li>모터 출력과 GPIO 매핑 (벤치)</li>
-            <li>IMU 원시값 취득과 축 변환</li>
-            <li>전류 간섭 보정 계수 (벤치 2회)</li>
-            <li>조종 신호 워치독 오탐 0회 (40회)</li>
-            <li>106초 연속 자세 유지 (테더)</li>
+            <li>2026-08-01 첫 실비행 무장 구간 <strong>176.2초</strong></li>
+            <li>고장 플래그 <strong>0건</strong> · Active IMU 2개</li>
+            <li>PID 평균 <strong>1000Hz</strong> · 최소 <strong>999Hz</strong></li>
+            <li>비행 중 자기계 ON 100%</li>
+            <li>Yaw hold 잠금 유지 <strong>91.9%</strong></li>
           </ul>
         </div>
         <div style="display:flex;flex-direction:column;gap:16px">
           <div style="height:6px;background:var(--uos-ink-muted)"></div>
           <div style="font-size:24px;font-weight:700;color:var(--uos-ink-muted)">진행 중</div>
           <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.5;display:flex;flex-direction:column;gap:12px;list-style-type:disc">
-            <li>착지 판정 임계값 벤치 검증</li>
-            <li>첫 자유 비행을 위한 사전 벤치 절차</li>
-            <li>Ki 값의 실기 재조정</li>
-            <li>헤딩 고정 기능의 비행 중 검증</li>
+            <li>안정적인 정지 호버 재현</li>
+            <li>시간 기반 자동착륙 비행 검증</li>
+            <li>Ki와 기체 비대칭의 실기 재조정</li>
+            <li>3901-L0X 거리·광류의 제어 연결</li>
           </ul>
         </div>
         <div style="display:flex;flex-direction:column;gap:16px">
           <div style="height:6px;background:var(--uos-rule)"></div>
-          <div style="font-size:24px;font-weight:700;color:var(--uos-rule)">아직 착수하지 않음</div>
+          <div style="font-size:24px;font-weight:700;color:var(--uos-rule)">아직 검증하지 않음</div>
           <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.5;display:flex;flex-direction:column;gap:12px;list-style-type:disc;color:var(--uos-ink-muted)">
-            <li>고도·위치 유지 (센서 미탑재)</li>
+            <li>거리·광류 폐루프 고도·위치 유지</li>
+            <li>실내 저고도 자동착륙 신뢰성</li>
             <li>실외 자유 비행</li>
             <li>경로 계획 · 군집 제어</li>
           </ul>
@@ -2058,21 +2059,21 @@
     </x-import>
   </section>
 
-  <section data-label="다음 단계" data-screen-label="76" data-speaker-notes="세 단계입니다. 각 단계마다 무엇이 되면 다음으로 넘어가는지를 미리 정해 두었습니다." style="background:#fff">
+  <section data-label="다음 단계" data-screen-label="76" data-speaker-notes="센서를 새로 다는 단계가 아닙니다. 이미 들어오는 거리·광류 데이터를 제어에 연결하고 실제 비행으로 검증하는 단계입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="다음 단계">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:18.667px;font-weight:700;opacity:.85">STEP 1 · 지금</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">테더 없는 정지 호버</div>
-            <div style="font-size:20px;line-height:1.55">사전 벤치 절차(축 식별 · 추력 램프 · 전원 인가)를 통과한 뒤, 실내에서 자유 호버를 시도합니다.</div>
-            <div style="font-size:18.667px;line-height:1.4;opacity:.85;margin-top:auto">통과 기준 — 30초 이상 자세 유지, 자동 착륙 정상 동작</div>
+            <div style="font-size:24px;font-weight:700;line-height:1.3">안정 호버를 재현하기</div>
+            <div style="font-size:20px;line-height:1.55">첫 실비행 기록을 출발점으로, 자세·Yaw·비대칭 보정을 반복 가능한 조건에서 다시 검증합니다.</div>
+            <div style="font-size:18.667px;line-height:1.4;opacity:.85;margin-top:auto">통과 기준 — 30초 이상 안정 호버 · 고장 0건</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">STEP 2</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">위치를 스스로 잡기</div>
-            <div style="font-size:20px;line-height:1.55">바닥을 보는 카메라(옵티컬 플로우)와 고도 센서를 추가해, 사람이 스틱을 놓아도 제자리에 머물게 합니다.</div>
-            <div style="font-size:18.667px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 — 무입력 상태에서 위치 유지</div>
+            <div style="font-size:24px;font-weight:700;line-height:1.3">거리·광류를 제어에 쓰기</div>
+            <div style="font-size:20px;line-height:1.55">이미 연결된 <strong>3901-L0X</strong>의 거리와 광류를 폐루프 제어에 연결해 고도·위치를 잡습니다.</div>
+            <div style="font-size:18.667px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 — 센서 이상 시 안전 전환 · 무입력 위치 유지</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">STEP 3</div>
