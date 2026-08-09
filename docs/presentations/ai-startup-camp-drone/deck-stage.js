@@ -638,6 +638,7 @@
       this._root = this.attachShadow({ mode: 'open' });
       this._index = 0;
       this._slides = [];
+      this._printing = false;
       // Explicit multi-selection (slide elements). Empty means the
       // selection is implicitly the current slide, so Delete always has
       // a well-defined target while the rail has focus.
@@ -725,6 +726,8 @@
       // attribute-keyed transition fires at 0s (changing transition-
       // duration after a transition has started doesn't affect it).
       this._onBeforePrint = () => {
+        this._printing = true;
+        this._syncSlideMedia(-1);
         this._syncPrintPageRule();
         // Self-heal: a departed doc-page may have removed the page-global
         // print-sizing meta this deck deferred to at connect time.
@@ -736,6 +739,7 @@
         this._slides.forEach((s) => s.setAttribute('data-deck-active', ''));
       };
       this._onAfterPrint = () => {
+        this._printing = false;
         this._applyIndex({ showOverlay: false, broadcast: false });
         if (this._freezeStyle) { this._freezeStyle.remove(); this._freezeStyle = null; }
       };
@@ -1047,6 +1051,7 @@
       window.removeEventListener('click', this._onDocClick, true);
       window.removeEventListener('beforeprint', this._onBeforePrint);
       window.removeEventListener('afterprint', this._onAfterPrint);
+      this._syncSlideMedia(-1);
       if (this._freezeStyle) { this._freezeStyle.remove(); this._freezeStyle = null; }
       this.removeEventListener('click', this._onTap);
       if (this._hideTimer) clearTimeout(this._hideTimer);
@@ -1509,6 +1514,7 @@
         if (i === curr) s.setAttribute('data-deck-active', '');
         else s.removeAttribute('data-deck-active');
       });
+      this._syncSlideMedia(curr);
       this._syncCount();
       // Follow-scroll on every navigation (init deep-link, keyboard, click,
       // tap, external goTo) — the only time we *don't* want the rail to
@@ -1543,6 +1549,28 @@
 
       this._prevIndex = curr;
       if (showOverlay) this._flashOverlay();
+    }
+
+    _syncSlideMedia(activeIndex) {
+      this._slides.forEach((slide, index) => {
+        slide.querySelectorAll('video').forEach((video) => {
+          if (!this._printing && index === activeIndex) {
+            // The x-import hydration layer preserves string attributes but
+            // drops boolean media attributes. Restore the runtime contract
+            // before play() so muted autoplay is permitted and the native
+            // controls/loop remain available to the presenter.
+            video.muted = true;
+            video.controls = true;
+            video.loop = true;
+            video.playsInline = true;
+            const started = video.play();
+            if (started && typeof started.catch === 'function') started.catch(() => {});
+            return;
+          }
+          video.pause();
+          try { video.currentTime = 0; } catch (e) {}
+        });
+      });
     }
 
     _flashOverlay(source) {
