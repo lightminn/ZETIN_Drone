@@ -429,6 +429,13 @@ button.secondary {
   letter-spacing: 0.07em;
 }
 
+.keyboard-instructions {
+  margin: 2px 0 0;
+  color: #b8c7d4;
+  font: 500 11px/1.5 "Noto Sans CJK KR", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
 .joystick {
   position: relative;
   width: 156px;

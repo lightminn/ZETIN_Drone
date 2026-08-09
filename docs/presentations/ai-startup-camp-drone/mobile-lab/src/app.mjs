@@ -32,6 +32,7 @@ let firstOrientationReceived = false;
 let sensorTimeout = 0;
 let activePointer = null;
 let touchVector = { x: 0, y: 0, magnitude: 0 };
+const pressedArrowKeys = new Set();
 let challenge = createChallengeState();
 let accumulator = 0;
 let lastFrameTime = null;
@@ -193,8 +194,17 @@ async function beginSensorExperience() {
 
 function resetTouchInput() {
   activePointer = null;
+  pressedArrowKeys.clear();
   touchVector = { x: 0, y: 0, magnitude: 0 };
   joystickStick.style.transform = "translate(-50%, -50%)";
+  renderInstrument();
+}
+
+function renderJoystickInput() {
+  const rect = joystick.getBoundingClientRect();
+  const radius = Math.min(rect.width, rect.height) / 2 - 23;
+  joystickStick.style.transform =
+    `translate(calc(-50% + ${touchVector.x * radius}px), calc(-50% + ${-touchVector.y * radius}px))`;
   renderInstrument();
 }
 
@@ -214,14 +224,12 @@ function updateJoystick(event) {
   if (activePointer !== event.pointerId) return;
   const rect = joystick.getBoundingClientRect();
   touchVector = joystickVector(event.clientX, event.clientY, rect);
-  const radius = Math.min(rect.width, rect.height) / 2 - 23;
-  joystickStick.style.transform =
-    `translate(calc(-50% + ${touchVector.x * radius}px), calc(-50% + ${-touchVector.y * radius}px))`;
-  renderInstrument();
+  renderJoystickInput();
 }
 
 joystick.addEventListener("pointerdown", (event) => {
   if (activePointer !== null) return;
+  pressedArrowKeys.clear();
   activePointer = event.pointerId;
   try {
     joystick.setPointerCapture(event.pointerId);
@@ -239,6 +247,48 @@ for (const eventName of ["pointerup", "pointercancel", "lostpointercapture"]) {
     resetTouchInput();
   });
 }
+
+const arrowAxes = new Map([
+  ["ArrowLeft", { x: -1, y: 0 }],
+  ["ArrowRight", { x: 1, y: 0 }],
+  ["ArrowUp", { x: 0, y: 1 }],
+  ["ArrowDown", { x: 0, y: -1 }],
+]);
+
+function updateKeyboardInput() {
+  let x = 0;
+  let y = 0;
+  for (const key of pressedArrowKeys) {
+    const axis = arrowAxes.get(key);
+    x += axis.x;
+    y += axis.y;
+  }
+  const length = Math.hypot(x, y);
+  if (length > 1) {
+    x /= length;
+    y /= length;
+  }
+  touchVector = { x, y, magnitude: Math.min(length, 1) };
+  renderJoystickInput();
+}
+
+joystick.addEventListener("keydown", (event) => {
+  if (!arrowAxes.has(event.key) || activePointer !== null) return;
+  event.preventDefault();
+  pressedArrowKeys.add(event.key);
+  updateKeyboardInput();
+});
+
+joystick.addEventListener("keyup", (event) => {
+  if (!arrowAxes.has(event.key)) return;
+  event.preventDefault();
+  pressedArrowKeys.delete(event.key);
+  updateKeyboardInput();
+});
+
+joystick.addEventListener("blur", () => {
+  if (pressedArrowKeys.size > 0) resetTouchInput();
+});
 
 function challengeInput() {
   if (mode === "touch") {

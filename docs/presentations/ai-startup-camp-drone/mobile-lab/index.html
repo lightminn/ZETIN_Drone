@@ -57,10 +57,21 @@
     </section>
 
     <div class="joystick-panel" data-joystick-wrap hidden>
-      <div class="axis-labels" aria-hidden="true">
-        <span>← ROLL →</span><span>↑ PITCH ↓</span>
+      <div class="axis-labels">
+        <span aria-hidden="true">← ROLL →</span><span aria-hidden="true">↑ PITCH ↓</span>
+        <p id="joystick-keyboard-instructions" class="keyboard-instructions" data-joystick-instructions>
+          키보드: 방향키로 조작 · 키를 놓거나 포커스를 옮기면 중립
+        </p>
       </div>
-      <div class="joystick" data-joystick aria-label="가상 Roll Pitch 조이스틱">
+      <div
+        class="joystick"
+        data-joystick
+        tabindex="0"
+        role="group"
+        aria-roledescription="2축 조이스틱"
+        aria-label="Roll·Pitch 2축 조이스틱"
+        aria-describedby="joystick-keyboard-instructions"
+      >
         <span class="joystick-ring" aria-hidden="true"></span>
         <span class="joystick-stick" data-joystick-stick aria-hidden="true"></span>
       </div>

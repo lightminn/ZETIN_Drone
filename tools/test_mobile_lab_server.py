@@ -21,6 +21,7 @@ MOBILE_LAB = (
     / "ai-startup-camp-drone"
     / "mobile-lab"
 )
+SIBLING_FONTS = MOBILE_LAB.parent / "vendor" / "uos-slide-template" / "fonts"
 sys.path.insert(0, str(MOBILE_LAB))
 
 from server import build_server  # noqa: E402
@@ -201,6 +202,52 @@ class MobileLabServerTest(unittest.TestCase):
         self.assertEqual(49, statuses.count(200))
         self.assertTrue(all(body["accepted"] for _, _, body in retry_results))
         self.assertEqual(51, self.get_scores()["count"])
+
+
+class DefaultMobileLabTopologyTest(unittest.TestCase):
+    """The product's default static root may expose only its explicit sibling-font alias."""
+
+    def setUp(self) -> None:
+        self.httpd = build_server("127.0.0.1", 0, MOBILE_LAB)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+        host, port = self.httpd.server_address[:2]
+        self.base_url = f"http://{host}:{port}"
+
+    def tearDown(self) -> None:
+        self.httpd.shutdown()
+        self.thread.join(timeout=5)
+        self.httpd.server_close()
+
+    def request(self, path: str) -> tuple[int, dict[str, str], bytes]:
+        try:
+            response: HTTPResponse = urlopen(f"{self.base_url}{path}", timeout=5)
+        except HTTPError as error:
+            response = error
+        with response:
+            return response.status, dict(response.headers.items()), response.read()
+
+    def test_default_product_server_serves_only_the_three_sibling_fonts(self) -> None:
+        """Removing the exact alias breaks binding typography; widening it leaks parent files."""
+        for filename in (
+            "NotoSansCJKkr-Regular.woff2",
+            "NotoSansCJKkr-Medium.woff2",
+            "NotoSansCJKkr-Bold.woff2",
+        ):
+            status, headers, body = self.request(
+                f"/vendor/uos-slide-template/fonts/{filename}"
+            )
+            self.assertEqual(200, status, filename)
+            self.assertIn("font/woff2", headers["Content-Type"])
+            self.assertEqual((SIBLING_FONTS / filename).read_bytes(), body)
+
+        self.assertEqual(404, self.request("/vendor/uos-slide-template/styles.css")[0])
+        self.assertEqual(
+            404,
+            self.request(
+                "/vendor/uos-slide-template/fonts/%2e%2e/styles.css"
+            )[0],
+        )
 
 
 if __name__ == "__main__":

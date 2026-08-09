@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import urllib.request
@@ -25,6 +26,11 @@ except ImportError:  # pragma: no cover - environment-dependent skip
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DECK_DIR = REPO_ROOT / "docs" / "presentations" / "ai-startup-camp-drone"
 LAB_DIR = DECK_DIR / "mobile-lab"
+sys.path.insert(0, str(LAB_DIR))
+
+from server import build_server  # noqa: E402
+
+
 CHROME_BIN = shutil.which("google-chrome-stable") or shutil.which("google-chrome")
 SCREENSHOT_DIR = Path(
     os.environ.get("MOBILE_LAB_SCREENSHOT_DIR", "/tmp/zetin-mobile-lab-browser-screenshots")
@@ -116,7 +122,6 @@ SENSOR_AND_CLOCK_SHIM = r"""
 
 @unittest.skipUnless(CHROME_BIN and websocket, "Chrome and websocket-client are required")
 class MobileLabBrowserTests(unittest.TestCase):
-    server: subprocess.Popen[bytes]
     chrome: subprocess.Popen[bytes]
     ws: websocket.WebSocket
     command_id: int
@@ -124,23 +129,12 @@ class MobileLabBrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-        cls.http_port = _unused_port()
         cls.debug_port = _unused_port()
         cls.runtime = tempfile.TemporaryDirectory(prefix="zetin-mobile-lab-browser-")
-        cls.server = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "http.server",
-                str(cls.http_port),
-                "--bind",
-                "127.0.0.1",
-                "--directory",
-                str(DECK_DIR),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        cls.server = build_server("127.0.0.1", 0, LAB_DIR)
+        cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.server_thread.start()
+        cls.http_port = int(cls.server.server_address[1])
         cls.chrome = subprocess.Popen(
             [
                 CHROME_BIN,
@@ -170,7 +164,8 @@ class MobileLabBrowserTests(unittest.TestCase):
             except (OSError, StopIteration, ValueError):
                 time.sleep(0.05)
         if target is None:
-            cls._stop_processes()
+            cls._stop_chrome()
+            cls._stop_server()
             cls.runtime.cleanup()
             raise RuntimeError("Chrome DevTools target did not become ready")
 
@@ -188,22 +183,31 @@ class MobileLabBrowserTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         if hasattr(cls, "ws"):
             cls.ws.close()
-        cls._stop_processes()
+        cls._stop_chrome()
+        cls._stop_server()
         if hasattr(cls, "runtime"):
             cls.runtime.cleanup()
 
     @classmethod
-    def _stop_processes(cls) -> None:
-        for name in ("chrome", "server"):
-            process = getattr(cls, name, None)
-            if process is None or process.poll() is not None:
-                continue
-            process.terminate()
-            try:
-                process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3)
+    def _stop_chrome(cls) -> None:
+        process = getattr(cls, "chrome", None)
+        if process is None or process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=3)
+
+    @classmethod
+    def _stop_server(cls) -> None:
+        server = getattr(cls, "server", None)
+        if server is None:
+            return
+        server.shutdown()
+        cls.server_thread.join(timeout=5)
+        server.server_close()
 
     @classmethod
     def _call(cls, method: str, params: dict | None = None) -> dict:
@@ -239,7 +243,14 @@ class MobileLabBrowserTests(unittest.TestCase):
         raise AssertionError(f"condition did not become true: {expression}; last={value!r}")
 
     @classmethod
-    def _navigate(cls, page: str, *, width: int = 390, height: int = 844) -> None:
+    def _navigate(
+        cls,
+        page: str,
+        *,
+        width: int = 390,
+        height: int = 844,
+        blocked_urls: list[str] | None = None,
+    ) -> None:
         cls._call(
             "Emulation.setDeviceMetricsOverride",
             {
@@ -249,10 +260,10 @@ class MobileLabBrowserTests(unittest.TestCase):
                 "mobile": True,
             },
         )
-        cls._call("Network.setBlockedURLs", {"urls": []})
+        cls._call("Network.setBlockedURLs", {"urls": blocked_urls or []})
         cls._call(
             "Page.navigate",
-            {"url": f"http://127.0.0.1:{cls.http_port}/mobile-lab/{page}"},
+            {"url": f"http://127.0.0.1:{cls.http_port}/{page}"},
         )
         cls._wait_for("document.readyState === 'complete'")
         cls._wait_for("Boolean(document.querySelector('main'))")
@@ -292,6 +303,24 @@ class MobileLabBrowserTests(unittest.TestCase):
     def _touch(cls, event_type: str, x: float | None = None, y: float | None = None) -> None:
         points = [] if event_type == "touchEnd" else [{"x": x, "y": y, "radiusX": 2, "radiusY": 2}]
         cls._call("Input.dispatchTouchEvent", {"type": event_type, "touchPoints": points})
+
+    @classmethod
+    def _key(cls, event_type: str, key: str, code: str, virtual_key_code: int) -> None:
+        cls._call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": event_type,
+                "key": key,
+                "code": code,
+                "windowsVirtualKeyCode": virtual_key_code,
+                "nativeVirtualKeyCode": virtual_key_code,
+            },
+        )
+
+    @classmethod
+    def _press_key(cls, key: str, code: str, virtual_key_code: int) -> None:
+        cls._key("rawKeyDown", key, code, virtual_key_code)
+        cls._key("keyUp", key, code, virtual_key_code)
 
     @classmethod
     def text(cls, selector: str) -> str:
@@ -403,8 +432,77 @@ class MobileLabBrowserTests(unittest.TestCase):
             self.evaluate("Boolean(document.querySelector('[data-result]').dataset.submissionId)")
         )
 
+    def test_keyboard_joystick_focus_axes_keyup_and_blur_neutralization(self) -> None:
+        self._navigate("index.html?sensors=none")
+        self._click('[data-action="touch"]')
+        self._wait_for("document.querySelector('main').dataset.screen === 'imu'")
+        self._click("[data-horizon]")
+        self._press_key("Tab", "Tab", 9)
+
+        self.assertTrue(
+            self.evaluate("document.activeElement === document.querySelector('[data-joystick]')")
+        )
+        self.assertEqual(0, self.evaluate("document.querySelector('[data-joystick]').tabIndex"))
+        self.assertIn("Roll", self.evaluate("document.querySelector('[data-joystick]').ariaLabel"))
+        self.assertIn("방향키", self.text("[data-joystick-instructions]"))
+        self.assertTrue(
+            self.evaluate(
+                "document.getElementById(document.querySelector('[data-joystick]')"
+                ".getAttribute('aria-describedby')) === "
+                "document.querySelector('[data-joystick-instructions]')"
+            )
+        )
+        self.assertFalse(
+            self.evaluate(
+                "Boolean(document.querySelector('[data-joystick-instructions]')"
+                ".closest('[aria-hidden=\"true\"]'))"
+            )
+        )
+        self.assertTrue(
+            self.evaluate("document.querySelector('[data-joystick]').matches(':focus-visible')")
+        )
+        focus_outline = self.evaluate(
+            "(() => { const style = getComputedStyle(document.querySelector('[data-joystick]')); "
+            "return {style: style.outlineStyle, width: parseFloat(style.outlineWidth)}; })()"
+        )
+        self.assertEqual("solid", focus_outline["style"])
+        self.assertGreaterEqual(focus_outline["width"], 3)
+        self.assertEqual(
+            "polite",
+            self.evaluate("document.querySelector('.attitude-values').getAttribute('aria-live')"),
+        )
+
+        self._key("rawKeyDown", "ArrowRight", "ArrowRight", 39)
+        self._wait_for("document.querySelector('[data-roll-value]').textContent.trim() === '+20.0°'")
+        self.assertEqual("0.0°", self.text("[data-pitch-value]"))
+        self._key("keyUp", "ArrowRight", "ArrowRight", 39)
+        self._wait_for("document.querySelector('[data-roll-value]').textContent.trim() === '0.0°'")
+
+        self._key("rawKeyDown", "ArrowRight", "ArrowRight", 39)
+        self._key("rawKeyDown", "ArrowUp", "ArrowUp", 38)
+        self._wait_for("document.querySelector('[data-roll-value]').textContent.trim() === '+14.1°'")
+        self.assertEqual("+14.1°", self.text("[data-pitch-value]"))
+        self._key("keyUp", "ArrowRight", "ArrowRight", 39)
+        self._wait_for("document.querySelector('[data-roll-value]').textContent.trim() === '0.0°'")
+        self.assertEqual("+20.0°", self.text("[data-pitch-value]"))
+        self._key("keyUp", "ArrowUp", "ArrowUp", 38)
+
+        self._key("rawKeyDown", "ArrowDown", "ArrowDown", 40)
+        self._wait_for("document.querySelector('[data-pitch-value]').textContent.trim() === '-20.0°'")
+        self._key("keyUp", "ArrowDown", "ArrowDown", 40)
+        self._wait_for("document.querySelector('[data-pitch-value]').textContent.trim() === '0.0°'")
+
+        self._key("rawKeyDown", "ArrowLeft", "ArrowLeft", 37)
+        self._wait_for("document.querySelector('[data-roll-value]').textContent.trim() === '-20.0°'")
+        self._press_key("Tab", "Tab", 9)
+        self._wait_for("document.querySelector('[data-roll-value]').textContent.trim() === '0.0°'")
+        self.assertEqual("0.0°", self.text("[data-pitch-value]"))
+        self.assertFalse(
+            self.evaluate("document.activeElement === document.querySelector('[data-joystick]')")
+        )
+
     def test_presenter_uses_local_qr_and_survives_missing_score_api(self) -> None:
-        self._navigate("presenter.html")
+        self._navigate("presenter.html", blocked_urls=["*/api/scores"])
         self._wait_for("Boolean(document.querySelector('[data-qr] svg'))")
         student_url = self.evaluate("document.querySelector('[data-student-url]').value")
         self.assertTrue(student_url.endswith("/index.html"), student_url)
@@ -462,7 +560,12 @@ class MobileLabBrowserTests(unittest.TestCase):
                 self.assertIn("실제 기체와 연결되지 않습니다", geometry["safety"])
                 self._screenshot(f"student-{width}x{height}.png")
 
-        self._navigate("presenter.html", width=390, height=844)
+        self._navigate(
+            "presenter.html",
+            width=390,
+            height=844,
+            blocked_urls=["*/api/scores"],
+        )
         self._wait_for("Boolean(document.querySelector('[data-qr] svg'))")
         self._screenshot("presenter-390x844.png")
 

@@ -20,6 +20,7 @@ MAX_REQUEST_BYTES = 4096
 ALLOWED_FIELDS = frozenset(
     {"submission_id", "nickname", "score", "stability", "duration_ms", "mode"}
 )
+FONT_ALIAS_PREFIX = "/vendor/uos-slide-template/fonts/"
 
 
 class SubmissionValidationError(ValueError):
@@ -136,6 +137,7 @@ class ScoreStore:
 def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTPServer:
     """Build a thread-safe score API and static server rooted at ``static_root``."""
     root = Path(static_root).resolve()
+    font_root = (root.parent / "vendor" / "uos-slide-template" / "fonts").resolve()
     store = ScoreStore()
 
     class ScoreRequestHandler(BaseHTTPRequestHandler):
@@ -168,8 +170,12 @@ def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTP
             if request_path == "/":
                 request_path = "/index.html"
             try:
-                candidate = (root / request_path.lstrip("/")).resolve()
-                candidate.relative_to(root)
+                if request_path.startswith(FONT_ALIAS_PREFIX):
+                    candidate = (font_root / request_path.removeprefix(FONT_ALIAS_PREFIX)).resolve()
+                    candidate.relative_to(font_root)
+                else:
+                    candidate = (root / request_path.lstrip("/")).resolve()
+                    candidate.relative_to(root)
             except (OSError, ValueError):
                 self._not_found()
                 return
