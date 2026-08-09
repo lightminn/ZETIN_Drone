@@ -216,7 +216,7 @@ Run `git diff --check` and inspect `git status --short`. Confirm that
 `docs/cascade_vs_single_pid.pdf` and the OnlyOffice lock are untracked and
 unstaged.
 
-- [ ] **Step 3: Commit and push scoped files**
+- [x] **Step 3: Commit and push scoped files**
 
 Stage only `BRIEF.md`, `README.md`, `SOURCES.md`, `index.html`, the updated PPTX
 artifact test, this plan, the design spec, and the canonical PPTX if it was safely regenerated. Commit with
