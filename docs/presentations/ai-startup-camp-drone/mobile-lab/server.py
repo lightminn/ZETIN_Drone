@@ -21,6 +21,14 @@ ALLOWED_FIELDS = frozenset(
     {"submission_id", "nickname", "score", "stability", "duration_ms", "mode"}
 )
 FONT_ALIAS_PREFIX = "/vendor/uos-slide-template/fonts/"
+ALLOWED_FONT_FILENAMES = frozenset(
+    {
+        "NotoSansCJKkr-Regular.woff2",
+        "NotoSansCJKkr-Medium.woff2",
+        "NotoSansCJKkr-Bold.woff2",
+    }
+)
+PUBLIC_SCORE_FIELDS = ("nickname", "score", "stability", "mode")
 
 
 class SubmissionValidationError(ValueError):
@@ -35,6 +43,9 @@ class MobileLabHTTPServer(ThreadingHTTPServer):
     """Threaded server sized to accept a full classroom submission burst."""
 
     request_queue_size = 64
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        del request, client_address
 
 
 def _invalid(message: str) -> None:
@@ -58,11 +69,18 @@ def _validate_payload(payload: object) -> dict[str, object]:
     nickname = payload["nickname"]
     if not isinstance(nickname, str):
         _invalid("nickname must be a string")
+    try:
+        nickname.encode("utf-8")
+    except UnicodeEncodeError:
+        _invalid("nickname must be valid UTF-8")
+    if any(
+        unicodedata.category(character) in {"Cc", "Cf", "Cs"}
+        for character in nickname
+    ):
+        _invalid("nickname must not contain control, format, or surrogate characters")
     nickname = nickname.strip() or "익명"
     if len(nickname) > 20:
         _invalid("nickname must contain at most 20 Unicode code points")
-    if any(unicodedata.category(character) == "Cc" for character in nickname):
-        _invalid("nickname must not contain control characters")
 
     score = payload["score"]
     if isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= 1000:
@@ -104,8 +122,12 @@ class ScoreStore:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._by_id: dict[str, dict[str, dict[str, object]]] = {}
+        self._by_id: dict[str, dict[str, object]] = {}
         self._next_sequence = 1
+
+    @staticmethod
+    def _public_record(record: dict[str, object]) -> dict[str, object]:
+        return {field: record[field] for field in PUBLIC_SCORE_FIELDS}
 
     def submit(self, payload: object) -> tuple[dict[str, object], bool]:
         canonical = _validate_payload(payload)
@@ -117,21 +139,27 @@ class ScoreStore:
                     raise SubmissionConflict(
                         "submission_id already belongs to a different payload"
                     )
-                return dict(existing["public"]), False
+                return self._public_record(existing["payload"]), False
 
-            public = {**canonical, "accepted_seq": self._next_sequence}
+            accepted_seq = self._next_sequence
             self._next_sequence += 1
             self._by_id[submission_id] = {
                 "payload": dict(canonical),
-                "public": public,
+                "accepted_seq": accepted_seq,
             }
-            return dict(public), True
+            return self._public_record(canonical), True
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
-            scores = [dict(entry["public"]) for entry in self._by_id.values()]
+            scores = [
+                {**entry["payload"], "accepted_seq": entry["accepted_seq"]}
+                for entry in self._by_id.values()
+            ]
         scores.sort(key=lambda record: (-int(record["score"]), int(record["accepted_seq"])))
-        return {"count": len(scores), "scores": scores}
+        return {
+            "count": len(scores),
+            "scores": [self._public_record(record) for record in scores[:10]],
+        }
 
 
 def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTPServer:
@@ -171,7 +199,11 @@ def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTP
                 request_path = "/index.html"
             try:
                 if request_path.startswith(FONT_ALIAS_PREFIX):
-                    candidate = (font_root / request_path.removeprefix(FONT_ALIAS_PREFIX)).resolve()
+                    font_filename = request_path.removeprefix(FONT_ALIAS_PREFIX)
+                    if font_filename not in ALLOWED_FONT_FILENAMES:
+                        self._not_found()
+                        return
+                    candidate = (font_root / font_filename).resolve()
                     candidate.relative_to(font_root)
                 else:
                     candidate = (root / request_path.lstrip("/")).resolve()

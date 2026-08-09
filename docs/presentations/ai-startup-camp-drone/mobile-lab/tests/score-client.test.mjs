@@ -38,3 +38,18 @@ test("submitScore keeps a local result object independent from later response ch
 
   assert.deepEqual(result, { status: "submitted", response: { accepted: true } });
 });
+
+test("submitScore aborts and resolves offline when the request never settles", async () => {
+  const payload = { score: 500, nickname: "하늘" };
+  const before = structuredClone(payload);
+  let requestSignal;
+
+  const result = await submitScore((_url, options) => {
+    requestSignal = options.signal;
+    return new Promise(() => {});
+  }, payload, { timeoutMs: 20 });
+
+  assert.deepEqual(result, { status: "offline" });
+  assert.equal(requestSignal.aborted, true);
+  assert.deepEqual(payload, before);
+});

@@ -48,11 +48,38 @@ SENSOR_AND_CLOCK_SHIM = r"""
   const params = new URLSearchParams(location.search);
   const scenario = params.get('sensors');
   window.__permissionProbe = {orientation: 0, motion: 0, activations: []};
+  const permissionResolvers = [];
+  const sensorListeners = {
+    deviceorientation: new Set(),
+    devicemotion: new Set(),
+  };
+  const nativeAddEventListener = window.addEventListener.bind(window);
+  const nativeRemoveEventListener = window.removeEventListener.bind(window);
+  window.addEventListener = (type, listener, options) => {
+    sensorListeners[type]?.add(listener);
+    return nativeAddEventListener(type, listener, options);
+  };
+  window.removeEventListener = (type, listener, options) => {
+    sensorListeners[type]?.delete(listener);
+    return nativeRemoveEventListener(type, listener, options);
+  };
+  window.__sensorListenerCounts = () => ({
+    orientation: sensorListeners.deviceorientation.size,
+    motion: sensorListeners.devicemotion.size,
+  });
 
   const record = (kind, result) => {
     window.__permissionProbe[kind] += 1;
     window.__permissionProbe.activations.push(Boolean(navigator.userActivation?.isActive));
+    if (scenario === 'delayed-grant') {
+      return new Promise(resolve => permissionResolvers.push(() => resolve(result)));
+    }
     return Promise.resolve(result);
+  };
+  window.__resolvePermissions = () => {
+    const pending = permissionResolvers.splice(0);
+    pending.forEach(resolve => resolve());
+    return pending.length;
   };
 
   if (scenario === 'insecure') {
@@ -61,7 +88,7 @@ SENSOR_AND_CLOCK_SHIM = r"""
   if (scenario === 'none' || scenario === 'insecure') {
     Object.defineProperty(window, 'DeviceOrientationEvent', {value: undefined, configurable: true});
     Object.defineProperty(window, 'DeviceMotionEvent', {value: undefined, configurable: true});
-  } else if (scenario === 'granted' || scenario === 'denied') {
+  } else if (scenario === 'granted' || scenario === 'denied' || scenario === 'delayed-grant') {
     class SyntheticOrientationEvent {}
     class SyntheticMotionEvent {}
     SyntheticOrientationEvent.requestPermission = () => record(
@@ -93,6 +120,30 @@ SENSOR_AND_CLOCK_SHIM = r"""
     });
     window.dispatchEvent(event);
   };
+
+  if (params.get('scores') === 'hang') {
+    const nativeFetch = window.fetch.bind(window);
+    window.__scoreFetchProbe = {calls: 0, concurrent: 0, maxConcurrent: 0, aborts: 0};
+    window.fetch = (input, options = {}) => {
+      if (String(input) !== '/api/scores') return nativeFetch(input, options);
+      const probe = window.__scoreFetchProbe;
+      probe.calls += 1;
+      probe.concurrent += 1;
+      probe.maxConcurrent = Math.max(probe.maxConcurrent, probe.concurrent);
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const abort = () => {
+          if (settled) return;
+          settled = true;
+          probe.concurrent -= 1;
+          probe.aborts += 1;
+          reject(new DOMException('synthetic hung score request aborted', 'AbortError'));
+        };
+        if (options.signal?.aborted) abort();
+        else options.signal?.addEventListener('abort', abort, {once: true});
+      });
+    };
+  }
 
   if (params.get('clock') === 'manual') {
     let now = 0;
@@ -337,6 +388,26 @@ class MobileLabBrowserTests(unittest.TestCase):
         path.write_bytes(base64.b64decode(encoded))
         return path
 
+    @classmethod
+    def _post_score(cls, index: int, nickname: str, score: int) -> None:
+        payload = {
+            "submission_id": f"fedcba98-7654-4321-8abc-{index:012d}",
+            "nickname": nickname,
+            "score": score,
+            "stability": score / 10,
+            "duration_ms": 20_000,
+            "mode": "touch",
+        }
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{cls.http_port}/api/scores",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            if response.status != 201:
+                raise AssertionError(f"score submission failed: {response.status}")
+
     def test_sensor_absence_and_insecure_context_offer_explained_touch_fallback(self) -> None:
         self._navigate("index.html?sensors=none")
         self._wait_for("document.fonts.status === 'loaded'")
@@ -395,6 +466,53 @@ class MobileLabBrowserTests(unittest.TestCase):
         })
         self.assertTrue(all(probe["activations"]))
         self.assertIsNotNone(self._rect('[data-action="touch-fallback"]'))
+
+    def test_granted_sensor_without_a_sample_falls_back_after_four_seconds(self) -> None:
+        self._navigate("index.html?sensors=granted")
+        self._click('[data-action="sensor"]')
+        self._wait_for("document.querySelector('main').dataset.sensorState === 'waiting'")
+        self._wait_for(
+            "document.querySelector('main').dataset.sensorState === 'fallback'",
+            timeout=5.5,
+        )
+        self.assertEqual("permission", self.evaluate("document.querySelector('main').dataset.screen"))
+        self.assertIn("도착하지 않았습니다", self.text("[data-sensor-reason]"))
+        self.assertIsNotNone(self._rect('[data-action="touch-fallback"]'))
+
+    def test_delayed_sensor_grant_cannot_undo_touch_or_home_cancellation(self) -> None:
+        self._navigate("index.html?sensors=delayed-grant")
+        self._click('[data-action="sensor"]')
+        self._wait_for("document.querySelector('main').dataset.sensorState === 'requesting'")
+        self._click('[data-action="touch-fallback"]')
+        self.assertEqual(2, self.evaluate("__resolvePermissions()"))
+        time.sleep(0.1)
+        self.assertEqual(
+            {"screen": "imu", "mode": "touch"},
+            self.evaluate(
+                "({screen: document.querySelector('main').dataset.screen, "
+                "mode: document.querySelector('main').dataset.mode})"
+            ),
+        )
+        self.assertEqual(
+            {"orientation": 0, "motion": 0}, self.evaluate("__sensorListenerCounts()")
+        )
+
+        self._navigate("index.html?sensors=delayed-grant")
+        self._click('[data-action="sensor"]')
+        self._wait_for("document.querySelector('main').dataset.sensorState === 'requesting'")
+        self._click('[data-action="back-start"]')
+        self.assertEqual(2, self.evaluate("__resolvePermissions()"))
+        time.sleep(0.1)
+        self.assertEqual(
+            {"screen": "start", "mode": "none"},
+            self.evaluate(
+                "({screen: document.querySelector('main').dataset.screen, "
+                "mode: document.querySelector('main').dataset.mode})"
+            ),
+        )
+        self.assertEqual(
+            {"orientation": 0, "motion": 0}, self.evaluate("__sensorListenerCounts()")
+        )
 
     def test_pointer_challenge_offline_result_and_restart(self) -> None:
         self._navigate("index.html?sensors=none&clock=manual")
@@ -512,62 +630,157 @@ class MobileLabBrowserTests(unittest.TestCase):
         resource_urls = self.evaluate("performance.getEntriesByType('resource').map(entry => entry.name)")
         self.assertTrue(all(url.startswith(f"http://127.0.0.1:{self.http_port}/") for url in resource_urls))
 
+    def test_presenter_renders_total_count_and_ordered_scores_from_product_server(self) -> None:
+        self._post_score(1, "첫째", 1000)
+        self._post_score(2, "둘째", 1000)
+        self._post_score(3, "셋째", 999)
+        self._navigate("presenter.html")
+        self._wait_for("document.querySelector('[data-score-count]').textContent.trim() === '3'")
+        self.assertEqual(
+            ["첫째", "둘째", "셋째"],
+            self.evaluate(
+                "[...document.querySelectorAll('[data-score-list] .score-name')]"
+                ".map(element => element.textContent.trim())"
+            ),
+        )
+        self.assertEqual(
+            ["1000", "1000", "0999"],
+            self.evaluate(
+                "[...document.querySelectorAll('[data-score-list] .score-value')]"
+                ".map(element => element.textContent.trim())"
+            ),
+        )
+
+    def test_presenter_times_out_hung_polling_without_overlapping_requests(self) -> None:
+        self._navigate("presenter.html?scores=hang")
+        self._wait_for("window.__scoreFetchProbe?.aborts >= 1", timeout=7.0)
+        probe = self.evaluate("window.__scoreFetchProbe")
+        self.assertGreaterEqual(probe["calls"], 1)
+        self.assertGreaterEqual(probe["aborts"], 1)
+        self.assertEqual(1, probe["maxConcurrent"])
+        self.assertIn("선택 기능", self.text("[data-board-status]"))
+
     def test_mobile_viewports_have_no_horizontal_overflow_or_clipped_actions(self) -> None:
-        for width, height in ((360, 800), (390, 844)):
-            with self.subTest(viewport=f"{width}x{height}"):
-                self._navigate("index.html?sensors=none", width=width, height=height)
+        def open_student_state(state: str, width: int, height: int) -> None:
+            parameters = "sensors=none&clock=manual" if state == "result" else "sensors=none"
+            if state in {"permission", "calibration"}:
+                parameters = "sensors=granted"
+            self._navigate(f"index.html?{parameters}", width=width, height=height)
+            if state == "start":
+                return
+            if state == "permission":
+                self._click('[data-action="sensor"]')
+            elif state == "calibration":
+                self._click('[data-action="sensor"]')
+                self._wait_for("document.querySelector('main').dataset.screen === 'permission'")
+                self.evaluate("__emitOrientation(0, 0)")
+            else:
                 self._click('[data-action="touch"]')
                 self._wait_for("document.querySelector('main').dataset.screen === 'imu'")
+                if state in {"challenge", "result"}:
+                    self._click('[data-action="start-challenge"]')
+                if state == "result":
+                    self.evaluate("__runFrames(1205)")
+            self._wait_for(
+                f"document.querySelector('main').dataset.screen === {json.dumps(state)}"
+            )
+
+        for width, height in ((360, 800), (390, 844)):
+            for state in ("start", "permission", "calibration", "imu", "challenge", "result"):
+                with self.subTest(viewport=f"{width}x{height}", student_state=state):
+                    open_student_state(state, width, height)
+                    geometry = self.evaluate(
+                        """
+                        (() => {
+                          const panel = document.querySelector('section[data-screen-panel]:not([hidden])');
+                          const buttons = [...panel.querySelectorAll('button')].map(button => {
+                            const rect = button.getBoundingClientRect();
+                            return {left: rect.left, top: rect.top, right: rect.right,
+                                    bottom: rect.bottom, width: rect.width, height: rect.height};
+                          });
+                          const dock = panel.querySelector('.action-dock').getBoundingClientRect();
+                          const panelRect = panel.getBoundingClientRect();
+                          return {
+                            scrollWidth: document.documentElement.scrollWidth,
+                            innerWidth,
+                            innerHeight,
+                            buttons,
+                            dock: {left: dock.left, right: dock.right, bottom: dock.bottom},
+                            panel: {left: panelRect.left, right: panelRect.right},
+                            safety: document.querySelector('.safety-boundary').textContent.trim(),
+                          };
+                        })()
+                        """
+                    )
+                    self.assertLessEqual(geometry["scrollWidth"], geometry["innerWidth"])
+                    self.assertGreaterEqual(geometry["panel"]["left"], 0)
+                    self.assertLessEqual(geometry["panel"]["right"], width)
+                    for button in geometry["buttons"]:
+                        self.assertGreaterEqual(button["left"], 0)
+                        self.assertLessEqual(button["right"], width)
+                        self.assertGreaterEqual(button["top"], 0)
+                        self.assertLessEqual(button["bottom"], height)
+                        self.assertGreaterEqual(button["height"], 48)
+                    if len(geometry["buttons"]) == 1:
+                        self.assertGreaterEqual(geometry["buttons"][0]["width"], width - 28)
+                    self.assertGreaterEqual(geometry["dock"]["left"], 0)
+                    self.assertLessEqual(geometry["dock"]["right"], width)
+                    self.assertLessEqual(geometry["dock"]["bottom"], height)
+                    self.assertIn("실제 기체와 연결되지 않습니다", geometry["safety"])
+            self._screenshot(f"student-result-{width}x{height}.png")
+
+        for width, height in ((360, 800), (390, 844)):
+            with self.subTest(viewport=f"{width}x{height}", presenter=True):
+                self._navigate(
+                    "presenter.html",
+                    width=width,
+                    height=height,
+                    blocked_urls=["*/api/scores"],
+                )
+                self._wait_for("Boolean(document.querySelector('[data-qr] svg'))")
                 geometry = self.evaluate(
                     """
                     (() => {
-                      const visible = element => {
-                        const style = getComputedStyle(element);
-                        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden'
-                          && element.getClientRects().length > 0;
-                      };
-                      const buttons = [...document.querySelectorAll('button.primary')]
-                        .filter(visible)
-                        .map(button => {
-                          const rect = button.getBoundingClientRect();
-                          return {left: rect.left, right: rect.right, width: rect.width,
-                                  height: rect.height};
-                        });
-                      const dock = document.querySelector('section:not([hidden]) .action-dock')
-                        .getBoundingClientRect();
+                      const selectors = [
+                        '.presenter-shell', '.presenter-grid', '.presenter-qr-panel',
+                        '.leaderboard-panel', '[data-qr]',
+                      ];
                       return {
                         scrollWidth: document.documentElement.scrollWidth,
                         innerWidth,
-                        innerHeight,
-                        buttons,
-                        dock: {left: dock.left, right: dock.right, bottom: dock.bottom},
+                        regions: selectors.map(selector => {
+                          const rect = document.querySelector(selector).getBoundingClientRect();
+                          return {selector, left: rect.left, right: rect.right};
+                        }),
                         safety: document.querySelector('.safety-boundary').textContent.trim(),
                       };
                     })()
                     """
                 )
                 self.assertLessEqual(geometry["scrollWidth"], geometry["innerWidth"])
-                self.assertTrue(geometry["buttons"])
-                for button in geometry["buttons"]:
-                    self.assertGreaterEqual(button["left"], 0)
-                    self.assertLessEqual(button["right"], width)
-                    self.assertGreaterEqual(button["height"], 48)
-                if len(geometry["buttons"]) == 1:
-                    self.assertGreaterEqual(geometry["buttons"][0]["width"], width - 28)
-                self.assertGreaterEqual(geometry["dock"]["left"], 0)
-                self.assertLessEqual(geometry["dock"]["right"], width)
-                self.assertLessEqual(geometry["dock"]["bottom"], height)
+                for region in geometry["regions"]:
+                    self.assertGreaterEqual(region["left"], 0, region["selector"])
+                    self.assertLessEqual(region["right"], width, region["selector"])
                 self.assertIn("실제 기체와 연결되지 않습니다", geometry["safety"])
-                self._screenshot(f"student-{width}x{height}.png")
-
-        self._navigate(
-            "presenter.html",
-            width=390,
-            height=844,
-            blocked_urls=["*/api/scores"],
-        )
-        self._wait_for("Boolean(document.querySelector('[data-qr] svg'))")
-        self._screenshot("presenter-390x844.png")
+                for selector in ('[data-action="update-qr"]', '[data-action="copy-url"]'):
+                    rect = self.evaluate(
+                        """
+                        (() => {
+                          const button = document.querySelector(%s);
+                          button.scrollIntoView({block: 'center'});
+                          const rect = button.getBoundingClientRect();
+                          return {left: rect.left, top: rect.top, right: rect.right,
+                                  bottom: rect.bottom, height: rect.height};
+                        })()
+                        """
+                        % json.dumps(selector)
+                    )
+                    self.assertGreaterEqual(rect["left"], 0)
+                    self.assertLessEqual(rect["right"], width)
+                    self.assertGreaterEqual(rect["top"], 0)
+                    self.assertLessEqual(rect["bottom"], height)
+                    self.assertGreaterEqual(rect["height"], 48)
+                self._screenshot(f"presenter-{width}x{height}.png")
 
 
 if __name__ == "__main__":

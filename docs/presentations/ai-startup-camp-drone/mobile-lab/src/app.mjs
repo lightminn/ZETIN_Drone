@@ -30,6 +30,7 @@ let mode = "none";
 let sensorAccess = null;
 let firstOrientationReceived = false;
 let sensorTimeout = 0;
+let sensorAttemptGeneration = 0;
 let activePointer = null;
 let touchVector = { x: 0, y: 0, magnitude: 0 };
 const pressedArrowKeys = new Set();
@@ -163,13 +164,26 @@ function attachSensorListeners() {
   window.addEventListener("devicemotion", handleMotion);
 }
 
+function cancelSensorAttempt() {
+  sensorAttemptGeneration += 1;
+  clearSensorTimeout();
+  sensorAccess = null;
+  firstOrientationReceived = false;
+  window.removeEventListener("deviceorientation", handleOrientation);
+  window.removeEventListener("devicemotion", handleMotion);
+}
+
 async function beginSensorExperience() {
+  cancelSensorAttempt();
+  const attemptGeneration = sensorAttemptGeneration;
   const accessPromise = requestSensorAccess(window);
   showScreen("permission");
   sensorReason.textContent = "센서 권한을 확인하고 있습니다.";
   app.dataset.sensorState = "requesting";
   attachSensorListeners();
-  sensorAccess = await accessPromise;
+  const nextSensorAccess = await accessPromise;
+  if (attemptGeneration !== sensorAttemptGeneration) return;
+  sensorAccess = nextSensorAccess;
 
   if (sensorAccess.orientation !== "granted") {
     app.dataset.sensorState = "fallback";
@@ -186,7 +200,11 @@ async function beginSensorExperience() {
   }
 
   sensorTimeout = window.setTimeout(() => {
-    if (app.dataset.screen !== "permission" || firstOrientationReceived) return;
+    if (
+      attemptGeneration !== sensorAttemptGeneration
+      || app.dataset.screen !== "permission"
+      || firstOrientationReceived
+    ) return;
     app.dataset.sensorState = "fallback";
     sensorReason.textContent = sensorReasonText("timeout");
   }, SENSOR_SAMPLE_TIMEOUT_MS);
@@ -209,7 +227,7 @@ function renderJoystickInput() {
 }
 
 function beginTouchExperience() {
-  clearSensorTimeout();
+  cancelSensorAttempt();
   setMode("touch");
   orientationModel.reset();
   touchVector = { x: 0, y: 0, magnitude: 0 };
@@ -393,7 +411,7 @@ document.querySelector('[data-action="sensor"]').addEventListener("click", begin
 document.querySelector('[data-action="touch"]').addEventListener("click", beginTouchExperience);
 document.querySelector('[data-action="touch-fallback"]').addEventListener("click", beginTouchExperience);
 document.querySelector('[data-action="back-start"]').addEventListener("click", () => {
-  clearSensorTimeout();
+  cancelSensorAttempt();
   setMode("none");
   showScreen("start");
   renderInstrument();

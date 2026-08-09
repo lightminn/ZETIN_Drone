@@ -4,6 +4,9 @@ const copyStatus = document.querySelector("[data-copy-status]");
 const boardStatus = document.querySelector("[data-board-status]");
 const scoreCount = document.querySelector("[data-score-count]");
 const scoreList = document.querySelector("[data-score-list]");
+const SCORE_REQUEST_TIMEOUT_MS = 5000;
+const SCORE_POLL_INTERVAL_MS = 3000;
+let scoreRequestActive = false;
 
 function defaultStudentUrl() {
   const url = new URL("./index.html", window.location.href);
@@ -69,10 +72,26 @@ function renderScores(records) {
 }
 
 async function refreshScores() {
+  if (scoreRequestActive) return;
+  scoreRequestActive = true;
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  let timeoutId;
   try {
-    const response = await fetch("/api/scores", { cache: "no-store" });
-    if (!response.ok) throw new Error("score API unavailable");
-    const body = await response.json();
+    const request = (async () => {
+      const response = await fetch("/api/scores", {
+        cache: "no-store",
+        ...(controller === null ? {} : { signal: controller.signal }),
+      });
+      if (!response.ok) throw new Error("score API unavailable");
+      return response.json();
+    })();
+    const timeout = new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        controller?.abort();
+        reject(new Error("score API timed out"));
+      }, SCORE_REQUEST_TIMEOUT_MS);
+    });
+    const body = await Promise.race([request, timeout]);
     if (!Number.isInteger(body.count) || !Array.isArray(body.scores)) {
       throw new Error("invalid score response");
     }
@@ -83,6 +102,9 @@ async function refreshScores() {
     scoreCount.textContent = "0";
     boardStatus.textContent = "점수판은 선택 기능입니다. QR과 학생 실습은 그대로 사용할 수 있습니다.";
     renderScores([]);
+  } finally {
+    window.clearTimeout(timeoutId);
+    scoreRequestActive = false;
   }
 }
 
@@ -95,4 +117,4 @@ urlInput.addEventListener("change", () => renderQr(urlInput.value));
 urlInput.value = defaultStudentUrl();
 renderQr(urlInput.value);
 refreshScores();
-window.setInterval(refreshScores, 3000);
+window.setInterval(refreshScores, SCORE_POLL_INTERVAL_MS);

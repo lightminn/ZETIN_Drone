@@ -15,12 +15,16 @@ function runSequence(sequence) {
 }
 
 test("identical fixed-step inputs produce byte-for-byte equal terminal states", () => {
-  const sequence = Array.from({ length: 600 }, (_, index) => ({
+  const sequence = Array.from({ length: 1200 }, (_, index) => ({
     roll: index % 120 < 60 ? 0.35 : -0.35,
     pitch: index % 90 < 45 ? -0.2 : 0.2,
   }));
+  const first = runSequence(sequence);
+  const second = runSequence(sequence);
 
-  assert.equal(JSON.stringify(runSequence(sequence)), JSON.stringify(runSequence(sequence)));
+  assert.equal(first.elapsed, 20);
+  assert.equal(first.finished, true);
+  assert.equal(JSON.stringify(first), JSON.stringify(second));
 });
 
 test("challenge reaches a 20-second terminal state and ignores further updates", () => {

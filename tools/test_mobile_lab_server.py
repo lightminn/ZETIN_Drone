@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from http.client import HTTPResponse
+from http.client import HTTPResponse, RemoteDisconnected
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -85,11 +87,13 @@ class MobileLabServerTest(unittest.TestCase):
         with response:
             return response.status, dict(response.headers.items()), response.read()
 
-    def post_json(self, payload: object) -> tuple[int, dict[str, str], dict[str, object]]:
+    def post_json(
+        self, payload: object, *, ensure_ascii: bool = False
+    ) -> tuple[int, dict[str, str], dict[str, object]]:
         status, headers, body = self.request(
             "/api/scores",
             method="POST",
-            body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            body=json.dumps(payload, ensure_ascii=ensure_ascii).encode("utf-8"),
             content_type="application/json",
         )
         return status, headers, json.loads(body)
@@ -159,6 +163,98 @@ class MobileLabServerTest(unittest.TestCase):
         self.assertEqual(2, snapshot["count"])
         self.assertEqual([900, 12], [record["score"] for record in snapshot["scores"]])
         self.assertEqual("익명", snapshot["scores"][1]["nickname"])
+
+    def test_nickname_rejects_raw_unsafe_unicode_before_normalization(self) -> None:
+        """Trimming must not hide control, format, or non-UTF-8 surrogate input."""
+        for index, nickname in enumerate(("\n팀", "팀\x00", "팀\u200d", "\ud800"), 10):
+            with self.subTest(nickname=ascii(nickname)):
+                status, _, _ = self.post_json(
+                    {**payload_for(index), "nickname": nickname}, ensure_ascii=True
+                )
+                self.assertEqual(400, status)
+                self.assertEqual({"count": 0, "scores": []}, self.get_scores())
+
+        spaced = {**payload_for(20), "nickname": "  하늘  "}
+        anonymous = {**payload_for(21), "nickname": "   "}
+        self.assertEqual(201, self.post_json(spaced)[0])
+        self.assertEqual(201, self.post_json(anonymous)[0])
+        snapshot = self.get_scores()
+        self.assertEqual(2, snapshot["count"])
+        self.assertEqual({"하늘", "익명"}, {entry["nickname"] for entry in snapshot["scores"]})
+        json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
+
+    def test_numeric_boundaries_booleans_and_non_finite_values(self) -> None:
+        """Only the documented finite numeric domain may enter the score store."""
+        valid_boundaries = (
+            {"score": 0, "stability": 0, "duration_ms": 1},
+            {"score": 1000, "stability": 100, "duration_ms": 600_000},
+        )
+        for index, values in enumerate(valid_boundaries, 30):
+            with self.subTest(valid=values):
+                self.assertEqual(201, self.post_json({**payload_for(index), **values})[0])
+
+        invalid_values = (
+            {"score": -1},
+            {"score": 1001},
+            {"score": 1.0},
+            {"score": True},
+            {"stability": -0.1},
+            {"stability": 100.1},
+            {"stability": True},
+            {"stability": float("nan")},
+            {"stability": float("inf")},
+            {"stability": float("-inf")},
+            {"duration_ms": 0},
+            {"duration_ms": 600_001},
+            {"duration_ms": 1.0},
+            {"duration_ms": True},
+        )
+        for index, values in enumerate(invalid_values, 40):
+            with self.subTest(invalid=values):
+                self.assertEqual(400, self.post_json({**payload_for(index), **values})[0])
+                self.assertEqual(2, self.get_scores()["count"])
+
+    def test_post_response_does_not_expose_internal_score_metadata(self) -> None:
+        """Submission responses must not leak identifiers, duration, or sequence."""
+        status, _, body = self.post_json(payload_for(59))
+        self.assertEqual(201, status)
+        self.assertEqual(
+            {"nickname", "score", "stability", "mode"}, set(body["record"])
+        )
+
+    def test_public_leaderboard_is_top_ten_minimal_and_ties_keep_acceptance_order(self) -> None:
+        """The GET projection must be bounded, private, and deterministic."""
+        scores = (900, 900, 1000, 950, 850, 800, 750, 700, 650, 600, 550, 500)
+        for index, score in enumerate(scores, 60):
+            status, _, _ = self.post_json(
+                {**payload_for(index), "nickname": f"참짜{index}", "score": score}
+            )
+            self.assertEqual(201, status)
+
+        snapshot = self.get_scores()
+        self.assertEqual(12, snapshot["count"])
+        self.assertEqual(10, len(snapshot["scores"]))
+        self.assertEqual(
+            ["참짜62", "참짜63", "참짜60", "참짜61"],
+            [entry["nickname"] for entry in snapshot["scores"][:4]],
+        )
+        self.assertTrue(
+            all(
+                set(entry) == {"nickname", "score", "stability", "mode"}
+                for entry in snapshot["scores"]
+            )
+        )
+
+    def test_unexpected_handler_errors_are_quiet(self) -> None:
+        """A classroom client fault must not print its address or a traceback."""
+        def fail_snapshot() -> dict[str, object]:
+            raise RuntimeError("synthetic handler failure")
+
+        self.httpd.score_store.snapshot = fail_snapshot  # type: ignore[attr-defined]
+        captured = io.StringIO()
+        with contextlib.redirect_stderr(captured), self.assertRaises(RemoteDisconnected):
+            urlopen(f"{self.base_url}/api/scores", timeout=5)
+        self.assertEqual("", captured.getvalue())
 
     def test_static_routes_are_root_confined(self) -> None:
         """The static server must not turn encoded traversal into file access."""
@@ -242,6 +338,7 @@ class DefaultMobileLabTopologyTest(unittest.TestCase):
             self.assertEqual((SIBLING_FONTS / filename).read_bytes(), body)
 
         self.assertEqual(404, self.request("/vendor/uos-slide-template/styles.css")[0])
+        self.assertEqual(404, self.request("/vendor/uos-slide-template/fonts/fonts.css")[0])
         self.assertEqual(
             404,
             self.request(
