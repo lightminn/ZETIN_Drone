@@ -148,10 +148,14 @@ SENSOR_AND_CLOCK_SHIM = r"""
   if (params.get('clock') === 'manual') {
     const challengeSeeds = [0, 0xffffffff];
     const nativeGetRandomValues = crypto.getRandomValues.bind(crypto);
+    window.__challengeSeedDrawCount = 0;
     Crypto.prototype.getRandomValues = function(values) {
-      if (values instanceof Uint32Array && values.length === 1 && challengeSeeds.length > 0) {
-        values[0] = challengeSeeds.shift();
-        return values;
+      if (values instanceof Uint32Array && values.length === 1) {
+        window.__challengeSeedDrawCount += 1;
+        if (challengeSeeds.length > 0) {
+          values[0] = challengeSeeds.shift();
+          return values;
+        }
       }
       return nativeGetRandomValues(values);
     };
@@ -562,6 +566,7 @@ class MobileLabBrowserTests(unittest.TestCase):
         self.assertFalse(
             self.evaluate("Boolean(document.querySelector('[data-result]').dataset.submissionId)")
         )
+        self.assertEqual(2, self.evaluate("window.__challengeSeedDrawCount"))
 
         self.evaluate("__runFrames(120)")
         second_attempt_attitude = (
