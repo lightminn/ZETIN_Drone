@@ -166,7 +166,7 @@ def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTP
         def _serve_static(self) -> None:
             request_path = unquote(urlsplit(self.path).path)
             if request_path == "/":
-                request_path = "/presenter.html"
+                request_path = "/index.html"
             try:
                 candidate = (root / request_path.lstrip("/")).resolve()
                 candidate.relative_to(root)

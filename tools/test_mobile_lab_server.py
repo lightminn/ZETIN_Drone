@@ -43,8 +43,11 @@ class MobileLabServerTest(unittest.TestCase):
     def setUp(self) -> None:
         self._temporary_directory = tempfile.TemporaryDirectory()
         static_root = Path(self._temporary_directory.name)
+        (static_root / "index.html").write_text(
+            "<!doctype html><title>student mobile lab</title>", encoding="utf-8"
+        )
         (static_root / "presenter.html").write_text(
-            "<!doctype html><title>mobile lab</title>", encoding="utf-8"
+            "<!doctype html><title>presenter mobile lab</title>", encoding="utf-8"
         )
         (static_root / "src").mkdir()
         (static_root / "src" / "score-client.mjs").write_text(
@@ -160,10 +163,12 @@ class MobileLabServerTest(unittest.TestCase):
         """The static server must not turn encoded traversal into file access."""
         status, headers, body = self.request("/")
         self.assertEqual(200, status)
-        self.assertIn(b"mobile lab", body)
+        self.assertIn(b"student mobile lab", body)
         self.assertEqual("accelerometer=(self), gyroscope=(self)", headers["Permissions-Policy"])
 
-        self.assertEqual(200, self.request("/presenter.html")[0])
+        status, _, body = self.request("/presenter.html")
+        self.assertEqual(200, status)
+        self.assertIn(b"presenter mobile lab", body)
         status, headers, body = self.request("/src/score-client.mjs")
         self.assertEqual(200, status)
         self.assertIn("text/javascript", headers["Content-Type"])
