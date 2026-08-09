@@ -1519,7 +1519,7 @@
     </x-import>
   </section>
 
-  <section data-label="Failsafe 전환" data-screen-label="57" data-speaker-notes="기존 방식은 즉시 정지, 곧 추락이었습니다. 자동 착륙으로 바꿨습니다." style="background:#fff">
+  <section data-label="Failsafe 전환" data-screen-label="57" data-speaker-notes="RC 신호 두절만 시간 기반 하강으로 넘깁니다. 현재 종료 조건은 착지 감지가 아니라 3초 백스톱입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="조종 신호가 끊기면 무엇을 해야 하는가">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
@@ -1529,9 +1529,9 @@
             <div style="font-size:20px;line-height:1.55">안전한 것처럼 보이지만, 공중에 있는 기체를 정지시키면 그대로 <strong>추락</strong>입니다.</div>
           </div>
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;font-weight:700;opacity:.85">현재 방식 · 커밋 3710053</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">자동 착륙 모드로 전환</div>
-            <div style="font-size:20px;line-height:1.55">저장된 수평 트림을 유지하면서 출력을 천천히 낮춰 <strong>스스로 내려앉습니다</strong>.</div>
+              <div style="font-size:18.667px;font-weight:700;opacity:.85">현재 방식 · RC 타임아웃 전용</div>
+              <div style="font-size:24px;font-weight:700;line-height:1.3">시간 기반 하강으로 전환</div>
+              <div style="font-size:20px;line-height:1.55">저장된 수평 트림을 유지하면서 출력을 낮추고, <strong>3초 뒤 백스톱으로 정지</strong>합니다.</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
@@ -1541,7 +1541,7 @@
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:20px;font-weight:700">백스톱 시간</div>
-            <div style="font-size:20px;line-height:1.5;color:var(--uos-ink-muted)">착지를 못 찾더라도 정해진 시간이 지나면 반드시 정지합니다. 착지 감지를 검증한 뒤에만 이 시간을 늘립니다.</div>
+              <div style="font-size:20px;line-height:1.5;color:var(--uos-ink-muted)">현재 착지 감지는 종료 조건이 아닙니다. <strong>landed=false</strong>로 두고 3초가 지나면 반드시 정지합니다.</div>
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:20px;font-weight:700">이 경로를 쓰지 않는 경우</div>
@@ -1552,98 +1552,98 @@
     </x-import>
   </section>
 
-  <section data-label="착지 판정 한계" data-screen-label="58" data-speaker-notes="여기가 오늘 가장 재미있는 물리 문제입니다. 가속도만으로는 정지와 등속 하강을 구분할 수 없습니다." style="background:#fff">
+  <section data-label="착지 판정 한계" data-screen-label="58" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없습니다. 거리·광류 센서는 연결됐지만 아직 판정에 쓰지 않습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="땅에 닿았는지를 어떻게 아는가">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
-        <div style="display:flex;flex-direction:column;gap:24px">
-          <div style="font-size:32px;font-weight:700;line-height:1.3">자동 착륙에는 "이제 땅에 닿았으니 모터를 끈다"는 판단이 필요합니다. 이 판단이 어렵습니다.</div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">우리에게 있는 것은 가속도계뿐입니다. 고도를 재는 센서는 아직 달지 않았습니다.</div>
-        </div>
+          <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
+            <div style="display:flex;flex-direction:column;gap:24px">
+              <div style="font-size:32px;font-weight:700;line-height:1.3">착지를 잘못 판단해 공중에서 모터를 끄는 것보다, <strong>판정을 보류하는 쪽</strong>이 안전합니다.</div>
+              <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55"><strong>Matek 3901-L0X</strong>의 거리·광류 데이터는 들어옵니다. 다만 현재는 텔레메트리 필드 60~64로 기록할 뿐, 착지 결정이나 제어에는 아직 사용하지 않습니다.</div>
+            </div>
         <div style="display:flex;flex-direction:column;gap:20px">
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:18.667px;font-weight:700;opacity:.85">물리적 한계</div>
             <div style="font-size:24px;font-weight:700;line-height:1.35">가속도만으로는 "정지 상태"와 "일정한 속도로 내려가는 상태"를 <strong>구분할 수 없습니다</strong>.</div>
           </div>
           <div style="font-size:20px;line-height:1.55">두 경우 모두 가속도계는 <strong>1g</strong>를 가리킵니다. 속도가 변하지 않으면 가속도는 0이고, 남는 것은 중력뿐이기 때문입니다.</div>
-          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">이 문제를 푸는 데 세 번의 시도가 필요했습니다.</div>
+              <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">그래서 IMU 기반 판정은 가설과 관측을 다시 분리해 검토했습니다.</div>
         </div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="폐기한 시도" data-screen-label="59" data-speaker-notes="첫 번째는 원리적으로 불가능, 두 번째는 이론은 맞지만 신호가 노이즈에 묻혔습니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="폐기한 두 가지 시도">
+  <section data-label="IMU 판정 재검토" data-screen-label="59" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확합니다. 능동 프로브도 아직 착지 판정기로 검증되지 않았습니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="IMU만으로 시도한 착지 판정">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
           <div style="border:2px solid var(--uos-rule);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-ink-muted)">시도 1 · 폐기</div>
+              <div style="font-size:18.667px;font-weight:700;color:var(--uos-ink-muted)">시도 1 · 원리적 한계</div>
             <div style="font-size:24px;font-weight:700;line-height:1.3">1g로 돌아오는 순간을 감지</div>
             <div style="font-size:20px;line-height:1.55">착지하면 가속도가 1g로 안정될 것이라고 생각했습니다.</div>
             <div style="font-size:20px;line-height:1.55;margin-top:auto;color:var(--uos-blue);font-weight:700">→ 등속 하강 중에도 계속 1g입니다. 원리적으로 구분이 불가능했습니다.</div>
           </div>
           <div style="border:2px solid var(--uos-rule);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-ink-muted)">시도 2 · 폐기 · 커밋 4174172</div>
+              <div style="font-size:18.667px;font-weight:700;color:var(--uos-ink-muted)">시도 2 · 관측 대역 한계</div>
             <div style="font-size:24px;font-weight:700;line-height:1.3">지면에 부딪히는 순간의 충격을 감지</div>
             <div style="font-size:20px;line-height:1.55">착지 순간에는 반발력으로 가속도가 튈 것이라고 보았습니다. 이론은 맞습니다.</div>
-            <div style="font-size:20px;line-height:1.55;margin-top:auto;color:var(--uos-blue);font-weight:700">→ 실제 신호가 노이즈 대역과 겹쳐, 확인 창(400ms)을 채우지 못했습니다. 6개 로그 중 85~94%만 창 안에 들어왔습니다.</div>
+              <div style="font-size:20px;line-height:1.55;margin-top:auto;color:var(--uos-blue);font-weight:700">→ 가속도 하드웨어 LPF 25Hz가 짧은 충격 서명을 약화하고, 비행 진동과도 겹칩니다.</div>
           </div>
         </div>
-        <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">두 번째 시도는 "거의 맞는" 상태였습니다. 하지만 착지 판정은 <strong>거의 맞아서는 안 되는</strong> 판단입니다. 공중에서 잘못 판정하면 그대로 추락합니다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">능동 프로브는 다음 가설이었지만, 비교했던 두 분포가 모두 지면 데이터로 확인됐습니다. <strong>공중 분포는 미측정</strong>이므로 착지 판정 성능을 말할 수 없습니다.</div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="능동 프로빙" data-screen-label="60" data-speaker-notes="관측을 기다리는 대신 질문을 던집니다. 살짝 출력을 낮춰보고 반응을 봅니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="세 번째 시도 — 기체에게 직접 물어본다">
+  <section data-label="프로브 가설과 반증" data-screen-label="60" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아닙니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없습니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="능동 프로브 — 가설과 실제 관측">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
-        <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">신호를 기다리는 대신, <strong>일부러 흔들어 보고 반응을 봅니다</strong>. 하강 도중 주기적으로 출력을 살짝 낮춥니다.</div>
+          <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">하강 중 출력을 잠깐 낮추고 IMU 반응을 보는 <strong>능동 프로브</strong>를 시험했습니다.</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
           <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">질문을 던진다</div>
-            <div style="font-size:20px;line-height:1.55">출력을 <strong>40µs만큼 120ms 동안</strong> 낮춥니다. 사람 눈에는 보이지 않는 크기입니다.</div>
+              <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">가설</div>
+              <div style="font-size:20px;line-height:1.55">출력을 <strong>40µs만큼 120ms 동안</strong> 낮추면 공중에서는 움직이고, 지면에서는 반응이 작을 것이라 예상했습니다.</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">공중이라면</div>
-            <div style="font-size:20px;line-height:1.55">떠 있는 힘이 줄어드니 <strong>가속도가 요동칩니다</strong>. 반응이 뚜렷합니다.</div>
+              <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">라벨 정정</div>
+              <div style="font-size:20px;line-height:1.55">기존에 공중과 지면으로 비교한 데이터는 <strong>둘 다 지면</strong>이었습니다. 공중 분포는 미측정입니다.</div>
           </div>
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:18.667px;font-weight:700;opacity:.85">땅에 닿아 있다면</div>
-            <div style="font-size:20px;line-height:1.55">지면이 힘을 받아주므로 <strong>반응이 거의 없습니다</strong>. 연속 2회 무반응이면 착지로 확정합니다.</div>
+              <div style="font-size:18.667px;font-weight:700;opacity:.85">실제 관측</div>
+              <div style="font-size:20px;line-height:1.55">지면에서도 반응이 사라지지 않은 사례가 있었고, 임계값 변경 뒤에는 <strong>지면 10회 모두 미검출</strong>이었습니다.</div>
           </div>
         </div>
-        <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55"><strong>커밋 9f577fc</strong> — 관측만 하는 감지에서, <strong>능동적으로 시험하는 감지</strong>로 바꾼 것이 이 문제의 해법이었습니다. 측정이 안 되면 측정할 수 있는 상황을 만든다는 접근입니다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">결론: 프로브는 <strong>기록에만 사용</strong>하고, 착지 결정에는 사용하지 않습니다. 공중에서 잘못 컷하는 경로를 닫았습니다.</div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="프로빙 결과" data-screen-label="61" data-speaker-notes="개선됐지만 아직 여유가 좁습니다. 벤치 검증을 계속하고 있습니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="프로빙 검증 결과와 남아 있는 위험">
+  <section data-label="현재 자동착륙 상태" data-screen-label="61" data-speaker-notes="현재는 착지 감지 결과로 모터를 끄지 않습니다. 3초 타이머가 유일한 종료 조건이며 실내 저고도 운용은 아직 신뢰하지 않습니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 구현 — 시간 기반 하강">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:18.667px;opacity:.85;font-weight:700">공중 오탐</div>
-            <div style="font-size:32px;font-weight:700;line-height:1.1">해소</div>
-            <div style="font-size:20px;line-height:1.5">접지 0.4초 전에 모터가 꺼지던 사례가 사라졌습니다</div>
+              <div style="font-size:18.667px;opacity:.85;font-weight:700">착지 판정 입력</div>
+              <div style="font-size:32px;font-weight:700;line-height:1.1">landed=false</div>
+              <div style="font-size:20px;line-height:1.5">프로브 응답으로 공중에서 조기 컷하는 경로를 사용하지 않습니다</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:18.667px;color:var(--uos-ink-muted);font-weight:700">접지 후 정지까지</div>
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">1.794 → 0.959초</div>
-            <div style="font-size:20px;line-height:1.5">땅에 닿은 뒤 모터가 꺼지기까지의 시간이 절반으로</div>
+              <div style="font-size:18.667px;color:var(--uos-ink-muted);font-weight:700">종료 조건</div>
+              <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">3초 타이머</div>
+              <div style="font-size:20px;line-height:1.5">자동착륙 진입 뒤 FS_MAX_MS가 지나면 백스톱으로 정지합니다</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:18.667px;color:var(--uos-ink-muted);font-weight:700">남은 여유</div>
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">0.011g</div>
-            <div style="font-size:20px;line-height:1.5">지면 반응과 공중 반응 사이의 간격 — 여전히 좁습니다</div>
+              <div style="font-size:18.667px;color:var(--uos-ink-muted);font-weight:700">프로브의 역할</div>
+              <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1.1">기록 전용</div>
+              <div style="font-size:20px;line-height:1.5">응답과 상태를 텔레메트리로 남겨 다음 판별식을 오프라인 평가합니다</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:20px;font-weight:700">측정된 반응 크기</div>
-            <div style="font-size:20px;line-height:1.55">지면 접촉 시 0.038~0.051g, 공중에서 0.063~0.139g. 두 구간이 붙어 있어서, 진동이 커지면 겹칠 수 있습니다.</div>
+              <div style="font-size:20px;font-weight:700">연결된 센서의 현재 경계</div>
+              <div style="font-size:20px;line-height:1.55"><strong>3901-L0X</strong> 거리·광류 5개 값은 필드 60~64에 기록됩니다. 착지 결정과 비행 제어에는 아직 사용하지 않습니다.</div>
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:20px;font-weight:700">그래서 지금 하는 일</div>
-            <div style="font-size:20px;line-height:1.55">벤치에서 프로빙 반응을 반복 측정하며 임계값을 다듬고 있습니다. 이 항목은 <strong>아직 검증 중</strong>으로 열어 두고 있습니다.</div>
+              <div style="font-size:20px;font-weight:700">운용 결론</div>
+              <div style="font-size:20px;line-height:1.55">거리·광류를 폐루프에 연결하고 비행으로 검증하기 전까지 <strong>실내 저고도 자동착륙을 신뢰하지 않습니다</strong>.</div>
           </div>
         </div>
       </div>
