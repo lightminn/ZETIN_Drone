@@ -55,7 +55,7 @@ class CalibrationResult:
     coverage_ratio: float
     raw_spread_pct: float
     corrected_spread_pct: float
-    heading_error_95_deg: float
+    radial_residual_95_ut: float
     target_radius_ut: float
 
     @property
@@ -322,11 +322,8 @@ def fit_calibration(samples: Iterable[Iterable[float]]) -> CalibrationResult:
         )
 
     coverage_eigenvalues, coverage_ratio = _coverage(corrected)
-    magnitude_error_95 = float(
+    radial_residual_95_ut = float(
         np.percentile(np.abs(corrected_norms - target_radius), 95.0)
-    )
-    heading_error_95 = math.degrees(
-        math.asin(min(1.0, magnitude_error_95 / target_radius))
     )
     return CalibrationResult(
         hard_iron=fit.center,
@@ -337,7 +334,7 @@ def fit_calibration(samples: Iterable[Iterable[float]]) -> CalibrationResult:
         coverage_ratio=coverage_ratio,
         raw_spread_pct=_spread_pct(raw_norms),
         corrected_spread_pct=corrected_spread,
-        heading_error_95_deg=heading_error_95,
+        radial_residual_95_ut=radial_residual_95_ut,
         target_radius_ut=target_radius,
     )
 
@@ -447,6 +444,9 @@ def recalibrate_mag_comp(
 def format_report(result: CalibrationResult) -> str:
     """Return a concise calibration quality report."""
 
+    radial_residual_95_pct = (
+        100.0 * result.radial_residual_95_ut / result.target_radius_ut
+    )
     warning = ""
     if result.coverage_ratio > COVERAGE_WARN_RATIO:
         warning = (
@@ -464,8 +464,9 @@ def format_report(result: CalibrationResult) -> str:
         + f"  axis_ratio={result.axis_ratio:.4f}\n"
         + f"|B| spread: raw={result.raw_spread_pct:.3f}% "
         + f"corrected={result.corrected_spread_pct:.3f}%\n"
-        + "estimated heading error from 95p magnitude residual: "
-        + f"{result.heading_error_95_deg:.3f} deg"
+        + "95p |B| radial residual: "
+        + f"{result.radial_residual_95_ut:.4f} uT "
+        + f"({radial_residual_95_pct:.3f}%)"
         + warning
     )
 

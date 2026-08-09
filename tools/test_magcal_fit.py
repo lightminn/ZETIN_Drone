@@ -15,6 +15,7 @@ from magcal_fit import (  # noqa: E402
     FitError,
     apply_calibration,
     fit_calibration,
+    format_report,
     format_firmware_constants,
     load_calibration_csv,
     recalibrate_mag_comp,
@@ -81,6 +82,52 @@ def relative_heading_error_95(samples, clean_mask, result):
 
 
 class MagnetometerCalibrationFitTests(unittest.TestCase):
+    def test_report_exposes_only_radial_fit_residual(self):
+        samples, _, _ = make_samples(23, coverage="full")
+
+        result = fit_calibration(samples)
+        corrected = apply_calibration(samples[result.inlier_mask], result)
+        corrected_norms = np.linalg.norm(corrected, axis=1)
+        want_ut = float(
+            np.percentile(
+                np.abs(corrected_norms - result.target_radius_ut), 95.0
+            )
+        )
+
+        angle = np.radians(30.0)
+        rotation = np.array(
+            [
+                [np.cos(angle), -np.sin(angle), 0.0],
+                [np.sin(angle), np.cos(angle), 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        rotated = (rotation @ corrected.T).T
+        np.testing.assert_allclose(
+            np.linalg.norm(rotated, axis=1), corrected_norms, atol=1e-12
+        )
+        original_heading = np.degrees(
+            np.arctan2(corrected[:, 1], corrected[:, 0])
+        )
+        rotated_heading = np.degrees(
+            np.arctan2(rotated[:, 1], rotated[:, 0])
+        )
+        heading_error = (
+            rotated_heading - original_heading + 180.0
+        ) % 360.0 - 180.0
+        self.assertAlmostEqual(
+            30.0, float(np.percentile(np.abs(heading_error), 95.0)), places=10
+        )
+
+        self.assertAlmostEqual(
+            want_ut, result.radial_residual_95_ut, places=10
+        )
+        report = format_report(result)
+        self.assertIn("95p |B| radial residual", report)
+        self.assertIn("uT", report)
+        self.assertIn("%", report)
+        self.assertNotIn("heading error", report.lower())
+
     def test_recovers_known_ellipsoid_and_relative_heading(self):
         samples, _, clean_mask = make_samples(7, coverage="full")
 

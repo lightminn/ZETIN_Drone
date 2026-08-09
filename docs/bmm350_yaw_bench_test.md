@@ -40,8 +40,9 @@ SIL은 융합 수학만 검증한다. 이 절차가 실센서·실간섭을 검�
    /home/light/anaconda3/bin/python scripts/magcal_fit.py logs/flight_log_YYYY-MM-DD_HHMMSS.csv
    ```
 
-5. 커버리지 경고/거부, 피팅 반경·축비, 보정 전후 `|B|` 산포와 추정 heading
-   오차를 확인한다. 통과한 출력의 `MAG_HARD_IRON`과 `MAG_SOFT_IRON` 블록을
+5. 커버리지 경고/거부, 피팅 반경·축비, 보정 전후 `|B|` 산포와 95퍼센타일
+   radial residual을 확인한다. radial residual은 구면 피팅 오차이지 heading
+   정확도가 아니다. 통과한 출력의 `MAG_HARD_IRON`과 `MAG_SOFT_IRON` 블록을
    펌웨어에 붙여 넣고, 함께 출력된 `W @ 기존계수` 값으로 `mag_comp_x/y/z`를
    갱신한다.
 6. 재빌드·재플래시한 뒤 새 로그로 `|B|` 산포와 heading 안정성을 다시

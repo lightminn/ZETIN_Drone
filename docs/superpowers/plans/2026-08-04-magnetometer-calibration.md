@@ -55,7 +55,7 @@
 
 - [x] **Step 5: Add validation, reporting, and CLI output**
 
-  Compute unit-direction covariance with `np.linalg.eigh`; warn above a ratio of 10 and reject degenerate coverage at 100 or non-positive minimum eigenvalue. Reject non-ellipsoid and poor-fit results rather than emitting NaN constants. Report selected/inlier sample counts, coverage eigenvalues/ratio, raw and corrected `|B|` spread, fitted radii/axis ratio, and a residual-derived 95th-percentile heading-error estimate. Print paste-ready `MAG_HARD_IRON[3]`, `MAG_SOFT_IRON[3][3]`, and `W @ [0.007497, -0.001218, -0.000640]` with an explicit instruction to revalidate `mag_comp`.
+  Compute unit-direction covariance with `np.linalg.eigh`; warn above a ratio of 10 and reject degenerate coverage at 100 or non-positive minimum eigenvalue. Reject non-ellipsoid and poor-fit results rather than emitting NaN constants. Report selected/inlier sample counts, coverage eigenvalues/ratio, raw and corrected `|B|` spread, fitted radii/axis ratio, and the 95th-percentile radial residual in µT and percent. Do not infer heading accuracy without independent known-orientation data. Print paste-ready `MAG_HARD_IRON[3]`, `MAG_SOFT_IRON[3][3]`, and `W @ [0.007497, -0.001218, -0.000640]` with an explicit instruction to revalidate `mag_comp`.
 
 - [x] **Step 6: Declare NumPy and make CI install the direct test dependency**
 

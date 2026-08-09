@@ -155,8 +155,9 @@ ar|at|ay <value>      # roll / pitch / yaw
   `control_dualsense.py` stdin에서는 `mag on`/`mag off`로 선택하며, 다음
   `start` 직전에 선택값을 `mag 1`/`mag 0`으로 다시 전송한다.
 - `magcal 1`은 hard/soft-iron 캘리브레이션용 raw 캡처를 시작한다(시동
-  상태에서는 거부). 진행 중에는 `Mag_Cal_Active=1`이고 `Mag_X/Y/Z`가 보정 전
-  BMM350 raw µT이므로 지상국 CSV에 회전 전체가 남는다. 모든 방향으로 회전한 뒤
+  상태에서는 거부). 첫 유효 raw 샘플부터 `Mag_Cal_Active=1`과 보정 전
+  BMM350 raw `Mag_X/Y/Z`를 같은 스냅샷으로 보내므로 지상국 CSV에 회전 전체가
+  남는다. 모든 방향으로 회전한 뒤
   `magcal 0`을 보내면 시리얼에는 샘플 수와 축별 span만 출력된다. CSV에
   `scripts/magcal_fit.py`를 실행해 Li & Griffiths 제약 타원체 + MAD 클리핑으로
   `MAG_HARD_IRON`/`MAG_SOFT_IRON`과 재환산 `mag_comp`를 얻는다. 전체 절차와
@@ -233,7 +234,7 @@ Mag_Cal_Active
 | 27 | `PID_Loop_Hz` | int | `pid_task`의 실측 루프 주파수(Hz) |
 | 28~30 | `TgtRate_Roll`, `TgtRate_Pitch`, `TgtRate_Yaw` | float | 바깥 각도 루프가 만든 목표 각속도(dps) |
 | 31 | `MagHeading` | float | BMM350 틸트보정 heading(deg). throttle 간섭 보정 적용값. `mag 0`이면 갱신되지 않는다 |
-| 32~34 | `Mag_X`, `Mag_Y`, `Mag_Z` | float | 평상시 hard/soft-iron·throttle 간섭 보정 후 자기장 성분(µT). `Mag_Cal_Active=1` 동안에는 보정 전 BMM350 raw µT |
+| 32~34 | `Mag_X`, `Mag_Y`, `Mag_Z` | float | 같은 패킷의 `Mag_Cal_Active=0`이면 hard/soft-iron·현재 throttle 간섭 보정 후 자기장 성분(µT), 1이면 보정 전 BMM350 raw µT |
 | 35 | `Yaw_Hold` | int | 0=각속도 모드, 1=heading 잠금 |
 | 36 | `Failsafe_Phase` | int | 0=정상, 1=하강 중, 2=착지컷, 3=백스톱컷, 4=중단컷 |
 | 37~38 | `Trim_Roll`, `Trim_Pitch` | float | 드론이 적용 중인 roll·pitch 트림(도) |
@@ -263,7 +264,7 @@ Mag_Cal_Active
 | 62 | `Flow_X` | int | 광류 `motionX` |
 | 63 | `Flow_Y` | int | 광류 `motionY` |
 | 64 | `Flow_Quality` | int | 0~255, **−1 = 신선한 프레임 없음** |
-| 65 | `Mag_Cal_Active` | int | 0=평상시, 1=`magcal` raw 캡처 중. 1일 때 32~34번은 보정 전 raw |
+| 65 | `Mag_Cal_Active` | int | 같은 패킷의 32~34번 도메인 식별자. 0=보정 후, 1=보정 전 raw. 시작 시 첫 raw와 함께 1이 되고 종료 시 보정값 복원과 함께 0이 된다 |
 
 ### 3901-L0X 필드 해석 (필드 60~64)
 

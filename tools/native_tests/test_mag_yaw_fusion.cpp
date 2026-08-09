@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "dual_imu_cascade_pwm.ino"
 
@@ -62,6 +63,27 @@ int failure_count = 0;
     failure_count++;
     std::cerr << "[FAIL] " << name << ": " << error.what() << '\n';
   }
+}
+
+std::vector<std::string> splitCsv(const std::string &packet) {
+  std::vector<std::string> fields;
+  std::size_t start = 0;
+  while (true) {
+    const std::size_t comma = packet.find(',', start);
+    if (comma == std::string::npos) {
+      fields.push_back(packet.substr(start));
+      return fields;
+    }
+    fields.push_back(packet.substr(start, comma - start));
+    start = comma + 1U;
+  }
+}
+
+std::vector<std::string> sendTelemetryFields() {
+  wifi_udp_fake::reset();
+  connectionEstablished = true;
+  sendTelemetry();
+  return splitCsv(wifi_udp_fake::telemetry_output);
 }
 
 int16_t rawValue(float value) {
@@ -121,6 +143,7 @@ void resetCommonFirmwareState(float roll_deg, float pitch_deg, float yaw_deg) {
   magTelemX = 0.0f;
   magTelemY = 0.0f;
   magTelemZ = 0.0f;
+  magTelemCalActive = false;
   mag_calibrating = false;
   connectionEstablished = false;
   lastMagReadMs = 0;
@@ -378,27 +401,74 @@ int runFusionTests() {
     CHECK_NEAR(calibrated[2], MAG_BODY_SIGN_Z * 5.2f, 1e-6f);
   });
 
-  runCase("magcal publishes raw XYZ and appends active state to telemetry", [] {
+  runCase("magcal wire flag always matches the XYZ domain", [] {
     resetCommonFirmwareState(0.0f, 0.0f, 0.0f);
     mag_ready = true;
-    mag_enabled = false;
-    mag_calibrating = true;
-    bmm.next_data.float_x = 12.5f;
-    bmm.next_data.float_y = -7.25f;
-    bmm.next_data.float_z = 33.75f;
+    mag_enabled = true;
+    magSampleValid = false;
+    base_throttle = MAG_THROTTLE_REF_US;
+    lastMagReadMs = 0U;
+    publishMagTelemetry(1.25f, -2.50f, 3.75f, false);
+
+    startMagCalibration();
+
+    std::vector<std::string> fields = sendTelemetryFields();
+    CHECK(fields.size() == 65U);
+    CHECK_NEAR(std::stof(fields.at(31)), 1.25f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(32)), -2.50f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(33)), 3.75f, 0.01f);
+    CHECK(fields.at(64) == "0");
+
+    bmm.next_data.float_x = MAG_HARD_IRON[0] + 10.0f;
+    bmm.next_data.float_y = MAG_HARD_IRON[1] + 20.0f;
+    bmm.next_data.float_z = MAG_HARD_IRON[2] + 30.0f;
 
     sampleMagnetometer(20U);
 
-    CHECK_NEAR(magTelemX, 12.5f, 1e-6f);
-    CHECK_NEAR(magTelemY, -7.25f, 1e-6f);
-    CHECK_NEAR(magTelemZ, 33.75f, 1e-6f);
-    connectionEstablished = true;
-    sendTelemetry();
-    const std::string &packet = wifi_udp_fake::telemetry_output;
-    CHECK(std::count(packet.begin(), packet.end(), ',') + 1U == 65U);
-    const std::size_t last_comma = packet.rfind(',');
-    CHECK(last_comma != std::string::npos);
-    CHECK(packet.substr(last_comma + 1U) == "1");
+    fields = sendTelemetryFields();
+    CHECK_NEAR(std::stof(fields.at(31)), MAG_HARD_IRON[0] + 10.0f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(32)), MAG_HARD_IRON[1] + 20.0f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(33)), MAG_HARD_IRON[2] + 30.0f, 0.01f);
+    CHECK(fields.at(64) == "1");
+
+    startMagCalibration();
+    fields = sendTelemetryFields();
+    CHECK_NEAR(std::stof(fields.at(31)), MAG_HARD_IRON[0] + 10.0f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(32)), MAG_HARD_IRON[1] + 20.0f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(33)), MAG_HARD_IRON[2] + 30.0f, 0.01f);
+    CHECK(fields.at(64) == "1");
+    CHECK(magCalSampleCount == 1U);
+
+    publishMagTelemetry(99.0f, 98.0f, 97.0f, false);
+    fields = sendTelemetryFields();
+    CHECK_NEAR(std::stof(fields.at(31)), MAG_HARD_IRON[0] + 10.0f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(32)), MAG_HARD_IRON[1] + 20.0f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(33)), MAG_HARD_IRON[2] + 30.0f, 0.01f);
+    CHECK(fields.at(64) == "1");
+
+    stopMagCalibration();
+
+    fields = sendTelemetryFields();
+    CHECK_NEAR(std::stof(fields.at(31)), 10.65519563f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(32)), 19.77457855f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(33)), 31.10798149f, 0.01f);
+    CHECK(fields.at(64) == "0");
+  });
+
+  runCase("magcal zero-sample stop preserves corrected XYZ", [] {
+    resetCommonFirmwareState(0.0f, 0.0f, 0.0f);
+    mag_ready = true;
+    publishMagTelemetry(1.25f, -2.50f, 3.75f, false);
+
+    startMagCalibration();
+    stopMagCalibration();
+
+    const std::vector<std::string> fields = sendTelemetryFields();
+    CHECK(fields.size() == 65U);
+    CHECK_NEAR(std::stof(fields.at(31)), 1.25f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(32)), -2.50f, 0.01f);
+    CHECK_NEAR(std::stof(fields.at(33)), 3.75f, 0.01f);
+    CHECK(fields.at(64) == "0");
   });
 
   runCase("convergence on a rotating heading", [] {

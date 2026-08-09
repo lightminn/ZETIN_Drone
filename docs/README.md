@@ -7,6 +7,7 @@
 - [UDP 프로토콜](udp_protocol.md)
 - [전원 인가 벤치 절차 (첫 호버 전 안전 관문)](power_on_bench_procedure.md)
 - [지상국 링크 요구사항과 RC 타임아웃 진단](ground_station_link.md)
+- [단일 PID 대비 캐스케이드(듀얼) PID의 이점](cascade_vs_single_pid.typ) (Typst → PDF)
 - [BMM350 yaw 융합 벤치 시험](bmm350_yaw_bench_test.md)
 - [자동착륙 착지 감지 연구](failsafe_land_research.md)
 - [노션 문서 컨벤션](notion_doc_convention.md)

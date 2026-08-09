@@ -52,9 +52,11 @@ Mag_Cal_Active
 비어 있다.
 `Timestamp`는 항상 PC에서 추가하며 UDP 데이터그램의 일부가 아니다.
 
-`Mag_Cal_Active=1`인 행의 `Mag_X/Y/Z`는 보정 전 BMM350 raw µT이며
-`scripts/magcal_fit.py`가 기본으로 이 행만 선택한다. 그 밖의 행에서 세 필드는
-hard/soft-iron과 throttle 간섭 보정 후 heading 계산에 실제 사용된 값이다.
+`Mag_Cal_Active`는 같은 행의 `Mag_X/Y/Z` 도메인을 식별한다. 1이면 세 필드는
+보정 전 BMM350 raw µT이고 `scripts/magcal_fit.py`가 기본으로 이 행만 선택한다.
+0이면 hard/soft-iron과 현재 throttle 간섭 보정 후 heading 계산에 사용하는
+도메인이다. 시작 시 첫 raw 샘플과 함께 1로, 종료 시 보정값 복원과 함께 0으로
+전환되므로 flag와 XYZ가 서로 다른 도메인을 가리키는 행은 만들지 않는다.
 
 저장소 루트에서 생성된 로그를 분석한다.
 

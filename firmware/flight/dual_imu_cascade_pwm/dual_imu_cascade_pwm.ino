@@ -671,6 +671,7 @@ volatile bool  mag_calibrating = false;
 volatile float magFieldX = 0.0f, magFieldY = 0.0f, magFieldZ = 0.0f;
 volatile float magHeading = 0.0f;
 volatile float magTelemX = 0.0f, magTelemY = 0.0f, magTelemZ = 0.0f;
+volatile bool magTelemCalActive = false;
 volatile uint32_t magSampleMs = 0;
 volatile bool magSampleValid = false;
 volatile bool mag_reference_pending = true;
@@ -818,6 +819,30 @@ static inline bool readMagSnapshot(MagSnapshot &snapshot) {
   return valid;
 }
 
+static inline void publishMagTelemetry(
+    float x, float y, float z, bool calibration_raw) {
+  portENTER_CRITICAL(&magSnapshotMux);
+  // Core 1 may already have entered its normal-domain block when Core 0
+  // starts calibration. Do not let that late writer overwrite a raw snapshot.
+  if (calibration_raw || !mag_calibrating) {
+    magTelemX = x;
+    magTelemY = y;
+    magTelemZ = z;
+    magTelemCalActive = calibration_raw;
+  }
+  portEXIT_CRITICAL(&magSnapshotMux);
+}
+
+static inline void readMagTelemetry(
+    float &x, float &y, float &z, bool &calibration_raw) {
+  portENTER_CRITICAL(&magSnapshotMux);
+  x = magTelemX;
+  y = magTelemY;
+  z = magTelemZ;
+  calibration_raw = magTelemCalActive;
+  portEXIT_CRITICAL(&magSnapshotMux);
+}
+
 static inline void requestMagReferenceUpdate() {
   portENTER_CRITICAL(&magSnapshotMux);
   mag_reference_pending = true;
@@ -883,9 +908,18 @@ static bool initMagnetometer() {
 }
 
 static void startMagCalibration() {
+  portENTER_CRITICAL(&magSnapshotMux);
+  const bool alreadyActive = mag_calibrating;
+  portEXIT_CRITICAL(&magSnapshotMux);
+  if (alreadyActive) {
+    Serial.println("[MAGCAL] already active");
+    return;
+  }
   mag_enabled = false;
   requestMagReferenceUpdate();
+  portENTER_CRITICAL(&magSnapshotMux);
   mag_calibrating = true;
+  portEXIT_CRITICAL(&magSnapshotMux);
   magCalMin[0] = FLT_MAX;
   magCalMin[1] = FLT_MAX;
   magCalMin[2] = FLT_MAX;
@@ -897,7 +931,26 @@ static void startMagCalibration() {
 }
 
 static void stopMagCalibration() {
+  MagSnapshot calibrated = {};
+  const bool have_sample =
+      magCalSampleCount > 0U && readMagSnapshot(calibrated);
+  if (have_sample) {
+    const float magThrDelta =
+        (float)(base_throttle - MAG_THROTTLE_REF_US);
+    calibrated.x -= mag_comp_x * magThrDelta;
+    calibrated.y -= mag_comp_y * magThrDelta;
+    calibrated.z -= mag_comp_z * magThrDelta;
+  }
+
+  portENTER_CRITICAL(&magSnapshotMux);
   mag_calibrating = false;
+  if (have_sample) {
+    magTelemX = calibrated.x;
+    magTelemY = calibrated.y;
+    magTelemZ = calibrated.z;
+  }
+  magTelemCalActive = false;
+  portEXIT_CRITICAL(&magSnapshotMux);
   if (magCalSampleCount == 0U) {
     Serial.println("[MAGCAL] no samples");
     return;
@@ -941,11 +994,7 @@ static void sampleMagnetometer(uint32_t now_ms) {
   if (!isfinite(raw[0]) || !isfinite(raw[1]) || !isfinite(raw[2])) return;
 
   if (mag_calibrating) {
-    // mag_enabled=false throughout calibration, so Core 1 cannot race this
-    // raw-telemetry writer with its compensated-vector telemetry writer.
-    magTelemX = raw[0];
-    magTelemY = raw[1];
-    magTelemZ = raw[2];
+    publishMagTelemetry(raw[0], raw[1], raw[2], true);
     for (int axis = 0; axis < 3; axis++) {
       if (raw[axis] < magCalMin[axis]) magCalMin[axis] = raw[axis];
       if (raw[axis] > magCalMax[axis]) magCalMax[axis] = raw[axis];
@@ -1339,7 +1388,7 @@ void pid_task(void *pv) {
         mag.x -= mag_comp_x * magThrDelta;
         mag.y -= mag_comp_y * magThrDelta;
         mag.z -= mag_comp_z * magThrDelta;
-        magTelemX = mag.x; magTelemY = mag.y; magTelemZ = mag.z;  // 보정 적용값(=k 0일 때 raw)
+        publishMagTelemetry(mag.x, mag.y, mag.z, false);
         float heading = tiltCompensatedMagHeadingDeg(
             mag.x, mag.y, mag.z, angleX, angleY);
         if (isfinite(heading)) {
@@ -1808,6 +1857,13 @@ static void sendTelemetry() {
   const uint8_t probeNoResponseSnapshot = fs_probe_no_response;
   const float probeResponseSnapshot = fs_probe_response_g;
   const ImuTelemetrySample imuSample = readImuSampleSnapshot();
+  float magTelemXSnapshot = 0.0f;
+  float magTelemYSnapshot = 0.0f;
+  float magTelemZSnapshot = 0.0f;
+  bool magTelemCalActiveSnapshot = false;
+  readMagTelemetry(
+      magTelemXSnapshot, magTelemYSnapshot, magTelemZSnapshot,
+      magTelemCalActiveSnapshot);
   udp.beginPacket(laptopIP, laptopPort);
   udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d,%ld,%d,%ld,%ld,%d,%d",
              angleX, angleY, angleZ,
@@ -1821,7 +1877,8 @@ static void sendTelemetry() {
              (int)calibration_ok, (int)!safety_lock,
              motorOut[0], motorOut[1], motorOut[2], motorOut[3], pidLoopHz,
              tgtRate[0], tgtRate[1], tgtRate[2], magHeading,
-             magTelemX, magTelemY, magTelemZ, (int)yaw_hold_now,
+             magTelemXSnapshot, magTelemYSnapshot, magTelemZSnapshot,
+             (int)yaw_hold_now,
              (int)fs_phase, trim_roll, trim_pitch,
              hoverEstSnapshot, (int)hoverValidSnapshot,
              (int)probeStateSnapshot, (int)probeNoResponseSnapshot,
@@ -1833,7 +1890,7 @@ static void sendTelemetry() {
              targetAngleX, targetAngleY, targetAngleZ, (int)mag_enabled,
              (long)msp_range_mm, msp_range_quality,
              (long)msp_flow_x, (long)msp_flow_y, msp_flow_quality,
-             (int)mag_calibrating);
+             (int)magTelemCalActiveSnapshot);
   udp.endPacket();
 }
 
