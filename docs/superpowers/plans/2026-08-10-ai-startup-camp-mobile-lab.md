@@ -401,14 +401,17 @@
 
   ```bash
   git status --short
-  git diff --name-status d8d6b4a..HEAD
-  git diff --name-only d8d6b4a..HEAD -- 'docs/presentations/ai-startup-camp-drone/*.pptx' 'docs/presentations/ai-startup-camp-drone/index.html'
+  git show --pretty='' --name-only 06efea3 036e15f c8b1b8f 337184d 3235178 cb855c0 5382ef8 | sort -u
+  git show --pretty='' --name-only 06efea3 036e15f c8b1b8f 337184d 3235178 cb855c0 5382ef8 -- 'docs/presentations/ai-startup-camp-drone/*.pptx' 'docs/presentations/ai-startup-camp-drone/index.html'
+  git show --name-status --format='%h %s' fbb1a85
   git diff --cached --name-only
   rg -n 'WebUSB|WebBluetooth|serial|dgram|udp|WebSocket|arm|disarm|throttle|gain' docs/presentations/ai-startup-camp-drone/mobile-lab --glob '!README.md' --glob '!vendor/**'
   ```
 
-  Expected: only task files are staged/changed, existing HTML/PPTX query is empty, protected PDF is
-  untracked and absent from the index, and no student runtime exposes forbidden control paths.
+  Expected: the mobile-lab task commit query contains no existing deck HTML or PPTX; concurrent
+  external commit `fbb1a85` separately owns the deck `index.html` change; any additional deck edit
+  and the protected PDF remain unstaged and absent from this task's commits; no student runtime
+  exposes forbidden control paths.
 
 - [ ] **Step 6: Commit documentation and any reviewed final fixes**
 
