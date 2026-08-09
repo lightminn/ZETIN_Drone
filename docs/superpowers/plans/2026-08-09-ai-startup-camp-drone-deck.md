@@ -13,6 +13,7 @@
 - The editable HTML is the source of truth; do not generate PPTX or PDF in this implementation.
 - Preserve exactly 77 `<section>` slides and the existing UOS blue/Noto Sans CJK KR/16:9 design.
 - Include the video, images, charts, runtime JavaScript, CSS, and fonts required for offline presentation.
+- Include all nine approved visualization videos from `/home/light/Documents/카카오톡 받은 파일/드론시각화/` under stable English filenames and place one on each mapped slide.
 - Do not copy `uploads/`, `.thumbnail`, `scratchpad.md`, CSV logs, PDF, or PPTX into the presentation directory.
 - Use current firmware and dated correction documents before stale overview prose.
 - Keep verified, experimental, unmeasured, and telemetry-only states distinct.
@@ -262,7 +263,60 @@ git commit -m "docs: refresh drone deck flight status and roadmap"
 
 ---
 
-### Task 5: Add usage and evidence documentation
+### Task 5: Integrate the concept visualization videos
+
+**Files:**
+- Create: `docs/presentations/ai-startup-camp-drone/assets/accelerometer.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/cascade-loop-timing.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/complementary-filter.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/gyro.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/gyro-bias.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/imu-axis-signs.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/landing-ambiguity.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/pi-error-correction.mp4`
+- Create: `docs/presentations/ai-startup-camp-drone/assets/yaw-correction.mp4`
+- Modify: `docs/presentations/ai-startup-camp-drone/index.html`
+
+**Interfaces:**
+- Consumes: nine H.264 854×480 source videos in `/home/light/Documents/카카오톡 받은 파일/드론시각화/`.
+- Produces: stable repository assets embedded on slides 29, 30, 31, 36, 37, 45, 47, 50, and 60.
+
+- [ ] **Step 1: Copy videos under stable English names**
+
+Map the source files exactly:
+
+```text
+가속도계.mp4                         -> accelerometer.mp4
+CascadeLoopTimingVisualization.mp4 -> cascade-loop-timing.mp4
+상보필터.mp4                         -> complementary-filter.mp4
+자이로.mp4                           -> gyro.mp4
+자이로바이어스.mp4                   -> gyro-bias.mp4
+IMU_부호.mp4                         -> imu-axis-signs.mp4
+LandingAmbiguityVisualization.mp4  -> landing-ambiguity.mp4
+PI오차개선.mp4                       -> pi-error-correction.mp4
+yaw조정.mp4                          -> yaw-correction.mp4
+```
+
+- [ ] **Step 2: Embed one video on each mapped slide**
+
+Use `controls loop muted playsinline preload="metadata"` without autoplay. Give every video a descriptive Korean `aria-label`. Reduce or replace nearby prose/card content rather than shrinking the global font scale.
+
+- [ ] **Step 3: Verify the media contract**
+
+Run `ffprobe` on all ten deck videos and assert every file has one readable video stream, nonzero width/height/duration, and is under 100MB. Assert the nine new asset names each occur exactly once in `index.html` and on the expected slide section.
+
+- [ ] **Step 4: Commit the visualization assets**
+
+```bash
+git add docs/presentations/ai-startup-camp-drone/assets/*.mp4 \
+  docs/presentations/ai-startup-camp-drone/index.html
+git diff --cached --check
+git commit -m "docs: add concept videos to the drone deck"
+```
+
+---
+
+### Task 6: Add usage and evidence documentation
 
 **Files:**
 - Modify: `docs/presentations/README.md`
@@ -308,7 +362,7 @@ git commit -m "docs: document AI startup camp deck sources and workflow"
 
 ---
 
-### Task 6: Verify rendering, video, content, and Git scope
+### Task 7: Verify rendering, video, content, and Git scope
 
 **Files:**
 - Verify: `docs/presentations/ai-startup-camp-drone/**`
@@ -352,7 +406,7 @@ Expected: only the pre-existing `docs/README.md`, `docs/cascade_vs_single_pid.ty
 
 ---
 
-### Task 7: Push the versioned deck to GitHub
+### Task 8: Push the versioned deck to GitHub
 
 **Files:**
 - No file changes expected.

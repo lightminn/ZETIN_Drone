@@ -43,6 +43,15 @@ docs/presentations/
     ├── chartdata.json
     ├── assets/
     │   ├── hover_demo.mp4
+    │   ├── accelerometer.mp4
+    │   ├── cascade-loop-timing.mp4
+    │   ├── complementary-filter.mp4
+    │   ├── gyro.mp4
+    │   ├── gyro-bias.mp4
+    │   ├── imu-axis-signs.mp4
+    │   ├── landing-ambiguity.mp4
+    │   ├── pi-error-correction.mp4
+    │   ├── yaw-correction.mp4
     │   ├── chart_*.png
     │   ├── image*.(png|jpeg)
     │   └── pcb_*.png
@@ -64,6 +73,11 @@ docs/presentations/
 
 CSV를 제외해도 발표 화면은 사전 생성된 차트 이미지와 `chartdata.json`으로
 동일하게 재생된다. 시연 영상과 로컬 폰트는 오프라인 발표를 위해 포함한다.
+
+추가 시각화 영상은
+`/home/light/Documents/카카오톡 받은 파일/드론시각화/`에서 가져온다. 원본의
+한글·혼합 파일명은 위 영문 kebab-case 이름으로 정리하고, 원본 파일은 수정하지
+않는다. 9개 영상은 H.264, 854×480, 약 6~11초이며 일반 Git 객체로 관리한다.
 
 ## 슬라이드 수정 범위
 
@@ -126,6 +140,26 @@ CSV를 제외해도 발표 화면은 사전 생성된 차트 이미지와 `chart
 - 76번의 `센서를 추가한다`는 계획을 `이미 연결된 거리·광류 센서를 제어에
   사용하고 검증한다`로 바꾼다.
 
+### 개념 시각화 영상
+
+기존 77장 구조 안에서 다음 영상을 관련 슬라이드의 정적 설명 영역과 조합한다.
+
+| 슬라이드 | 영상 | 저장 파일 |
+|---|---|---|
+| 29 각도 센서는 없다 | 가속도계 | `accelerometer.mp4` |
+| 30 반대되는 약점 | 자이로 | `gyro.mp4` |
+| 31 상보필터 | 상보필터 | `complementary-filter.mp4` |
+| 36 자이로 바이어스 | 자이로바이어스 | `gyro-bias.mp4` |
+| 37 축 변환 | IMU 부호 | `imu-axis-signs.mp4` |
+| 45 I 항의 역할 | PI 오차 개선 | `pi-error-correction.mp4` |
+| 47 캐스케이드 구조 | 루프 타이밍 | `cascade-loop-timing.mp4` |
+| 50 헤딩 고정 | Yaw 조정 | `yaw-correction.mp4` |
+| 60 착지 판정 반증 | 착지 모호성 | `landing-ambiguity.mp4` |
+
+영상은 `controls loop muted playsinline preload="metadata"`로 넣고 자동재생하지
+않는다. 한 슬라이드에 하나만 배치하며, 설명 글씨를 줄여 억지로 끼워 넣지 않고
+기존 카드 수나 문단을 줄여 16:9 안에서 충분한 영상 면적을 확보한다.
+
 ## 시각·문체 원칙
 
 - 기존 UOS 파란색, Noto Sans CJK KR, 16:9 레이아웃을 유지한다.
@@ -187,6 +221,10 @@ CSV를 제외해도 발표 화면은 사전 생성된 차트 이미지와 `chart
   렌더링한다.
 - 화면 잘림, 겹침, 과도하게 작은 글씨, 누락 이미지가 없는지 확인한다.
 - `hover_demo.mp4`가 존재하고 `ffprobe`가 비디오 스트림을 읽는지 확인한다.
+- 추가 시각화 영상 9개도 `ffprobe`에서 H.264 비디오 스트림, 854×480,
+  0초보다 긴 재생시간을 보고하는지 확인한다.
+- 29·30·31·36·37·45·47·50·60번에서 영상이 하나씩 표시되고, 대응하지 않는
+  슬라이드에 잘못 배치되지 않았는지 확인한다.
 - 렌더링 검사는 HTML 정적 검증이며 실제 현장 프로젝터·오디오 재생 검증을
   대신하지 않는다.
 
@@ -204,6 +242,7 @@ CSV를 제외해도 발표 화면은 사전 생성된 차트 이미지와 `chart
 
 1. 77장 발표자료에 위 기술·상태 수정이 전부 반영돼 있다.
 2. 저장소만 복제해도 로컬에서 발표자료와 영상을 열 수 있다.
-3. `SOURCES.md`로 핵심 주장과 근거를 추적할 수 있다.
-4. 기존 사용자 작업은 그대로 남아 있다.
-5. 발표자료 커밋이 현재 브랜치에 추가되고 GitHub `origin`에 푸시돼 있다.
+3. 개념 시각화 영상 9개가 관련 슬라이드에 배치돼 있다.
+4. `SOURCES.md`로 핵심 주장과 근거를 추적할 수 있다.
+5. 기존 사용자 작업은 그대로 남아 있다.
+6. 발표자료 커밋이 현재 브랜치에 추가되고 GitHub `origin`에 푸시돼 있다.
