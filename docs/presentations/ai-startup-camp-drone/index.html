@@ -31,27 +31,27 @@
 
   <section data-label="진행 순서" data-screen-label="02" data-speaker-notes="의의와 하드웨어를 짚은 뒤 제어 소프트웨어를 중심으로 살펴봅니다. 마지막에는 실제 기체 시연과 조종·텔레메트리 실습으로 이어집니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="오늘의 진행 순서">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(4,1fr);gap:18px">
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;opacity:.8">01</div>
-            <div style="font-size:32px;font-weight:700;line-height:1.2">의의</div>
-            <div style="font-size:20px;line-height:1.55;opacity:.92">드론이 뜨는 원리부터, 왜 비행 제어 컴퓨터를 직접 만들었는지까지</div>
-          </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;color:var(--uos-ink-muted)">02</div>
-            <div style="font-size:32px;font-weight:700;line-height:1.2;color:var(--uos-blue)">하드웨어</div>
-            <div style="font-size:20px;line-height:1.55">기체 프레임, 자체 제작 보드, 전원 계통과 안전 규칙</div>
-          </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;color:var(--uos-ink-muted)">03</div>
-            <div style="font-size:32px;font-weight:700;line-height:1.2;color:var(--uos-blue)">제어 소프트웨어</div>
-            <div style="font-size:20px;line-height:1.55">센서 → 검증 체계 → 게인 튜닝 → 안전장치 → 자동 착륙</div>
-          </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;color:var(--uos-ink-muted)">04</div>
-            <div style="font-size:32px;font-weight:700;line-height:1.2;color:var(--uos-blue)">시연 · 실습</div>
-            <div style="font-size:20px;line-height:1.55">호버링 시연, 조종 체험, 텔레메트리 읽기와 퀴즈</div>
-          </div>
+      <div style="width:100%;height:100%;display:grid;grid-template-rows:repeat(4,1fr);gap:14px">
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px 28px;display:grid;grid-template-columns:64px 240px 1fr;align-items:center;gap:20px">
+          <div style="font-size:20px;opacity:.8">01</div>
+          <div style="font-size:28px;font-weight:700;line-height:1.2">의의</div>
+          <div style="font-size:20px;line-height:1.5;opacity:.92">드론이 뜨는 원리부터, 왜 비행 제어 컴퓨터를 직접 만들었는지까지</div>
+        </div>
+        <div style="background:var(--uos-surface);border-radius:4px;padding:20px 28px;display:grid;grid-template-columns:64px 240px 1fr;align-items:center;gap:20px">
+          <div style="font-size:20px;color:var(--uos-ink-muted)">02</div>
+          <div style="font-size:28px;font-weight:700;line-height:1.2;color:var(--uos-blue)">하드웨어</div>
+          <div style="font-size:20px;line-height:1.5">기체 프레임, 자체 제작 보드, 전원 계통과 안전 규칙</div>
+        </div>
+        <div style="background:var(--uos-surface);border-radius:4px;padding:20px 28px;display:grid;grid-template-columns:64px 240px 1fr;align-items:center;gap:20px">
+          <div style="font-size:20px;color:var(--uos-ink-muted)">03</div>
+          <div style="font-size:28px;font-weight:700;line-height:1.2;color:var(--uos-blue)">제어 소프트웨어</div>
+          <div style="font-size:20px;line-height:1.5">센서 → 검증 체계 → 게인 튜닝 → 안전장치 → 자동 착륙</div>
+        </div>
+        <div style="background:var(--uos-surface);border-radius:4px;padding:20px 28px;display:grid;grid-template-columns:64px 240px 1fr;align-items:center;gap:20px">
+          <div style="font-size:20px;color:var(--uos-ink-muted)">04</div>
+          <div style="font-size:28px;font-weight:700;line-height:1.2;color:var(--uos-blue)">시연 · 실습</div>
+          <div style="font-size:20px;line-height:1.5">호버링 시연, 조종 체험, 텔레메트리 읽기와 퀴즈</div>
+        </div>
       </div>
     </x-import>
   </section>
