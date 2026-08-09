@@ -35,6 +35,14 @@ function reasonForStatus(status) {
   return "granted";
 }
 
+function accessReason(orientation, motion) {
+  if (orientation !== "granted") return reasonForStatus(orientation);
+  if (motion === "denied") return "motion-denied";
+  if (motion === "error") return "motion-permission-error";
+  if (motion === "unavailable") return "motion-unavailable";
+  return "granted";
+}
+
 export function detectSensorCapability(env) {
   const secure = env?.isSecureContext === true;
   if (!secure) {
@@ -67,7 +75,7 @@ export async function requestSensorAccess(env) {
   return {
     orientation,
     motion,
-    reason: reasonForStatus(orientation),
+    reason: accessReason(orientation, motion),
   };
 }
 

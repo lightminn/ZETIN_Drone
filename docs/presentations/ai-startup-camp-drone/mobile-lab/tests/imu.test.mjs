@@ -99,6 +99,46 @@ test("requestSensorAccess preserves denied and error permission branches", async
   });
 });
 
+test("requestSensorAccess identifies partial motion access without blocking orientation", async () => {
+  const orientation = {
+    requestPermission: async () => "granted",
+  };
+  const denied = await requestSensorAccess({
+    isSecureContext: true,
+    DeviceOrientationEvent: orientation,
+    DeviceMotionEvent: { requestPermission: async () => "denied" },
+  });
+  const errored = await requestSensorAccess({
+    isSecureContext: true,
+    DeviceOrientationEvent: orientation,
+    DeviceMotionEvent: {
+      requestPermission: async () => {
+        throw new TypeError("motion unavailable");
+      },
+    },
+  });
+  const unavailable = await requestSensorAccess({
+    isSecureContext: true,
+    DeviceOrientationEvent: orientation,
+  });
+
+  assert.deepEqual(denied, {
+    orientation: "granted",
+    motion: "denied",
+    reason: "motion-denied",
+  });
+  assert.deepEqual(errored, {
+    orientation: "granted",
+    motion: "error",
+    reason: "motion-permission-error",
+  });
+  assert.deepEqual(unavailable, {
+    orientation: "granted",
+    motion: "unavailable",
+    reason: "motion-unavailable",
+  });
+});
+
 test("OrientationModel calibration subtracts the current neutral sample", () => {
   const model = new OrientationModel({ smoothing: 1 });
   model.updateOrientation({ beta: 10, gamma: -5 });
