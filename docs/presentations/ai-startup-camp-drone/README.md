@@ -5,7 +5,22 @@
 
 ## 로컬 미리보기
 
-저장소 루트에서 다음을 실행한다.
+가장 간단한 방법은 발표자료 폴더에서 실행 스크립트를 여는 것이다.
+
+```bash
+cd /home/light/ZETIN/robotics/zetin-drone/docs/presentations/ai-startup-camp-drone
+./present.sh
+```
+
+스크립트가 로컬 서버와 독립 Chrome 발표 창을 함께 연다. 그 Chrome 창을 닫으면
+서버와 임시 브라우저 프로필도 자동으로 정리된다. 기본 포트가 사용 중이면 다른
+포트를 첫 번째 인자로 지정할 수 있다.
+
+```bash
+./present.sh 8010
+```
+
+서버와 브라우저를 따로 관리하려면 다음 수동 방식도 사용할 수 있다.
 
 ```bash
 cd docs/presentations/ai-startup-camp-drone
