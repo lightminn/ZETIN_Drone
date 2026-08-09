@@ -779,20 +779,20 @@
 
   <section data-label="각도 센서는 없다" data-screen-label="29" data-speaker-notes="여기가 오늘 가장 중요한 개념 슬라이드입니다. 각도계라는 부품은 없습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="각도를 직접 재는 센서는 없다">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:28px">
-        <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1000px">드론에는 "지금 몇 도 기울었는가"를 직접 알려주는 부품이 없습니다. 두 가지 간접적인 방법으로 <strong>추정</strong>합니다.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">방법 1 · 가속도계</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">중력이 어느 쪽으로 당기는지 보고 각도를 역산한다</div>
-            <div style="font-size:20px;line-height:1.55">기울면 중력이 세 축에 나뉘어 걸립니다. 그 비율을 삼각함수로 풀면 각도가 나옵니다.</div>
-            <div style="font-size:20px;line-height:1.55;margin-top:auto"><strong>약점</strong> — 기체가 흔들리거나 가속하면, 중력 말고 다른 힘이 섞여 값이 요동칩니다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0;justify-content:center">
+          <video src="assets/accelerometer.mp4" controls loop muted playsinline preload="metadata" aria-label="기울기에 따라 가속도계의 중력 벡터가 세 축으로 나뉘는 시각화" style="width:100%;max-height:360px;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">가속도계 — 중력 벡터가 세 축으로 나뉘는 비율에서 기울기를 역산</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
+          <div style="font-size:30px;font-weight:700;line-height:1.35">각도는 직접 읽지 않고, 두 센서의 간접 측정으로 <strong>추정</strong>합니다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">가속도계 · 중력 방향</div>
+            <div style="font-size:20px;line-height:1.5">오래 보면 기준이 되지만, 흔들림과 선형 가속이 섞이면 요동합니다.</div>
           </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">방법 2 · 자이로</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">회전하는 속도를 재서, 계속 더해 각도를 만든다</div>
-            <div style="font-size:20px;line-height:1.55">1초에 1000번, "지난 1/1000초 동안 얼마나 돌았는지"를 누적합니다.</div>
-            <div style="font-size:20px;line-height:1.55;margin-top:auto"><strong>약점</strong> — 아주 작은 오차도 함께 누적되어, 시간이 지나면 실제와 서서히 어긋납니다.</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:18.667px;font-weight:700;opacity:.85">자이로 · 회전 속도 누적</div>
+            <div style="font-size:20px;line-height:1.5">순간 움직임은 빠르게 잡지만, 작은 오차까지 더해져 시간이 지나면 흐릅니다.</div>
           </div>
         </div>
       </div>
@@ -801,58 +801,41 @@
 
   <section data-label="반대되는 약점" data-screen-label="30" data-speaker-notes="짧은 시간에는 자이로가, 긴 시간에는 가속도계가 믿을 만합니다. 정확히 반대입니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 방법의 반대되는 약점">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:28px">
-        <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
-          <thead>
-            <tr>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:14px 20px;width:220px">시간 척도</th>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:14px 20px">가속도계</th>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:14px 20px">자이로</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="padding:16px 20px;border-bottom:1px solid var(--uos-rule)">아주 짧은 순간 (수 ms)</td>
-              <td style="padding:16px 20px;border-bottom:1px solid var(--uos-rule)">신뢰도 낮음 — 진동과 가속에 흔들림</td>
-              <td style="padding:16px 20px;border-bottom:1px solid var(--uos-rule);font-weight:700;color:var(--uos-blue)">신뢰도 높음 — 순간 반응이 빠름</td>
-            </tr>
-            <tr style="background:var(--uos-surface)">
-              <td style="padding:16px 20px;border-bottom:1px solid var(--uos-rule)">긴 시간 (수 초~수 분)</td>
-              <td style="padding:16px 20px;border-bottom:1px solid var(--uos-rule);font-weight:700;color:var(--uos-blue)">신뢰도 높음 — 중력은 사라지지 않음</td>
-              <td style="padding:16px 20px;border-bottom:1px solid var(--uos-rule)">신뢰도 낮음 — 오차가 계속 누적</td>
-            </tr>
-          </tbody>
-        </table>
-        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:32px;flex:1;align-items:center">
-          <div style="font-size:32px;font-weight:700;line-height:1.35">두 약점이 시간 축에서 정확히 반대입니다. 그렇다면 <strong>섞으면</strong> 서로를 덮을 수 있습니다.</div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;font-size:20px;line-height:1.55">이렇게 두 값을 가중치로 섞어 각도를 추정하는 방법을 <strong>상보필터</strong>(complementary filter)라고 부릅니다. 서로를 보완한다는 뜻입니다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.12fr 1fr;gap:32px">
+        <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
+          <div style="background:var(--uos-surface);border-radius:4px;padding:26px">
+            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue);margin-bottom:10px">아주 짧은 순간 · 수 ms</div>
+            <div style="font-size:22px;line-height:1.5"><strong>자이로</strong>는 빠르고 안정적 · 가속도계는 진동과 가속에 흔들림</div>
+          </div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:26px">
+            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue);margin-bottom:10px">긴 시간 · 수 초~수 분</div>
+            <div style="font-size:22px;line-height:1.5"><strong>가속도계</strong>는 중력 기준 유지 · 자이로는 작은 오차가 누적</div>
+          </div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:22px;line-height:1.5">약점이 반대이므로 두 값을 섞어 서로를 보완합니다. 이것이 <strong>상보필터</strong>입니다.</div>
         </div>
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0;justify-content:center">
+          <video src="assets/gyro.mp4" controls loop muted playsinline preload="metadata" aria-label="회전 속도를 적분해 각도를 추정할 때 자이로 오차가 누적되는 시각화" style="width:100%;max-height:350px;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">자이로 — 순간 회전은 빠르게 따라가지만 오차도 함께 누적</figcaption>
+        </figure>
       </div>
     </x-import>
   </section>
 
   <section data-label="상보필터" data-screen-label="31" data-speaker-notes="식은 한 줄이지만 α는 고정값이 아닙니다. 현재 펌웨어는 가속도 크기가 1g에서 얼마나 벗어났는지에 따라 0.999, 0.9995, 0.9998을 고릅니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="상보필터의 원리">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:28px">
-        <div style="background:var(--uos-surface);border-radius:4px;padding:32px;display:flex;flex-direction:column;gap:16px">
-          <div style="font-size:32px;font-weight:700;line-height:1.4;text-align:center">각도 = <span style="color:var(--uos-blue)">α</span> × (직전 각도 + 자이로로 구한 변화량) + <span style="color:var(--uos-blue)">(1−α)</span> × (가속도계로 구한 각도)</div>
-          <div style="font-size:20px;color:var(--uos-ink-muted);text-align:center">현재 사용값 — α = 0.999 / 0.9995 / 0.9998 · 가속도 크기의 신뢰도에 따라 자동 선택</div>
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
+        <div style="background:var(--uos-surface);border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:27px;font-weight:700;line-height:1.35;text-align:center">각도 = <span style="color:var(--uos-blue)">α</span> × (직전 각도 + 자이로 변화량) + <span style="color:var(--uos-blue)">(1−α)</span> × 가속도 각도</div>
+          <div style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">α = 0.999 / 0.9995 / 0.9998 · 가속도 크기의 신뢰도에 따라 자동 선택</div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
-          <div style="display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--uos-blue);padding-top:20px">
-            <div style="font-size:20px;font-weight:700">자이로 쪽이 하는 일</div>
-            <div style="font-size:20px;line-height:1.5">순간의 움직임을 빠르게 따라갑니다. 진동에 잘 흔들리지 않습니다.</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--uos-blue);padding-top:20px">
-            <div style="font-size:20px;font-weight:700">가속도계 쪽이 하는 일</div>
-            <div style="font-size:20px;line-height:1.5">매 tick 0.1% 이하의 작은 비율로 "중력 기준"을 섞어, 누적된 오차를 서서히 끌어당깁니다.</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--uos-blue);padding-top:20px">
-            <div style="font-size:20px;font-weight:700">α가 크면</div>
-            <div style="font-size:20px;line-height:1.5">반응이 빠르고 노이즈에 강하지만, 누적 오차를 교정하는 속도는 느려집니다.</div>
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:28px;flex:1;min-height:0">
+          <video src="assets/complementary-filter.mp4" controls loop muted playsinline preload="metadata" aria-label="자이로의 빠른 반응과 가속도계의 중력 기준을 섞는 상보필터 시각화" style="width:100%;align-self:center;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <div style="display:flex;flex-direction:column;gap:15px;justify-content:center">
+            <div style="border-top:6px solid var(--uos-blue);padding-top:14px;font-size:20px;line-height:1.5"><strong>자이로</strong> — 순간 움직임을 빠르게 따라갑니다.</div>
+            <div style="border-top:6px solid var(--uos-blue);padding-top:14px;font-size:20px;line-height:1.5"><strong>가속도계</strong> — 매 tick 0.1% 이하로 중력 기준을 섞습니다.</div>
+            <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px;font-size:20px;line-height:1.5">정지에 가까우면 빨리 교정하고, 급기동·진동 중에는 자이로를 더 오래 믿습니다.</div>
           </div>
         </div>
-        <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">핵심은 비율을 고정하지 않는 것입니다. 정지에 가까우면 중력 기준을 더 빨리 반영하고, 급기동·진동 중에는 자이로를 더 오래 믿습니다.</div>
       </div>
     </x-import>
   </section>
@@ -973,21 +956,18 @@
 
   <section data-label="문제 2 바이어스" data-screen-label="36" data-speaker-notes="정지해 있어도 자이로는 0을 내놓지 않습니다. 그 작은 값이 적분되면서 각도가 흘러갑니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 2 — 정지 상태에서도 남는 고정 오차">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
-        <div style="display:flex;flex-direction:column;gap:22px">
-          <div style="font-size:32px;font-weight:700;line-height:1.3">자이로는 가만히 있어도 0을 내놓지 않습니다.</div>
-          <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
-            <li>센서마다 일정하게 고정된 오차가 섞여 있습니다. 이를 <strong>바이어스</strong>라고 부릅니다</li>
-            <li>각도는 각속도를 계속 더해서 만들기 때문에, 바이어스도 함께 누적됩니다</li>
-            <li>초당 0.1°의 바이어스는 1분 뒤 6°의 오차가 됩니다</li>
-          </ul>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:20px">
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:18.667px;font-weight:700;opacity:.85">해결 · 커밋 7b3e64e</div>
-            <div style="font-size:20px;line-height:1.55">전원이 켜진 직후, 기체가 <strong>정지해 있는 짧은 구간</strong>의 자이로 값을 측정해 바이어스로 저장하고, 이후 모든 측정값에서 빼줍니다. 두 IMU 모두에 동일하게 적용합니다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
+          <video src="assets/gyro-bias.mp4" controls loop muted playsinline preload="metadata" aria-label="정지한 자이로의 작은 바이어스가 적분되며 각도 오차로 누적되는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">초당 0.1°의 바이어스도 1분 뒤에는 6°의 각도 오차</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:18px;justify-content:center">
+          <div style="font-size:30px;font-weight:700;line-height:1.35">자이로는 가만히 있어도 완전한 0을 내놓지 않습니다.</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:25px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:18.667px;font-weight:700;opacity:.85">해결 · 시작 시 영점 보정</div>
+            <div style="font-size:20px;line-height:1.5">전원을 켠 직후 정지 구간의 값을 바이어스로 저장하고, 이후 두 IMU의 모든 측정값에서 뺍니다.</div>
           </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;font-size:20px;line-height:1.55">그래서 <strong>전원을 켤 때는 기체를 움직이지 않아야</strong> 합니다. 이 순간 흔들면 잘못된 바이어스가 저장되어, 비행 내내 기체가 한쪽으로 흐릅니다. 오늘 실습에서도 지켜야 하는 규칙입니다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:25px;font-size:20px;line-height:1.5"><strong>운용 규칙</strong> — 전원을 켤 때 기체를 움직이면 잘못된 영점이 비행 내내 남습니다.</div>
         </div>
       </div>
     </x-import>
@@ -995,22 +975,15 @@
 
   <section data-label="문제 3 축 변환" data-screen-label="37" data-speaker-notes="센서가 읽는 축과 기체의 축은 다릅니다. 변환식에서 가속도는 맞았는데 자이로만 부호가 뒤집혀 있었습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 3 — 센서축에서 기체축으로 옮기는 과정의 부호 오류">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.05fr;gap:36px">
-        <div style="display:flex;flex-direction:column;gap:20px">
-          <div style="font-size:20px;line-height:1.55">센서가 읽는 x·y·z 축은 기체의 앞·옆·아래 축과 일치하지 않습니다. 보드를 어떻게 올렸느냐에 따라 <strong>축을 바꾸고 부호를 뒤집는 변환</strong>이 필요합니다.</div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-family:ui-monospace,monospace;font-size:18.667px;line-height:1.9">기체 roll 각속도 = + 센서 Y<br />기체 pitch 각속도 = − 센서 X<br />기체 yaw 각속도 = − 센서 Z<br /><br />기체 가속도 X = + 센서 Y<br />기체 가속도 Y = − 센서 X<br />기체 가속도 Z = + 센서 Z</div>
-          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">현재 검증된 변환식 — 이 여섯 줄이 하드웨어와 소프트웨어의 실제 접점입니다</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:20px">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">무엇이 틀렸었나</div>
-            <div style="font-size:20px;line-height:1.55">가속도 변환은 이미 검증되어 있었는데, 자이로 변환만 <strong>반대 부호</strong>로 적용되어 있었습니다. 결과적으로 좌우·앞뒤 회전 속도가 뒤집힌 채 제어기에 들어갔습니다.</div>
-          </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:18.667px;font-weight:700;opacity:.85">해결 · 커밋 9c23c44</div>
-            <div style="font-size:20px;line-height:1.55">두 변환의 부호 규칙을 하나로 통일했습니다. 이 값이 상보필터의 입력이므로, 자세 추정 전체가 영향을 받고 있었습니다.</div>
-          </div>
-          <div style="font-size:20px;line-height:1.55">부호가 뒤집힌 각속도로 제어하면, 제어기는 <strong>기울기를 줄이는 대신 키우는 방향</strong>으로 모터를 조작합니다. 이것이 다음 장의 시뮬레이션에서 재현할 상황입니다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
+          <video src="assets/imu-axis-signs.mp4" controls loop muted playsinline preload="metadata" aria-label="센서 좌표축을 드론 기체 좌표축으로 바꾸며 축과 부호를 확인하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">센서축과 기체축이 다르면 축 교환과 부호 변환이 필요</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:16px;justify-content:center">
+          <div style="background:var(--uos-surface);border-radius:4px;padding:21px;font-family:ui-monospace,monospace;font-size:18.667px;line-height:1.7">Roll 각속도 = + 센서 Y<br />Pitch 각속도 = − 센서 X<br />Yaw 각속도 = − 센서 Z<br /><br />가속도 X = + 센서 Y<br />가속도 Y = − 센서 X<br />가속도 Z = + 센서 Z</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:22px;font-size:20px;line-height:1.5">가속도 부호는 맞았지만 자이로만 반대로 들어갔습니다. 이 경우 제어기는 기울기를 <strong>줄이는 대신 키웁니다</strong>.</div>
+          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">현재 검증된 여섯 줄 — 하드웨어와 자세 추정 코드가 만나는 경계</div>
         </div>
       </div>
     </x-import>
@@ -1200,25 +1173,17 @@
 
   <section data-label="I항의 역할" data-screen-label="45" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해줍니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="I 항의 역할 — 남은 오차를 기억한다">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1">P</div>
-            <div style="font-size:20px;font-weight:700">지금 얼마나 벗어났나</div>
-            <div style="font-size:20px;line-height:1.5;color:var(--uos-ink-muted)">현재의 오차에 비례해 대응합니다. 빠르지만 오차를 완전히 없애지 못합니다.</div>
-          </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:32px;font-weight:700;line-height:1">I</div>
-            <div style="font-size:20px;font-weight:700">얼마나 오래 벗어나 있었나</div>
-            <div style="font-size:20px;line-height:1.5;opacity:.9">오차를 계속 누적해서, 누적된 만큼 힘을 더해 줍니다. 작은 오차가 오래 남아 있으면 결국 밀어냅니다.</div>
-          </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:32px;font-weight:700;color:var(--uos-blue);line-height:1">D</div>
-            <div style="font-size:20px;font-weight:700">얼마나 빠르게 변하나</div>
-            <div style="font-size:20px;line-height:1.5;color:var(--uos-ink-muted)">변화 속도에 반대로 작용해 진동을 눌러 줍니다. 브레이크 역할입니다.</div>
-          </div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.14fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
+          <video src="assets/pi-error-correction.mp4" controls loop muted playsinline preload="metadata" aria-label="P 제어만 남긴 정상상태 오차를 I 항이 누적해 제거하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">P가 빠르게 반응하고 I가 오래 남은 오차를 끝까지 밀어냄</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:15px;justify-content:center">
+          <div style="background:var(--uos-surface);border-radius:4px;padding:20px;font-size:20px;line-height:1.45"><strong style="font-size:28px;color:var(--uos-blue)">P</strong> · 지금 얼마나 벗어났는지에 비례해 빠르게 대응</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px;font-size:20px;line-height:1.45"><strong style="font-size:28px">I</strong> · 얼마나 오래 벗어났는지 기억해 남은 오차 제거</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:20px;font-size:20px;line-height:1.45"><strong style="font-size:28px;color:var(--uos-blue)">D</strong> · 변화 속도에 반대로 작용해 진동을 제동</div>
+          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">I 누적값은 과도하게 커지지 않도록 ±50µs로 제한합니다.</div>
         </div>
-        <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">주의할 점 — I 항의 역할이 커질수록 P 항의 역할은 상대적으로 줄어듭니다. 또한 누적값이 지나치게 커지지 않도록 <strong>상한(클램프)</strong>을 걸어 둡니다. 우리 설정은 ±50µs입니다.</div>
       </div>
     </x-import>
   </section>
@@ -1259,21 +1224,21 @@
 
   <section data-label="캐스케이드 구조" data-screen-label="47" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 겹으로 겹친 제어 루프">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.16fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
+          <video src="assets/cascade-loop-timing.mp4" controls loop muted playsinline preload="metadata" aria-label="250Hz 각도 루프와 1000Hz 각속도 루프가 서로 다른 주기로 동작하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">바깥 루프 한 번 사이에 안쪽 루프가 네 번 모터를 보정</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:18px;justify-content:center">
+          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:9px">
             <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">바깥 루프 · 250Hz</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">"몇 도 기울어 있는가"를 보고<br />"얼마나 빠르게 돌아야 하는가"를 정한다</div>
-            <div style="font-size:20px;line-height:1.55">목표 각도와 현재 각도의 차이에 Kp를 곱해, 목표 회전 속도를 만듭니다.</div>
+            <div style="font-size:22px;font-weight:700;line-height:1.4">각도 오차 → 목표 회전 속도</div>
           </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:9px">
             <div style="font-size:18.667px;font-weight:700;opacity:.85">안쪽 루프 · 1000Hz</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">"목표 회전 속도를 실제로 내고 있는가"를 보고<br />모터 출력을 조정한다</div>
-            <div style="font-size:20px;line-height:1.55">PID 세 항이 모두 작동하는 곳입니다. 바깥 루프보다 네 배 빠르게 돕니다.</div>
+            <div style="font-size:22px;font-weight:700;line-height:1.4">각속도 오차 → 모터 출력</div>
           </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:20px;background:var(--uos-surface);border-radius:4px;padding:26px">
-          <div style="font-size:20px;line-height:1.55;flex:1">왜 나누는가 — 각도를 직접 모터 출력으로 연결하면, 기체가 목표를 지나쳐 갔다가 되돌아오는 <strong>오버슈트</strong>를 다루기 어렵습니다. 회전 속도를 중간 목표로 두면, "지금 너무 빠르게 돌고 있다"는 판단을 따로 할 수 있습니다.</div>
+          <div style="font-size:20px;line-height:1.5">회전 속도를 중간 목표로 두면 목표를 지나치는 <strong>오버슈트</strong>를 따로 제동할 수 있습니다.</div>
         </div>
       </div>
     </x-import>
@@ -1368,19 +1333,16 @@
 
   <section data-label="헤딩 고정" data-screen-label="50" data-speaker-notes="지자기센서는 나침반입니다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지자기센서로 헤딩 고정">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
-        <div style="display:flex;flex-direction:column;gap:22px">
-          <div style="font-size:20px;line-height:1.55">지자기센서(BMM350)는 나침반과 같은 부품입니다. 지구 자기장의 방향을 읽어 <strong>절대 방위</strong>를 알려줍니다.</div>
-          <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
-            <li>50Hz로 읽어, Yaw 추정값의 기준점으로 사용합니다</li>
-            <li>급하게 반영하면 순간적인 흔들림이 생기므로, <strong>약 4초 시간상수</strong>로 아주 완만하게 섞습니다</li>
-            <li>목적은 자북을 향한 항법이 아니라, <strong>지금 향한 방향을 유지</strong>하는 것입니다</li>
-          </ul>
-          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">커밋 430f7cf — 헤딩 고정(heading hold) 기능 추가</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">앞서 배운 <strong>상보필터가 그대로 다시 쓰입니다</strong>. 빠르지만 흘러가는 값(자이로)과, 느리지만 기준이 있는 값(지자기)을 섞는 구조가 같습니다.</div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:26px;font-size:20px;line-height:1.55">같은 도구를 두 곳에 씁니다 — 기울기에는 <strong>가속도계</strong>를 기준으로, 방위에는 <strong>지자기센서</strong>를 기준으로. 시간상수만 다릅니다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.12fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
+          <video src="assets/yaw-correction.mp4" controls loop muted playsinline preload="metadata" aria-label="자이로 Yaw 추정값을 지자기 헤딩 기준으로 천천히 보정하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">빠른 자이로 Yaw를 느리지만 절대 기준이 있는 지자기로 보정</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:17px;justify-content:center">
+          <div style="font-size:28px;font-weight:700;line-height:1.35">BMM350은 지구 자기장을 읽어 <strong>절대 방위 기준</strong>을 제공합니다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:23px;font-size:20px;line-height:1.5"><strong>50Hz 측정</strong> · Yaw 기준점으로 사용</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:23px;font-size:20px;line-height:1.5"><strong>250Hz 보정 · K=0.001</strong> · 약 4초에 걸쳐 완만하게 융합</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:23px;font-size:20px;line-height:1.5">목적은 자북 항법이 아니라, <strong>지금 향한 방향을 유지</strong>하는 것입니다.</div>
         </div>
       </div>
     </x-import>
@@ -1595,23 +1557,17 @@
 
   <section data-label="프로브 가설과 반증" data-screen-label="60" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아닙니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="능동 프로브 — 가설과 실제 관측">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
-          <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">하강 중 출력을 잠깐 낮추고 IMU 반응을 보는 <strong>능동 프로브</strong>를 시험했습니다.</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-              <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">가설</div>
-              <div style="font-size:20px;line-height:1.55">출력을 <strong>40µs만큼 120ms 동안</strong> 낮추면 공중에서는 움직이고, 지면에서는 반응이 작을 것이라 예상했습니다.</div>
-          </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-              <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">라벨 정정</div>
-              <div style="font-size:20px;line-height:1.55">기존에 공중과 지면으로 비교한 데이터는 <strong>둘 다 지면</strong>이었습니다. 공중 분포는 미측정입니다.</div>
-          </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:26px;display:flex;flex-direction:column;gap:12px">
-              <div style="font-size:18.667px;font-weight:700;opacity:.85">실제 관측</div>
-              <div style="font-size:20px;line-height:1.55">지면에서도 반응이 사라지지 않은 사례가 있었고, 임계값 변경 뒤에는 <strong>지면 10회 모두 미검출</strong>이었습니다.</div>
-          </div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.13fr 1fr;gap:32px">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
+          <video src="assets/landing-ambiguity.mp4" controls loop muted playsinline preload="metadata" aria-label="가속도만으로 지면 정지와 등속 하강을 구분하기 어려운 착지 판정 모호성 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">같은 1g가 지면 정지와 등속 하강 두 상태를 모두 설명</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;gap:14px;justify-content:center">
+          <div style="background:var(--uos-surface);border-radius:4px;padding:20px;font-size:20px;line-height:1.45"><strong style="color:var(--uos-blue)">가설</strong> · 출력을 40µs, 120ms 낮춰 공중과 지면 반응을 구분</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:20px;font-size:20px;line-height:1.45"><strong style="color:var(--uos-blue)">라벨 정정</strong> · 비교한 두 분포는 모두 지면, <strong>공중 분포는 미측정</strong></div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px;font-size:20px;line-height:1.45"><strong>실제 관측</strong> · 지면에서도 반응이 남았고 변경한 임계값에서는 10회 모두 미검출</div>
+          <div style="font-size:20px;line-height:1.5">프로브는 <strong>기록에만 사용</strong>하고 착지 결정에는 사용하지 않습니다.</div>
         </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55">결론: 프로브는 <strong>기록에만 사용</strong>하고, 착지 결정에는 사용하지 않습니다. 공중에서 잘못 컷하는 경로를 닫았습니다.</div>
       </div>
     </x-import>
   </section>
