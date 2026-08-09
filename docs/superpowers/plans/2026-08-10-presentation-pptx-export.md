@@ -149,7 +149,7 @@ MPLCONFIGDIR=/tmp/zetin-pptx-full-mpl \
   /home/light/anaconda3/bin/python -m unittest discover -s tools -p 'test_*.py' -v
 ```
 
-- [ ] **Step 5: Commit and push only scoped files**
+- [x] **Step 5: Commit and push only scoped files**
 
 ```bash
 git add docs/presentations/ai-startup-camp-drone/export_pptx.cjs \
