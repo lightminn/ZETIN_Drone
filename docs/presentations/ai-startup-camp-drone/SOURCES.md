@@ -6,6 +6,7 @@
 
 | 슬라이드 | 주장 | 저장소 근거 | 증거 시점·경계 |
 |---|---|---|---|
+| 1, 11, 12, 23, 76, 77 | 기술 중심 발표 방향, 교육 아이템 맥락, PCB 주문·납땜·부품 납기 상태, 다중 드론 확장 목표 | [`BRIEF.md`](BRIEF.md) | 2026-08-10 사용자 제공 발표 준비 정리. 발표 방향과 실행 현황이며 비행 검증 증거가 아님 |
 | 27, 72 | 상태 텔레메트리 65개 필드, 별도 1kHz 원시 IMU | [`udp_protocol.md`](../../udp_protocol.md), [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) | 현행 프로토콜. CSV는 수신 시각까지 66열 |
 | 31, 33, 48 | Roll·Pitch 적응형 α = 0.999 / 0.9995 / 0.9998 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `ALPHA_STATIC`, `ALPHA_NORMAL`, `ALPHA_DYN`, `compute_alpha` | 현행 펌웨어 |
 | 32, 48, 50 | Yaw 보정 250Hz, K=0.001, 시정수 약 4초 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `K_MAG`, `magFusionCnt` | 현행 펌웨어. 1kHz α 값은 설명용 등가식일 뿐 구현값이 아님 |

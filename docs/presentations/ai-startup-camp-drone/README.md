@@ -47,7 +47,8 @@ cd docs/presentations/ai-startup-camp-drone
 
 1. 내용과 레이아웃은 `index.html`에서 수정한다.
 2. 오프라인 발표에 필요한 자산만 `assets/`와 `vendor/`에 둔다.
-3. 주장이나 수치를 고칠 때는 [SOURCES.md](SOURCES.md)의 근거도 함께 확인한다.
+3. 발표 대상과 기술/사업 비중은 [BRIEF.md](BRIEF.md), 주장과 수치는
+   [SOURCES.md](SOURCES.md)를 함께 확인한다.
 4. 슬라이드는 77장을 유지하고, 작은 글씨를 늘리기보다 카드나 문장을 줄인다.
 5. 영상은 한 슬라이드에 하나만 두고 `controls loop muted playsinline
    preload="metadata"`를 유지한다.

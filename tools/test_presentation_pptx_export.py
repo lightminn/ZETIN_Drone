@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -16,12 +17,15 @@ from pptx import Presentation
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PPTX_PATH = (
+DEFAULT_PPTX_PATH = (
     REPO_ROOT
     / "docs"
     / "presentations"
     / "ai-startup-camp-drone"
     / "ZETIN_Drone_AI_Startup_Camp.pptx"
+)
+PPTX_PATH = Path(
+    os.environ.get("ZETIN_PRESENTATION_PPTX", str(DEFAULT_PPTX_PATH))
 )
 SLIDE_NAME = re.compile(r"ppt/slides/slide\d+\.xml$")
 NOTE_NAME = re.compile(r"ppt/notesSlides/notesSlide\d+\.xml$")

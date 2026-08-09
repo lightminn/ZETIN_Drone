@@ -9,7 +9,7 @@
 <x-dc>
 <helmet>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ZETIN Drone 기술 교안</title>
+  <title>ZETIN Drone 기술 발표</title>
   <link rel="stylesheet" href="vendor/uos-slide-template/fonts/fonts.css">
   <link rel="stylesheet" href="vendor/uos-slide-template/_ds_bundle.css">
   <link rel="stylesheet" href="vendor/uos-slide-template/styles.css">
@@ -23,8 +23,8 @@
 
 <x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1280" height="720" hint-size="100%,100%">
 
-  <section data-label="표지" data-screen-label="01" data-speaker-notes="오늘은 드론을 직접 만든 이야기를 합니다. 로봇을 전혀 모르셔도 따라올 수 있게 구성했습니다. 세 시간 중 한 시간은 직접 보고 만져보는 시간입니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="2026.08" subtitle="AI 창업 캠프 · 기술 교안 · 3시간 과정" title="ZETIN Drone
+  <section data-label="표지" data-screen-label="01" data-speaker-notes="창업지원단 대상 발표이지만 본론은 비행제어 기술입니다. 앞부분에서 이 기술 과정을 교육 아이템으로 확장할 수 있는 이유만 짧게 짚고, 하드웨어·소프트웨어·시연으로 들어갑니다. 세 시간 중 한 시간은 직접 보고 만져보는 시간입니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="2026.08" subtitle="AI 창업 캠프 · 기술 발표 및 체험 · 3시간 과정" title="ZETIN Drone
 비행 제어 시스템
 직접 만들기"></x-import>
   </section>
@@ -256,8 +256,8 @@
     </x-import>
   </section>
 
-  <section data-label="사업 근거" data-screen-label="11" data-speaker-notes="숫자는 일부러 넣지 않았습니다. 여기서 말할 것은 시장 규모가 아니라, 우리가 가진 것이 왜 팔 수 있는 것인지의 논리입니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기술 역량이 사업의 근거가 되는 지점">
+  <section data-label="사업 근거" data-screen-label="11" data-speaker-notes="창업지원단 대상이라 사업의 연결고리를 이 장과 다음 장에서만 짧게 짚습니다. 이후부터는 기술이 본론입니다. 시장 규모가 아니라 설계·실패·측정·수정 과정을 재현할 수 있다는 점이 교육 아이템의 근거입니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기술이 교육 아이템이 되는 지점">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
           <div style="border-top:6px solid var(--uos-blue);padding-top:24px;display:flex;flex-direction:column;gap:14px">
@@ -265,29 +265,29 @@
             <div style="font-size:20px;line-height:1.55">완성된 드론 한 대가 아니라, <strong>드론이 만들어지는 과정 전체</strong>입니다. 설계·실패·측정·수정 기록이 남아 있습니다.</div>
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:24px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">왜 남이 못 하는가</div>
-            <div style="font-size:20px;line-height:1.55">완제품을 조립하는 교육은 흔합니다. <strong>부호 하나가 뒤집혀 기체가 발산하는 장면</strong>을 재현해 보여줄 수 있는 곳은 드뭅니다.</div>
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">기술적 차별점</div>
+            <div style="font-size:20px;line-height:1.55">완제품 조립법에서 끝나지 않고, <strong>부호 반전·바이어스·축 변환 오류</strong>를 재현하고 측정으로 고치는 과정을 보여줍니다.</div>
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:24px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">왜 반복 가능한가</div>
             <div style="font-size:20px;line-height:1.55">비행 없이 컴퓨터 안에서 검증하는 체계를 갖췄습니다. <strong>기체를 부수지 않고</strong> 같은 실습을 몇 번이든 돌릴 수 있습니다.</div>
           </div>
         </div>
-        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;font-size:20px;line-height:1.55">기술 역량을 사업으로 옮기는 지점은 성능 수치가 아니라 <strong>재현성</strong>입니다. 같은 결과를 남이 따라할 수 있게 만들어 두었다면, 그것은 곧 커리큘럼입니다.</div>
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;font-size:20px;line-height:1.55">여기서 말하는 사업성은 기술을 대신하는 말이 아닙니다. 기술 개발 과정을 <strong>다른 사람이 따라 할 수 있는 실습</strong>으로 묶는 것이 교육 아이템의 출발점입니다.</div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="교육 아이템" data-screen-label="12" data-speaker-notes="오늘 이 교안 자체가 상품의 시제품입니다. 세 시간짜리 모듈로 잘라 쓸 수 있게 구성했습니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="교육 아이템으로서의 의미">
+  <section data-label="교육 아이템" data-screen-label="12" data-speaker-notes="오늘 발표와 실습은 교육 모듈의 시제품입니다. 완성된 상품이나 매출을 주장하는 장이 아니라, 실제 기술 과정을 선생님과 참가자가 따라갈 수 있는 단위로 나눴다는 점을 보여주는 장입니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기술 발표를 교육 모듈로 바꾸는 방법">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:20px">
-          <div style="font-size:32px;font-weight:700;line-height:1.3">오늘 이 세 시간이 상품의 시제품입니다.</div>
+          <div style="font-size:32px;font-weight:700;line-height:1.3">오늘 발표와 실습은<br>교육 모듈의 시제품입니다.</div>
           <ul style="margin:0;padding-left:28px;font-size:20px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
             <li><strong>개념 → 실패 → 측정 → 수정</strong>의 한 사이클이 40분 모듈로 잘립니다</li>
             <li>시뮬레이터가 있으므로 기체 없이도 실습이 가능합니다</li>
             <li>실측 로그가 있으므로 데이터 읽기 실습으로 확장됩니다</li>
-            <li>같은 구조를 다른 로봇(지상 로봇·매니퓰레이터)으로 복제할 수 있습니다</li>
+            <li>참가자가 듣기만 하지 않고 계산·선택·조종으로 직접 확인합니다</li>
           </ul>
         </div>
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -574,7 +574,7 @@
     </x-import>
   </section>
 
-  <section data-label="1차 보드의 교훈" data-screen-label="23" data-speaker-notes="첫 보드는 신호선 배치가 빽빽했고, 디버깅 접근이 나빴습니다. 지금 보드는 그걸 고친 결과입니다." style="background:#fff">
+  <section data-label="1차 보드의 교훈" data-screen-label="23" data-speaker-notes="첫 보드는 신호선 배치가 빽빽했고 디버깅 접근이 나빴습니다. 지금 보드는 그걸 고친 결과입니다. 차기 PCB는 주문 진행 중이며, 납땜 작업과 알리 부품 납기는 실제 제작 일정의 위험으로 관리하고 있습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="1차 보드에서 배운 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.2fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
@@ -607,6 +607,7 @@
             </tbody>
           </table>
           <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:20px;line-height:1.5">교육 관점에서 중요한 것은 <strong>측정할 수 있게 만드는 것</strong>입니다. 측정점이 없는 보드는 문제가 생겼을 때 추측밖에 할 수 없습니다.</div>
+          <div style="background:#eaf2fb;border-radius:4px;padding:18px 20px;font-size:18.667px;line-height:1.45"><strong>현재 실행 상태</strong> · 차기 PCB는 주문 진행 중입니다. 납땜 작업과 알리 부품 납기는 일정 위험으로 관리하고 있습니다.</div>
         </div>
       </div>
     </x-import>
@@ -2015,7 +2016,7 @@
     </x-import>
   </section>
 
-  <section data-label="다음 단계" data-screen-label="76" data-speaker-notes="센서를 새로 다는 단계가 아닙니다. 이미 들어오는 거리·광류 데이터를 제어에 연결하고 실제 비행으로 검증하는 단계입니다." style="background:#fff">
+  <section data-label="다음 단계" data-screen-label="76" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증합니다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장합니다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않습니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="다음 단계">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
@@ -2033,9 +2034,9 @@
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">STEP 3</div>
-            <div style="font-size:24px;font-weight:700;line-height:1.3">여러 대를 함께</div>
-            <div style="font-size:20px;line-height:1.55">시뮬레이션에서 검증한 경로 계획을 실기로 옮기고, 여러 대를 묶어 제어하는 구조로 확장합니다.</div>
-            <div style="font-size:18.667px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 — 시뮬레이션과 실기 결과의 일치</div>
+            <div style="font-size:24px;font-weight:700;line-height:1.3">다중 드론 sim-to-real</div>
+            <div style="font-size:20px;line-height:1.55">시뮬레이션에서 경로 계획과 군집 제어를 검증한 뒤, 여러 실제 기체로 옮겨 시뮬레이션과 실기의 차이를 줄입니다.</div>
+            <div style="font-size:18.667px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">현재 상태 — 아직 검증하지 않음 · 단일 기체 기반 검증이 선행</div>
           </div>
         </div>
         <div style="font-size:20px;line-height:1.55;border-top:1px solid var(--uos-rule);padding-top:20px">각 단계의 <strong>통과 기준을 미리 정해 두는 것</strong>이 이 프로젝트의 방식입니다. 기준이 없으면 "잘 되는 것 같다"에서 멈추게 됩니다.</div>
@@ -2043,8 +2044,8 @@
     </x-import>
   </section>
 
-  <section data-label="마무리" data-screen-label="77" data-speaker-notes="질문 받겠습니다. 실습 자료와 로그는 요청하시면 공유합니다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="Q &amp; A" subtitle="ZETIN Drone · AI 창업 캠프 기술 교안" title="감사합니다
+  <section data-label="마무리" data-screen-label="77" data-speaker-notes="질문 받겠습니다. 비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣겠습니다. 실습 자료와 로그는 요청하시면 공유합니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="Q &amp; A" subtitle="ZETIN Drone · 비행제어 기술 · 실습 · 교육 확장" title="감사합니다
 측정할 수 있게
 만드는 것부터"></x-import>
   </section>
