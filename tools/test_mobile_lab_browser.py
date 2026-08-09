@@ -146,6 +146,15 @@ SENSOR_AND_CLOCK_SHIM = r"""
   }
 
   if (params.get('clock') === 'manual') {
+    const challengeSeeds = [0, 0xffffffff];
+    const nativeGetRandomValues = crypto.getRandomValues.bind(crypto);
+    Crypto.prototype.getRandomValues = function(values) {
+      if (values instanceof Uint32Array && values.length === 1 && challengeSeeds.length > 0) {
+        values[0] = challengeSeeds.shift();
+        return values;
+      }
+      return nativeGetRandomValues(values);
+    };
     let now = 0;
     let nextId = 1;
     let callbacks = [];
@@ -527,9 +536,13 @@ class MobileLabBrowserTests(unittest.TestCase):
         self.assertGreater(float(self.text("[data-pitch-value]").replace("°", "")), 10)
 
         self._click('[data-action="start-challenge"]')
-        self.evaluate("__runFrames(90)")
         self._touch("touchEnd")
-        self.evaluate("__runFrames(1205)")
+        self.evaluate("__runFrames(120)")
+        first_attempt_attitude = (
+            self.text("[data-roll-value]"),
+            self.text("[data-pitch-value]"),
+        )
+        self.evaluate("__runFrames(1085)")
         self._wait_for("document.querySelector('main').dataset.screen === 'result'")
         score_before = self.text("[data-result-score]")
         self.assertRegex(score_before, r"^\d{1,4}$")
@@ -549,6 +562,13 @@ class MobileLabBrowserTests(unittest.TestCase):
         self.assertFalse(
             self.evaluate("Boolean(document.querySelector('[data-result]').dataset.submissionId)")
         )
+
+        self.evaluate("__runFrames(120)")
+        second_attempt_attitude = (
+            self.text("[data-roll-value]"),
+            self.text("[data-pitch-value]"),
+        )
+        self.assertNotEqual(first_attempt_attitude, second_attempt_attitude)
 
     def test_keyboard_joystick_focus_axes_keyup_and_blur_neutralization(self) -> None:
         self._navigate("index.html?sensors=none")

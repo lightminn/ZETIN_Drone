@@ -40,6 +40,12 @@ let lastFrameTime = null;
 let challengeFrame = 0;
 let localResult = null;
 
+function nextChallengeSeed() {
+  const seed = new Uint32Array(1);
+  crypto.getRandomValues(seed);
+  return seed[0] || 0x6d2b79f5;
+}
+
 function showScreen(name) {
   app.dataset.screen = name;
   screenPanels.forEach((panel) => {
@@ -382,7 +388,9 @@ function finishChallenge() {
 
 function startChallenge({ restart = false } = {}) {
   if (challengeFrame) window.cancelAnimationFrame(challengeFrame);
-  challenge = restart ? restartChallenge(challenge) : createChallengeState();
+  challenge = restart
+    ? restartChallenge(challenge, { seed: nextChallengeSeed() })
+    : createChallengeState({ seed: nextChallengeSeed() });
   accumulator = 0;
   lastFrameTime = null;
   localResult = null;
