@@ -11,6 +11,7 @@
 - [BMM350 yaw 융합 벤치 시험](bmm350_yaw_bench_test.md)
 - [자동착륙 착지 감지 연구](failsafe_land_research.md)
 - [노션 문서 컨벤션](notion_doc_convention.md)
+- [Oracle 재사용 웹 호스팅 운영 가이드](oracle_web_hosting.md)
 - [저장소 마이그레이션 맵](migration_map.md)
 - [저장소 정리 설계](design/2026-07-13-repository-cleanup-design.md)
 - [저장소 정리 구현 계획](plans/2026-07-13-repository-cleanup.md)

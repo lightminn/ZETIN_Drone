@@ -3,17 +3,31 @@
 이 자료는 설치·로그인 없이 QR로 접속하는 교육용 가상 드론 실습입니다. 학생 입력은
 브라우저 안의 Roll·Pitch 시뮬레이션과 20초 호버링 점수에만 쓰이며, 실제 드론·펌웨어·지상국·모터에는 연결되지 않습니다. 실제 비행 시연이 있다면 학생 실습과 분리된 진행자 전용 구역에서 진행합니다.
 
-## 행사 전 역할과 주소
+## 권장 공개 운영 주소
 
-- 학생: `/` 또는 `/index.html`
-- 발표자·프로젝터: `/presenter.html`
+```text
+학생:           https://uos-drone.kro.kr/
+발표자·프로젝터: https://uos-drone.kro.kr/presenter.html
+선택 점수 API:  https://uos-drone.kro.kr/api/scores
+```
+
+행사 공개 운영은 위 신뢰 HTTPS 주소를 우선 사용합니다. Oracle 호스트의 최초 구성,
+release 배포, OCI ingress, DNS, TLS 갱신과 rollback은
+[Oracle 재사용 웹 호스팅 운영 가이드](../../../oracle_web_hosting.md)를 따릅니다.
+LAN HTTP와 직접 8443 제공은 인터넷 공개 운영 권장 경로가 아니라 비상·로컬
+리허설 경로입니다.
+
+## 화면 역할과 주소
+
+- 학생: `https://uos-drone.kro.kr/` 또는 같은 출처의 `/index.html`
+- 발표자·프로젝터: 같은 출처의 `/presenter.html`
 - 선택 점수 API: 같은 출처의 `/api/scores`
 
 발표자 페이지는 QR을 로컬에서 만들고 URL을 복사합니다. 점수 API가 없거나 중단되어도 QR과 학생 실습은 계속 사용할 수 있습니다.
 
 `<LAN-IP>`는 진행자 노트북의 행사 Wi-Fi IPv4 주소, `<trusted-name>`은 그 IP가 아닌 행사에서 신뢰되는 HTTPS 호스트 이름으로 바꿉니다. QR에는 `127.0.0.1`이나 `localhost`를 넣지 않습니다. 그것들은 진행자 자신의 장치만 가리킵니다.
 
-## 빠른 리허설: HTTP 터치 미리보기
+## 비상·로컬 리허설: HTTP 터치 미리보기
 
 HTTP는 레이아웃·QR·터치 조이스틱·가상 호버링을 확인하는 미리보기 용도입니다. 앱은 HTTP에서 센서가 제한됨을 알리고 터치 경로를 제공합니다. 실제 휴대폰 기울임·권한 리허설에는 다음 HTTPS 절차를 사용합니다.
 
@@ -40,9 +54,13 @@ HTTP는 레이아웃·QR·터치 조이스틱·가상 호버링을 확인하는 
 
 이 정적 HTTP 미리보기에는 점수 API가 없습니다. 발표자 화면의 `점수판은 선택 기능입니다` 상태가 정상이며, 학생 결과는 각 휴대폰 화면에 남습니다. `Ctrl+C`로 종료합니다.
 
-## 선택 점수 서버와 신뢰된 HTTPS
+## 비상·로컬 점수 서버와 신뢰된 HTTPS
 
-`server.py`는 정적 파일과 점수 API를 함께 제공합니다. 점수는 서버 메모리에만 있으며, 서버를 다시 시작하면 제출 수와 순위가 초기화됩니다. 영속 저장·로그인·외부 서비스 생성은 이 실습 범위에 없습니다.
+`server.py`는 정적 파일과 점수 API를 함께 제공합니다. 점수는 서버 메모리에만 있으며,
+서버를 다시 시작하면 제출 수와 순위가 초기화됩니다. 서로 다른 고유 제출은 한
+프로세스에서 최대 500개이며, 같은 ID·같은 내용의 재시도는 중복 순위를 만들지
+않습니다. 상한, 오프라인 또는 제출 실패가 발생해도 학생 화면의 로컬 결과와
+재도전은 유지됩니다. 영속 저장·로그인·외부 서비스 생성은 이 실습 범위에 없습니다.
 
 ### 점수 서버를 포함한 HTTP 리허설
 
@@ -56,7 +74,7 @@ cd docs/presentations/ai-startup-camp-drone/mobile-lab
 발표자:  http://<LAN-IP>:8000/presenter.html
 ```
 
-### 센서용 HTTPS 리허설 또는 소규모 직접 제공
+### 센서용 비상 HTTPS 리허설 또는 소규모 직접 제공
 
 행사용으로 신뢰되는 인증서와 개인키가 이미 있다면 둘을 함께 지정합니다. `--cert`와 `--key`는 하나만 지정할 수 없습니다.
 
@@ -75,6 +93,11 @@ cd docs/presentations/ai-startup-camp-drone/mobile-lab
 
 휴대폰이 인증서를 신뢰하고 주소의 호스트 이름이 인증서와 일치할 때만 이 주소로 센서 시험을 합니다. 경고가 나는 자체 서명 인증서, IP 주소와 맞지 않는 인증서, HTTP 주소는 iOS/Android 센서 권한 실습의 통과 근거가 아닙니다. HTTP에서도 터치 실습은 가능합니다.
 
+Device Orientation/Motion은 사용자 동작과 secure context를 요구하는 브라우저
+기능이므로, 공개 행사 IMU 경로는 신뢰된 HTTPS로 제공해야 합니다. 위 8443 직접
+제공은 Oracle/Nginx 운영 경로가 중단된 경우의 제한된 리허설 대안이지 공개 배포
+기본값이 아닙니다.
+
 ### 정적 HTTPS 호스트에 배포할 때
 
 학교나 행사장의 기존 신뢰 HTTPS 호스트를 사용하면 학생 앱 자체는 정적으로 배포할 수 있습니다. 학생 경로와 발표자 경로가 같은 출처에 있도록 다음과 같이 배치합니다.
@@ -91,7 +114,9 @@ https://<trusted-name>/vendor/uos-slide-template/fonts/... -> sibling font files
 
 ## QR·학생 진행 순서
 
-1. 발표자 화면 `https://<trusted-name>:8443/presenter.html`을 열고 `학생 접속 URL`에 학생의 `/` 주소를 입력합니다.
+1. 발표자 화면 `https://uos-drone.kro.kr/presenter.html`을 열고 `학생 접속 URL`에
+   `https://uos-drone.kro.kr/`이 들어 있는지 확인합니다. 비상 리허설에서만
+   `https://<trusted-name>:8443/presenter.html`과 그 학생 `/` 주소로 바꿉니다.
 2. `QR 갱신`을 눌러 화면 QR이 입력한 URL을 담았는지 확인합니다. `URL 복사`로 채팅·발표 자료용 주소도 복사합니다.
 3. 프로젝터에는 발표자 페이지를 띄우고, 학생은 QR을 스캔해 학생 `/` 페이지를 엽니다.
 4. 학생은 선택 표시 이름을 입력하거나 비워 두고, `센서로 체험 시작` 또는 `터치로 체험`을 고릅니다.
@@ -121,6 +146,10 @@ https://<trusted-name>/vendor/uos-slide-template/fonts/... -> sibling font files
 
 ## 50명 행사 전 체크리스트
 
+- [ ] 공용 resolver 두 곳에서 `uos-drone.kro.kr` A가 `140.83.83.165`로 보이고, 예전 LAN/private A와 미검증 AAAA가 남지 않았다.
+- [ ] OCI의 올바른 VNIC에 연결된 stateful NSG/Security List에서 TCP 80·443 ingress를 확인했고 기존 SSH·tunnel 규칙을 교체하지 않았다.
+- [ ] Oracle status 검사에서 current release, Nginx, 선택 backend·loopback API, local-SNI/public-IP HTTPS가 정상이고 public 8000·8443에 앱 listener가 없음을 확인했다.
+- [ ] 공개 80/DNS 전환 뒤 Certbot HTTP-01 `renew --dry-run`과 timer를 확인했거나, 현재 인증서 만료일 2026-11-07 전의 명시적 미완료 항목으로 남겼다.
 - [ ] 신뢰된 HTTPS 학생 URL과 발표자 URL을 두 대의 실제 iOS 기기와 두 대의 실제 Android 기기에서 각각 열었다.
 - [ ] 위 네 기기에서 센서 시작 버튼, 각 플랫폼의 실제 권한/센서 동작, 중립 보정, Roll·Pitch 표기를 직접 확인했다.
 - [ ] 네 기기 모두에서 세로 화면이 가로 스크롤·잘린 주요 버튼 없이 읽히고, 안전 영역의 하단 버튼을 누를 수 있다.
@@ -128,6 +157,8 @@ https://<trusted-name>/vendor/uos-slide-template/fonts/... -> sibling font files
 - [ ] QR을 프로젝터/인쇄물의 실제 크기로 띄우고 뒤쪽 좌석 예상 거리에서 스캔해 올바른 HTTPS 학생 URL로 열었다.
 - [ ] 행사 Wi-Fi에서 50대가 정적 자산을 동시에 받는 리허설을 했고, QR 접속·터치 실습·오프라인 전환을 관찰했다.
 - [ ] 점수판을 쓸 경우 50대 제출 리허설을 했고, 제출 수·순위 표시를 확인했다.
+- [ ] 점수판은 클라이언트가 제출한 교육용 비공식 결과이며 실제 비행 성능이나 검증된 측정값이 아니라고 발표자 화면과 진행 멘트로 안내했다.
+- [ ] 최대 500개 고유 제출 뒤 새 제출은 거부될 수 있지만 학생 로컬 결과는 유지된다는 운영 경계를 진행자가 알고 있다.
 - [ ] 점수 서버 재시작 뒤 순위와 제출 수가 0으로 초기화되는 것을 진행자가 알고, 재시작 시점과 안내 문구를 정했다.
 - [ ] 점수 서버 없이도 학생 결과·QR·발표자 화면이 작동하는 오프라인 드릴을 했다.
 - [ ] 진행자 노트북 전원, 프로젝터 입력·해상도·가독성, 충전기, Wi-Fi 연결, 예비 QR/URL 안내를 확인했다.

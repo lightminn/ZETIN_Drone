@@ -10,6 +10,7 @@ from check_repo_layout import (  # noqa: E402
     check_migration_map,
     check_sketch_names,
     check_stale_tokens,
+    maintained_markdown_files,
 )
 
 
@@ -37,6 +38,42 @@ class RepoLayoutChecksTest(unittest.TestCase):
         errors = check_markdown_links(self.repo, [readme])
         self.assertEqual(1, len(errors))
         self.assertIn("docs/missing.md", errors[0])
+
+    def test_maintained_scan_includes_oracle_web_runbook_links(self):
+        runbook = self.write(
+            "docs/oracle_web_hosting.md",
+            "[broken](missing-oracle-target.md)",
+        )
+        errors = check_markdown_links(
+            self.repo,
+            maintained_markdown_files(self.repo),
+        )
+        self.assertTrue(
+            any(
+                str(runbook.relative_to(self.repo)) in error
+                and "missing-oracle-target.md" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_maintained_scan_includes_mobile_lab_readme_links(self):
+        readme = self.write(
+            "docs/presentations/ai-startup-camp-drone/mobile-lab/README.md",
+            "[broken](missing-mobile-lab-target.md)",
+        )
+        errors = check_markdown_links(
+            self.repo,
+            maintained_markdown_files(self.repo),
+        )
+        self.assertTrue(
+            any(
+                str(readme.relative_to(self.repo)) in error
+                and "missing-mobile-lab-target.md" in error
+                for error in errors
+            ),
+            errors,
+        )
 
     def test_sketch_directory_must_match_ino_basename(self):
         self.write("firmware/flight/right/right.ino")

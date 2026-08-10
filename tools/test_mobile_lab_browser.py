@@ -661,6 +661,11 @@ class MobileLabBrowserTests(unittest.TestCase):
         self._post_score(3, "셋째", 999)
         self._navigate("presenter.html")
         self._wait_for("document.querySelector('[data-score-count]').textContent.trim() === '3'")
+        disclaimer = self.text("[data-score-disclaimer]")
+        self.assertIn("참가자 브라우저가 제출", disclaimer)
+        self.assertIn("교육용 비공식", disclaimer)
+        self.assertIn("실제 비행 성능", disclaimer)
+        self.assertIn("검증된 측정값이 아닙니다", disclaimer)
         self.assertEqual(
             ["첫째", "둘째", "셋째"],
             self.evaluate(
