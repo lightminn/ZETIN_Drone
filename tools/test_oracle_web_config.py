@@ -121,6 +121,21 @@ class OracleWebConfigTests(unittest.TestCase):
 		self.assertIn("access_log off;", http_block)
 		self.assertIn("access_log off;", https_block)
 
+	def test_module_scripts_have_javascript_mime_under_nosniff(self) -> None:
+		"""Ubuntu's stock mime.types omits mjs, so the site must type modules explicitly."""
+		result = self._render()
+		self.assertEqual(result.returncode, 0, result.stderr)
+		site = (self.output / "mobile-lab.conf").read_text(encoding="utf-8")
+		module_location = (
+			"location ~* \\.mjs$ {\n"
+			"\t\tdefault_type application/javascript;\n"
+			"\t\texpires -1;\n"
+			"\t\ttry_files $uri =404;\n"
+			"\t}"
+		)
+		self.assertIn(module_location, site)
+		self.assertLess(site.index(module_location), site.index("location ~* \\.(?:html|css|js)$"))
+
 	def test_rejects_invalid_domain_backend_port_and_nonabsolute_tls_paths(self) -> None:
 		"""Relaxed values permit config injection, privileged ports, or ambiguous TLS files."""
 		cases: list[tuple[str, object, str | None, str | None]] = [
