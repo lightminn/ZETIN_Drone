@@ -17,27 +17,50 @@ policy_saved=0
 policy_active=0
 
 restore_policy_rc() {
+	local status=0
+	local operation_status=0
 	if (( policy_active )); then
-		rm -f -- "$policy_path"
-		policy_active=0
+		if rm -f -- "$policy_path"; then
+			policy_active=0
+		else
+			status=$?
+		fi
 	fi
-	if (( policy_saved )); then
-		cp -a --no-dereference -- "$policy_backup" "$policy_path"
-		policy_saved=0
+	if (( policy_saved && ! policy_active )); then
+		if cp -a --no-dereference -- "$policy_backup" "$policy_path"; then
+			policy_saved=0
+		else
+			operation_status=$?
+			if (( status == 0 )); then
+				status=$operation_status
+			fi
+		fi
 	fi
+	return "$status"
 }
 
 cleanup() {
 	local status=$?
 	local restore_status=0
+	local cleanup_status=0
 	trap - EXIT
 	set +e
 	restore_policy_rc
 	restore_status=$?
-	find "$work_dir" -mindepth 1 -delete
-	rmdir "$work_dir"
+	if (( restore_status != 0 )); then
+		echo "policy-rc.d restoration failed (status $restore_status); recovery material retained at $work_dir" >&2
+	else
+		find "$work_dir" -mindepth 1 -delete
+		cleanup_status=$?
+		if (( cleanup_status == 0 )); then
+			rmdir "$work_dir"
+			cleanup_status=$?
+		fi
+	fi
 	if (( status == 0 && restore_status != 0 )); then
 		status=$restore_status
+	elif (( status == 0 && cleanup_status != 0 )); then
+		status=$cleanup_status
 	fi
 	exit "$status"
 }

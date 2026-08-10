@@ -243,6 +243,103 @@ class OracleWebConfigTests(unittest.TestCase):
 					self.assertTrue(policy.is_symlink())
 					self.assertEqual(os.readlink(policy), original.name)
 
+	def test_bootstrap_retains_recovery_material_when_policy_restoration_fails(self) -> None:
+		"""Failed guard removal or prior-policy restore must remain visible and recoverable."""
+		bubblewrap = shutil.which("bwrap")
+		if bubblewrap is None:
+			self.skipTest("bubblewrap is unavailable")
+		bootstrap = PROJECT_ROOT / "tools/oracle_web/bootstrap_host.sh"
+		cases = (
+			("rm-after-success", "rm", False, 73),
+			("cp-after-success", "cp", False, 74),
+			("cp-after-apt-error", "cp", True, 42),
+		)
+		for label, failure, fail_install, expected_status in cases:
+			with self.subTest(label=label):
+				fixture = self.root / label
+				upper = fixture / "upper"
+				work = fixture / "work"
+				bin_dir = upper / "bin"
+				sbin_dir = upper / "sbin"
+				libexec_dir = upper / "libexec"
+				var_dir = fixture / "var"
+				bin_dir.mkdir(parents=True)
+				sbin_dir.mkdir()
+				libexec_dir.mkdir()
+				(var_dir / "tmp").mkdir(parents=True)
+				work.mkdir()
+				shutil.copy2("/usr/bin/rm", libexec_dir / "zetin-test-rm")
+				shutil.copy2("/usr/bin/cp", libexec_dir / "zetin-test-cp")
+				apt = bin_dir / "apt-get"
+				apt.write_text(
+					"#!/bin/sh\n"
+					"test -x /usr/sbin/policy-rc.d || exit 91\n"
+					"status=0; /usr/sbin/policy-rc.d fixture || status=$?\n"
+					"test \"$status\" -eq 101 || exit 92\n"
+					"if test \"${FAKE_APT_FAIL:-0}\" = 1 && test \"$1\" = install; then exit 42; fi\n",
+					encoding="utf-8",
+				)
+				(bin_dir / "systemctl").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+				(sbin_dir / "nginx").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+				(bin_dir / "rm").write_text(
+					"#!/bin/sh\n"
+					"for arg do\n"
+					"  if test \"$arg\" = /usr/sbin/policy-rc.d; then\n"
+					"    count=0; test ! -f /usr/sbin/rm-count || read -r count </usr/sbin/rm-count\n"
+					"    count=$((count + 1)); printf '%s\\n' \"$count\" >/usr/sbin/rm-count\n"
+					"    if test \"${FAIL_POLICY_RM:-0}\" = 1 && test \"$count\" -ge 2; then\n"
+					"      echo 'injected policy rm failure' >&2; exit 73\n"
+					"    fi\n"
+					"  fi\n"
+					"done\n"
+					"exec /usr/libexec/zetin-test-rm \"$@\"\n",
+					encoding="utf-8",
+				)
+				(bin_dir / "cp").write_text(
+					"#!/bin/sh\n"
+					"last=; for arg do last=$arg; done\n"
+					"if test \"${FAIL_POLICY_CP:-0}\" = 1 && test \"$last\" = /usr/sbin/policy-rc.d; then\n"
+					"  echo 'injected policy cp failure' >&2; exit 74\n"
+					"fi\n"
+					"exec /usr/libexec/zetin-test-cp \"$@\"\n",
+					encoding="utf-8",
+				)
+				for executable in (
+					apt, bin_dir / "systemctl", sbin_dir / "nginx", bin_dir / "rm", bin_dir / "cp",
+				):
+					os.chmod(executable, 0o755)
+				policy = sbin_dir / "policy-rc.d"
+				original_bytes = b"#!/bin/sh\nexit 23\n"
+				if failure == "cp":
+					policy.write_bytes(original_bytes)
+					os.chmod(policy, 0o751)
+				command = [
+					bubblewrap,
+					"--unshare-user", "--uid", "0", "--gid", "0",
+					"--ro-bind", "/", "/",
+					"--overlay-src", "/usr", "--overlay", str(upper), str(work), "/usr",
+					"--tmpfs", "/etc", "--ro-bind", "/etc/passwd", "/etc/passwd",
+					"--ro-bind", "/etc/group", "/etc/group",
+					"--tmpfs", "/srv", "--bind", str(var_dir), "/var",
+					"--tmpfs", "/usr/local", "--dev", "/dev", "--proc", "/proc",
+					"--setenv", "FAKE_APT_FAIL", "1" if fail_install else "0",
+					"--setenv", "FAIL_POLICY_RM", "1" if failure == "rm" else "0",
+					"--setenv", "FAIL_POLICY_CP", "1" if failure == "cp" else "0",
+					"/usr/bin/bash", str(bootstrap),
+				]
+				completed = subprocess.run(command, capture_output=True, text=True)
+				self.assertEqual(completed.returncode, expected_status, completed.stderr)
+				self.assertIn("policy-rc.d restoration failed", completed.stderr)
+				recovery_dirs = list((var_dir / "tmp").glob("zetin-web-bootstrap.*"))
+				self.assertEqual(len(recovery_dirs), 1)
+				if failure == "rm":
+					self.assertEqual(policy.read_bytes(), b"#!/bin/sh\nexit 101\n")
+				else:
+					self.assertFalse(policy.exists() or policy.is_symlink())
+					backup = recovery_dirs[0] / "policy-rc.d.original"
+					self.assertEqual(backup.read_bytes(), original_bytes)
+					self.assertEqual(os.stat(backup).st_mode & 0o777, 0o751)
+
 
 if __name__ == "__main__":
 	unittest.main()
