@@ -843,6 +843,32 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 			],
 		)
 
+	def test_explicit_null_backend_is_a_static_release(self) -> None:
+		"""Literal JSON null must select the static topology without a service transition."""
+		manifest, files = self._release(
+			"null-static", {"public/index.html": b"explicit null static\n"},
+		)
+		manifest["backend"] = None
+		archive, digest = self._archive("null-static", manifest=manifest, files=files)
+		with tarfile.open(archive, "r:gz") as built:
+			release_bytes = built.extractfile("release.json").read()
+		self.assertIn(b'"backend": null', release_bytes)
+
+		try:
+			result = self._module().activate(
+				"mobile-lab", "null-static", archive, digest,
+				app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			)
+		except self._module().ReleaseError as error:
+			self.fail(f"explicit null backend was rejected: {error}")
+
+		self.assertEqual(
+			result,
+			{"current": "null-static", "previous": None, "backend_restarted": False, "score_reset": False},
+		)
+		self.assertEqual(self._current_target(), "releases/null-static")
+		self.assertFalse(any(command[-1] == "zetin-webapp@mobile-lab.service" for command in self.runner.commands))
+
 	def test_manifest_runtime_members_must_match_backend_topology(self) -> None:
 		"""Static releases cannot smuggle runtime files, and API releases need both runtime parts."""
 		static_manifest, static_files = self._release("static-has-runtime")

@@ -133,13 +133,14 @@ def _validate_manifest(raw: Any, requested_site: str, requested_release: str) ->
 	backend = None
 	if "backend" in raw:
 		backend_value = raw["backend"]
-		if not isinstance(backend_value, dict):
-			raise ReleaseError("backend must be an object")
-		_exact_keys(backend_value, {"port", "health_path"}, set(), "backend")
-		port = backend_value["port"]
-		if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-			raise ReleaseError("backend.port must be an integer from 1 through 65535")
-		backend = {"port": port, "health_path": _url_path(backend_value["health_path"], "backend.health_path")}
+		if backend_value is not None:
+			if not isinstance(backend_value, dict):
+				raise ReleaseError("backend must be an object or null")
+			_exact_keys(backend_value, {"port", "health_path"}, set(), "backend")
+			port = backend_value["port"]
+			if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+				raise ReleaseError("backend.port must be an integer from 1 through 65535")
+			backend = {"port": port, "health_path": _url_path(backend_value["health_path"], "backend.health_path")}
 
 	members_value = raw["members"]
 	if not isinstance(members_value, list) or not members_value:
