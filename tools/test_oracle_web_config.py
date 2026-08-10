@@ -6,6 +6,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -159,6 +160,88 @@ class OracleWebConfigTests(unittest.TestCase):
 		self.assertIn("Restart=on-failure", unit)
 		self.assertNotIn("StateDirectory=", unit)
 		self.assertNotIn("ReadWritePaths=", unit)
+
+	def test_api_method_guard_rejects_implicit_head_with_405(self) -> None:
+		"""Nginx treats HEAD as GET unless an exact request-method guard rejects it."""
+		result = self._render()
+		self.assertEqual(result.returncode, 0, result.stderr)
+		site = (self.output / "mobile-lab.conf").read_text(encoding="utf-8")
+		self.assertIn("if ($request_method !~ ^(GET|POST)$) {", site)
+		self.assertIn("return 405;", site)
+		self.assertNotIn("GET|HEAD|POST", site)
+
+	def test_bootstrap_policy_guard_is_executable_and_always_restores_prior_target(self) -> None:
+		"""Apt maintainer scripts must be suppressed without consuming an existing policy."""
+		bubblewrap = shutil.which("bwrap")
+		if bubblewrap is None:
+			self.skipTest("bubblewrap is unavailable")
+		bootstrap = PROJECT_ROOT / "tools/oracle_web/bootstrap_host.sh"
+		cases = (
+			("absent-success", "absent", False),
+			("file-success", "file", False),
+			("symlink-error", "symlink", True),
+		)
+		for label, prior_kind, fail_install in cases:
+			with self.subTest(label=label):
+				fixture = self.root / label
+				upper = fixture / "upper"
+				work = fixture / "work"
+				bin_dir = upper / "bin"
+				sbin_dir = upper / "sbin"
+				bin_dir.mkdir(parents=True)
+				sbin_dir.mkdir()
+				work.mkdir()
+				apt = bin_dir / "apt-get"
+				systemctl = bin_dir / "systemctl"
+				apt.write_text(
+					"#!/bin/sh\n"
+					"test -x /usr/sbin/policy-rc.d || exit 91\n"
+					"policy_status=0\n"
+					"/usr/sbin/policy-rc.d fixture-action || policy_status=$?\n"
+					"test \"$policy_status\" -eq 101 || exit 92\n"
+					"printf '%s\\n' \"$*\" >>/usr/sbin/apt.log\n"
+					"if test \"${FAKE_APT_FAIL:-0}\" = 1 && test \"$1\" = install; then exit 42; fi\n",
+					encoding="utf-8",
+				)
+				systemctl.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+				nginx = sbin_dir / "nginx"
+				nginx.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+				for executable in (apt, systemctl, nginx):
+					os.chmod(executable, 0o755)
+				policy = sbin_dir / "policy-rc.d"
+				original = sbin_dir / "original-policy"
+				if prior_kind == "file":
+					policy.write_bytes(b"#!/bin/sh\nexit 23\n")
+					os.chmod(policy, 0o751)
+				elif prior_kind == "symlink":
+					original.write_bytes(b"#!/bin/sh\nexit 23\n")
+					os.chmod(original, 0o751)
+					policy.symlink_to(original.name)
+				command = [
+					bubblewrap,
+					"--unshare-user", "--uid", "0", "--gid", "0",
+					"--ro-bind", "/", "/",
+					"--overlay-src", "/usr", "--overlay", str(upper), str(work), "/usr",
+					"--tmpfs", "/etc", "--ro-bind", "/etc/passwd", "/etc/passwd",
+					"--ro-bind", "/etc/group", "/etc/group",
+					"--tmpfs", "/srv", "--tmpfs", "/var", "--dir", "/var/tmp",
+					"--tmpfs", "/usr/local",
+					"--dev", "/dev", "--proc", "/proc",
+					"--setenv", "FAKE_APT_FAIL", "1" if fail_install else "0",
+					"/usr/bin/bash", str(bootstrap),
+				]
+				completed = subprocess.run(command, capture_output=True, text=True)
+				self.assertEqual(completed.returncode, 42 if fail_install else 0, completed.stderr)
+				self.assertEqual((sbin_dir / "apt.log").read_text(encoding="utf-8").splitlines()[0], "update")
+				if prior_kind == "absent":
+					self.assertFalse(policy.exists() or policy.is_symlink())
+				elif prior_kind == "file":
+					self.assertFalse(policy.is_symlink())
+					self.assertEqual(policy.read_bytes(), b"#!/bin/sh\nexit 23\n")
+					self.assertEqual(os.stat(policy).st_mode & 0o777, 0o751)
+				else:
+					self.assertTrue(policy.is_symlink())
+					self.assertEqual(os.readlink(policy), original.name)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,37 @@ install_root=/usr/local/lib/zetin-web/oracle_web
 backup_root=/var/backups/zetin-web
 backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)-$$
 work_dir=$(mktemp -d /var/tmp/zetin-web-bootstrap.XXXXXX)
-trap 'find "$work_dir" -mindepth 1 -delete; rmdir "$work_dir"' EXIT
+policy_path=/usr/sbin/policy-rc.d
+policy_backup="$work_dir/policy-rc.d.original"
+policy_saved=0
+policy_active=0
+
+restore_policy_rc() {
+	if (( policy_active )); then
+		rm -f -- "$policy_path"
+		policy_active=0
+	fi
+	if (( policy_saved )); then
+		cp -a --no-dereference -- "$policy_backup" "$policy_path"
+		policy_saved=0
+	fi
+}
+
+cleanup() {
+	local status=$?
+	local restore_status=0
+	trap - EXIT
+	set +e
+	restore_policy_rc
+	restore_status=$?
+	find "$work_dir" -mindepth 1 -delete
+	rmdir "$work_dir"
+	if (( status == 0 && restore_status != 0 )); then
+		status=$restore_status
+	fi
+	exit "$status"
+}
+trap cleanup EXIT
 
 backup_target() {
 	local target=$1
@@ -42,9 +72,20 @@ install_file() {
 	fi
 }
 
+if [[ -e "$policy_path" || -L "$policy_path" ]]; then
+	cp -a --no-dereference -- "$policy_path" "$policy_backup"
+	policy_saved=1
+fi
+policy_source="$work_dir/policy-rc.d"
+printf '%s\n' '#!/bin/sh' 'exit 101' >"$policy_source"
+policy_active=1
+rm -f -- "$policy_path"
+install -o root -g root -m 0755 -- "$policy_source" "$policy_path"
+
 /usr/bin/apt-get update
 DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install --yes \
 	nginx certbot python3-certbot-nginx curl rsync
+restore_policy_rc
 
 install -d -o root -g root -m 0755 \
 	/srv/zetin-web/apps \

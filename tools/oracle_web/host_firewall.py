@@ -20,6 +20,7 @@ BACKUP_DIR = Path("/var/backups/zetin-web/firewall")
 IPTABLES = "/usr/sbin/iptables"
 IPTABLES_SAVE = "/usr/sbin/iptables-save"
 HTTP_RULE = "-A INPUT -p tcp -m tcp --dport 80 -m comment --comment zetin-web:http -j ACCEPT"
+HTTP_COMMENT = "zetin-web:http"
 HTTP_ARGUMENTS = (
 	"-p", "tcp", "-m", "tcp", "--dport", "80", "-m", "comment",
 	"--comment", "zetin-web:http", "-j", "ACCEPT",
@@ -92,6 +93,22 @@ def _is_equivalent_http(tokens: tuple[str, ...]) -> bool:
 	return _without_comment(tokens) == UNTAGGED_HTTP_TOKENS
 
 
+def _is_tagged_http(tokens: tuple[str, ...]) -> bool:
+	comment_modules = sum(
+		1 for index in range(len(tokens) - 1)
+		if tokens[index:index + 2] == ("-m", "comment")
+	)
+	comment_values = [
+		tokens[index + 1] for index, token in enumerate(tokens[:-1])
+		if token == "--comment"
+	]
+	return (
+		_is_equivalent_http(tokens)
+		and comment_modules == 1
+		and comment_values == [HTTP_COMMENT]
+	)
+
+
 def _filter_policy(text: str) -> _FilterPolicy:
 	lines = text.splitlines(keepends=True)
 	filter_starts = [index for index, line in enumerate(lines) if _line_body(line) == "*filter"]
@@ -136,7 +153,7 @@ def rollback_http_rule(text: str) -> tuple[str, bool]:
 	"""Remove one exact canonical tagged rule from the filter table only."""
 	policy = _filter_policy(text)
 	for index in range(policy.start + 1, policy.end):
-		if _line_body(policy.lines[index]) == HTTP_RULE:
+		if _is_tagged_http(_tokens(policy.lines[index])):
 			del policy.lines[index]
 			return "".join(policy.lines), True
 	return text, False
@@ -320,7 +337,7 @@ def rollback_http(
 	except (OSError, subprocess.SubprocessError, RuntimeError) as error:
 		raise FirewallError(f"cannot inspect live firewall: {error}") from error
 	live_changed = any(
-		_line_body(live_policy.lines[index]) == HTTP_RULE
+		_is_tagged_http(_tokens(live_policy.lines[index]))
 		for index in range(live_policy.start + 1, live_policy.end)
 	)
 	if not persistent_changed and not live_changed:
@@ -330,7 +347,9 @@ def rollback_http(
 		try:
 			_atomic_write(persistent_path, persistent_after.encode("utf-8"), snapshot, replace_func)
 		except OSError as error:
-			raise FirewallError(f"cannot replace persistent rules: {error}") from error
+			restore_error = _restore_if_changed(persistent_path, snapshot, replace_func)
+			detail = f"; persistent restore failed: {restore_error}" if restore_error else ""
+			raise FirewallError(f"cannot replace persistent rules{detail}: {error}") from error
 	if live_changed:
 		try:
 			command_runner(_delete_command())

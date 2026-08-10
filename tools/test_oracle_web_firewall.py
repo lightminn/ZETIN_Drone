@@ -10,7 +10,9 @@ import unittest
 
 
 HTTP_RULE = "-A INPUT -p tcp -m tcp --dport 80 -m comment --comment zetin-web:http -j ACCEPT"
+QUOTED_HTTP_RULE = '-A INPUT -p tcp -m tcp --dport 80 -m comment --comment "zetin-web:http" -j ACCEPT'
 USER_HTTP_RULE = "-A INPUT -p tcp -m tcp --dport 80 -j ACCEPT"
+OTHER_COMMENT_RULE = '-A INPUT -p tcp -m tcp --dport 80 -m comment --comment "user:http" -j ACCEPT'
 REJECT_RULE = "-A INPUT -j REJECT --reject-with icmp-port-unreachable"
 
 
@@ -90,7 +92,7 @@ class OracleWebFirewallTests(unittest.TestCase):
 	def test_ensure_is_idempotent_for_equivalent_rule_before_reject(self) -> None:
 		"""Ignoring an existing untagged equivalent rule duplicates public access rules."""
 		module = self._module()
-		for existing in (HTTP_RULE, USER_HTTP_RULE):
+		for existing in (HTTP_RULE, QUOTED_HTTP_RULE, USER_HTTP_RULE):
 			with self.subTest(existing=existing):
 				original = rules_text(http_rule=existing)
 				changed, inserted = module.ensure_http_rule(original)
@@ -110,17 +112,48 @@ class OracleWebFirewallTests(unittest.TestCase):
 	def test_rollback_removes_only_the_exact_tagged_rule(self) -> None:
 		"""Broad dport-80 deletion would remove a user-owned firewall rule."""
 		module = self._module()
-		original = rules_text(http_rule=HTTP_RULE).replace(
-			f"{HTTP_RULE}\n{REJECT_RULE}",
-			f"{USER_HTTP_RULE}\n{HTTP_RULE}\n{REJECT_RULE}",
+		original = rules_text(http_rule=QUOTED_HTTP_RULE).replace(
+			f"{QUOTED_HTTP_RULE}\n{REJECT_RULE}",
+			f"{USER_HTTP_RULE}\n{OTHER_COMMENT_RULE}\n{QUOTED_HTTP_RULE}\n{REJECT_RULE}",
 		)
-		expected = original.replace(f"{HTTP_RULE}\n", "", 1)
+		expected = original.replace(f"{QUOTED_HTTP_RULE}\n", "", 1)
 
 		changed, removed = module.rollback_http_rule(original)
 
 		self.assertTrue(removed)
 		self.assertEqual(changed.encode(), expected.encode())
 		self.assertIn(USER_HTTP_RULE, changed)
+		self.assertIn(OTHER_COMMENT_RULE, changed)
+
+	def test_quoted_live_and_persistent_rule_are_idempotent_and_rollback_exactly(self) -> None:
+		"""Real iptables-save quoting must not hide the helper-owned live rule."""
+		module = self._module()
+		quoted = rules_text(live_wireguard=True, http_rule=QUOTED_HTTP_RULE)
+		self._write_persistent(quoted)
+		runner = RecordingRunner()
+
+		self.assertEqual(
+			module.ensure_http(
+				persistent_path=self.persistent,
+				backup_dir=self.backup_dir,
+				save_runner=lambda: quoted,
+				command_runner=runner,
+			),
+			{"persistent_changed": False, "live_changed": False},
+		)
+		self.assertEqual(runner.commands, [])
+
+		result = module.rollback_http(
+			persistent_path=self.persistent,
+			backup_dir=self.backup_dir,
+			save_runner=lambda: quoted,
+			command_runner=runner,
+		)
+		self.assertEqual(result, {"persistent_changed": True, "live_changed": True})
+		self.assertNotIn(QUOTED_HTTP_RULE, self.persistent.read_text(encoding="utf-8"))
+		self.assertEqual(runner.commands, [
+			("/usr/sbin/iptables", "-D", "INPUT", "-p", "tcp", "-m", "tcp", "--dport", "80", "-m", "comment", "--comment", "zetin-web:http", "-j", "ACCEPT"),
+		])
 
 	def test_transaction_preserves_live_drift_and_persistent_metadata(self) -> None:
 		"""Saving the live rules wholesale would leak live-only WireGuard into rules.v4."""
@@ -193,6 +226,35 @@ class OracleWebFirewallTests(unittest.TestCase):
 		self.assertEqual(runner.commands[0][1:4], ("-I", "INPUT", "4"))
 		self.assertEqual(runner.commands[1][1:3], ("-D", "INPUT"))
 		self.assertEqual(runner.commands[1][3:], runner.commands[0][4:])
+
+	def test_rollback_restores_persistent_snapshot_when_replace_then_sync_fails(self) -> None:
+		"""A post-replace durability failure must not leave persistence ahead of live state."""
+		module = self._module()
+		original = rules_text(http_rule=HTTP_RULE)
+		self._write_persistent(original, mode=0o640)
+		runner = RecordingRunner()
+		calls = 0
+
+		def replace_then_fail_once(source, destination) -> None:
+			nonlocal calls
+			calls += 1
+			os.replace(source, destination)
+			if calls == 1:
+				raise OSError("fixture failure after replace")
+
+		with self.assertRaises(module.FirewallError):
+			module.rollback_http(
+				persistent_path=self.persistent,
+				backup_dir=self.backup_dir,
+				save_runner=lambda: original,
+				command_runner=runner,
+				replace_func=replace_then_fail_once,
+			)
+
+		self.assertEqual(self.persistent.read_bytes(), original.encode())
+		self.assertEqual(os.stat(self.persistent).st_mode & 0o777, 0o640)
+		self.assertEqual(runner.commands, [])
+		self.assertEqual(calls, 2)
 
 
 if __name__ == "__main__":
