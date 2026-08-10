@@ -10,8 +10,11 @@ import os
 from pathlib import Path
 import tarfile
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import redirect_stdout
+from unittest import mock
 
 
 class RecordingRunner:
@@ -620,6 +623,332 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 			{"current": "cli-release", "previous": None, "backend_restarted": True, "score_reset": True},
 		)
 		self.assertEqual(output.getvalue().count("\n"), 1)
+
+	def test_archive_bytes_cannot_change_between_checksum_and_manifest_parse(self) -> None:
+		"""Reopening the staging pathname after hashing can activate different, unverified bytes."""
+		safe_files = {
+			"public/index.html": b"verified safe bytes\n",
+			"backend/server.py": b"print('server')\n",
+			"run": b"#!/bin/sh\nexec python3 backend/server.py\n",
+		}
+		safe_manifest, _ = self._release("race", safe_files)
+		archive, digest = self._archive("race", manifest=safe_manifest, files=safe_files)
+		safe_archive = archive.read_bytes()
+		hostile_files = dict(safe_files)
+		hostile_files["public/index.html"] = b"replacement bytes\n"
+		hostile_manifest, _ = self._release("race", hostile_files)
+		self._archive("race", manifest=hostile_manifest, files=hostile_files)
+		replacement_archive = archive.read_bytes()
+		archive.write_bytes(safe_archive)
+		module = self._module()
+		original_reader = module._read_archive
+
+		def replace_path_then_parse(source, *arguments):
+			archive.write_bytes(replacement_archive)
+			return original_reader(source, *arguments)
+
+		with mock.patch.object(module, "_read_archive", side_effect=replace_path_then_parse):
+			module.activate(
+				"mobile-lab", "race", archive, digest,
+				app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			)
+
+		installed = self.app_root / "mobile-lab/releases/race/public/index.html"
+		self.assertEqual(installed.read_bytes(), b"verified safe bytes\n")
+
+	def test_staging_ancestor_symlink_is_rejected_without_app_tree_mutation(self) -> None:
+		"""Leaf lstat alone permits a staging parent symlink to redirect the root helper."""
+		real_staging = Path(self.tempdir.name) / "real-staging"
+		symlink_parent = Path(self.tempdir.name) / "staging-parent"
+		symlink_parent.mkdir()
+		os.symlink(real_staging, symlink_parent / "link")
+		staging_root = symlink_parent / "link"
+		manifest, files = self._release("linked-parent")
+		archive = real_staging / "mobile-lab/linked-parent.tar.gz"
+		archive.parent.mkdir(parents=True)
+		with tarfile.open(archive, "w:gz") as built:
+			release_bytes = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+			metadata = tarfile.TarInfo("release.json")
+			metadata.mode = 0o444
+			metadata.size = len(release_bytes)
+			built.addfile(metadata, io.BytesIO(release_bytes))
+			for path, content in files.items():
+				member = tarfile.TarInfo(path)
+				member.mode = 0o555 if path == "run" else 0o444
+				member.size = len(content)
+				built.addfile(member, io.BytesIO(content))
+		digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+		with self.assertRaises(self._module().ReleaseError):
+			self._module().activate(
+				"mobile-lab", "linked-parent", staging_root / "mobile-lab/linked-parent.tar.gz", digest,
+				app_root=self.app_root, staging_root=staging_root, runner=self.runner,
+			)
+
+		self.assertFalse(self.app_root.exists())
+
+	def test_all_public_operations_reject_untrusted_app_tree_modes_and_symlinks(self) -> None:
+		"""Rollback must not follow a site symlink or accept a writable app tree rejected elsewhere."""
+		self._activate("old")
+		site_root = self.app_root / "mobile-lab"
+		moved_site = self.app_root / "moved-site"
+		site_root.rename(moved_site)
+		os.symlink(moved_site.name, site_root)
+		archive, digest = self._archive("new")
+
+		operations = (
+			lambda: self._module().activate(
+				"mobile-lab", "new", archive, digest,
+				app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			),
+			lambda: self._module().rollback("mobile-lab", "old", app_root=self.app_root, runner=self.runner),
+			lambda: self._module().status("mobile-lab", app_root=self.app_root),
+		)
+		for operation in operations:
+			with self.assertRaises(self._module().ReleaseError):
+				operation()
+		self.assertEqual(os.readlink(site_root), moved_site.name)
+
+		site_root.unlink()
+		moved_site.rename(site_root)
+		os.chmod(site_root, 0o777)
+		for operation in operations:
+			with self.assertRaises(self._module().ReleaseError):
+				operation()
+		self.assertEqual(os.stat(site_root).st_mode & 0o777, 0o777)
+
+	def test_new_trusted_directories_use_fixed_modes_despite_restrictive_umask(self) -> None:
+		"""Root contract modes must not depend on the invoking shell or service umask."""
+		archive, digest = self._archive("umask")
+		previous_umask = os.umask(0o077)
+		try:
+			try:
+				self._module().activate(
+					"mobile-lab", "umask", archive, digest,
+					app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+				)
+			except self._module().ReleaseError as error:
+				self.fail(f"fixed directory modes depended on umask: {error}")
+		finally:
+			os.umask(previous_umask)
+		self.assertEqual(os.stat(self.app_root).st_mode & 0o777, 0o755)
+		self.assertEqual(os.stat(self.app_root / "mobile-lab").st_mode & 0o777, 0o755)
+		self.assertEqual(os.stat(self.app_root / "mobile-lab/releases").st_mode & 0o777, 0o755)
+
+	def test_runtime_reconciliation_handles_remove_reorder_and_failed_remove(self) -> None:
+		"""Runtime state must follow backend presence, not only the target manifest's backend flag."""
+		first_static_manifest, first_static_files = self._release(
+			"first-static", {"public/index.html": b"first static\n"},
+		)
+		first_static_manifest.pop("backend")
+		first_archive, first_digest = self._archive(
+			"first-static", manifest=first_static_manifest, files=first_static_files,
+		)
+		first_result = self._module().activate(
+			"mobile-lab", "first-static", first_archive, first_digest,
+			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+		)
+		self.assertFalse(first_result["backend_restarted"])
+		self.assertFalse(first_result["score_reset"])
+		self.assertFalse(any(command[1] in ("restart", "stop") for command in self.runner.commands if len(command) > 1))
+
+		self.runner.commands.clear()
+		self._activate("backend-old")
+		self.assertIn(("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"), self.runner.commands)
+		self.runner.commands.clear()
+		static_manifest, static_files = self._release(
+			"static", {"public/index.html": b"static only\n"},
+		)
+		static_manifest.pop("backend")
+		archive, digest = self._archive("static", manifest=static_manifest, files=static_files)
+
+		result = self._module().activate(
+			"mobile-lab", "static", archive, digest,
+			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+		)
+		self.assertIn(("/usr/bin/systemctl", "stop", "zetin-webapp@mobile-lab.service"), self.runner.commands)
+		self.assertFalse(result["backend_restarted"])
+		self.assertTrue(result["score_reset"])
+
+		# Reordering identical backend members is not a code change.
+		self.runner.commands.clear()
+		manifest, files = self._release("reordered")
+		manifest["members"] = list(reversed(manifest["members"]))
+		archive, digest = self._archive("reordered", manifest=manifest, files=files)
+		result = self._module().activate(
+			"mobile-lab", "reordered", archive, digest,
+			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+		)
+		self.assertTrue(result["backend_restarted"], "adding backend after static must restart it")
+
+		manifest2, files2 = self._release("reordered-again")
+		manifest2["members"] = [manifest2["members"][1], manifest2["members"][0], manifest2["members"][2]]
+		archive2, digest2 = self._archive("reordered-again", manifest=manifest2, files=files2)
+		self.runner.commands.clear()
+		result2 = self._module().activate(
+			"mobile-lab", "reordered-again", archive2, digest2,
+			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+		)
+		self.assertFalse(result2["backend_restarted"])
+		self.assertFalse(result2["score_reset"])
+
+		# Removing backend and then failing HTTPS must restart the prior backend on recovery.
+		static2_manifest, static2_files = self._release(
+			"static-fail", {"public/index.html": b"unhealthy static\n"},
+		)
+		static2_manifest.pop("backend")
+		archive3, digest3 = self._archive("static-fail", manifest=static2_manifest, files=static2_files)
+		failing = RecordingRunner(
+			lambda command, _index: "static HTTPS failed"
+			if command[-1] == "https://uos-drone.kro.kr/" else None
+		)
+		with self.assertRaises(self._module().ReleaseError):
+			self._module().activate(
+				"mobile-lab", "static-fail", archive3, digest3,
+				app_root=self.app_root, staging_root=self.staging_root, runner=failing,
+			)
+		self.assertEqual(self._current_target(), "releases/reordered-again")
+		self.assertEqual(
+			failing.commands[-2:],
+			[
+				("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
+				("/usr/bin/systemctl", "reload", "nginx"),
+			],
+		)
+
+	def test_concurrent_activation_cannot_let_older_recovery_overwrite_newer_success(self) -> None:
+		"""The site transaction lock must cover current inspection through health recovery."""
+		self._activate("old")
+		_, files_a = self._release("new-a")
+		files_a["backend/server.py"] = b"new a\n"
+		archive_a, digest_a = self._archive("new-a", files=files_a)
+		_, files_b = self._release("new-b")
+		files_b["backend/server.py"] = b"new b\n"
+		archive_b, digest_b = self._archive("new-b", files=files_b)
+		a_at_health = threading.Event()
+		release_a = threading.Event()
+		b_finished = threading.Event()
+		results: dict[str, object] = {}
+
+		def runner_a(command, _index=[0]):
+			_index[0] += 1
+			if command[-1] == "http://127.0.0.1:18080/api/scores":
+				a_at_health.set()
+				self.assertTrue(release_a.wait(5))
+				raise RuntimeError("new-a health failed")
+
+		def activate_a() -> None:
+			try:
+				self._module().activate(
+					"mobile-lab", "new-a", archive_a, digest_a,
+					app_root=self.app_root, staging_root=self.staging_root, runner=runner_a,
+				)
+			except Exception as error:
+				results["a"] = error
+
+		def activate_b() -> None:
+			try:
+				results["b"] = self._module().activate(
+					"mobile-lab", "new-b", archive_b, digest_b,
+					app_root=self.app_root, staging_root=self.staging_root, runner=RecordingRunner(),
+				)
+			except Exception as error:
+				results["b"] = error
+			finally:
+				b_finished.set()
+
+		thread_a = threading.Thread(target=activate_a)
+		thread_b = threading.Thread(target=activate_b)
+		thread_a.start()
+		self.assertTrue(a_at_health.wait(5))
+		thread_b.start()
+		time.sleep(0.1)
+		self.assertFalse(b_finished.is_set(), "new-b must wait for new-a's transaction lock")
+		release_a.set()
+		thread_a.join(5)
+		thread_b.join(5)
+		self.assertFalse(thread_a.is_alive())
+		self.assertFalse(thread_b.is_alive())
+		self.assertIsInstance(results["a"], self._module().ReleaseError)
+		self.assertIsInstance(results["b"], dict)
+		self.assertEqual(self._current_target(), "releases/new-b")
+
+	def test_only_validated_stale_current_next_is_reconciled_under_site_lock(self) -> None:
+		"""A crash-stale valid link may be removed, but an attacker-controlled next path must block."""
+		self._activate("old")
+		next_link = self.app_root / "mobile-lab/current.next"
+		os.symlink("releases/old", next_link)
+		try:
+			self._activate("new")
+		except self._module().ReleaseError as error:
+			self.fail(f"validated stale current.next was not reconciled: {error}")
+		self.assertEqual(self._current_target(), "releases/new")
+		self.assertFalse(next_link.exists())
+
+		os.symlink("/tmp/not-a-release", next_link)
+		archive, digest = self._archive("blocked")
+		with self.assertRaises(self._module().ReleaseError):
+			self._module().activate(
+				"mobile-lab", "blocked", archive, digest,
+				app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			)
+		self.assertEqual(self._current_target(), "releases/new")
+		self.assertEqual(os.readlink(next_link), "/tmp/not-a-release")
+
+	def test_file_prefix_collision_fails_before_creating_site_tree(self) -> None:
+		"""A regular file cannot also be the parent directory of another manifest member."""
+		files = {"public": b"file named public\n", "public/index.html": b"nested\n"}
+		manifest, _ = self._release("prefix", files)
+		manifest.pop("backend")
+		archive, digest = self._archive("prefix", manifest=manifest, files=files)
+
+		with self.assertRaises(self._module().ReleaseError):
+			self._module().activate(
+				"mobile-lab", "prefix", archive, digest,
+				app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			)
+
+		self.assertFalse(self.app_root.exists())
+		self.assertEqual(self.runner.commands, [])
+
+	def test_archive_resource_limits_reject_before_creating_site_tree(self) -> None:
+		"""Compressed, count, member, and total limits must stop tar bombs before app writes."""
+		module = self._module()
+		cases: list[tuple[str, str, Path, str]] = []
+		archive_path = self.staging_root / "mobile-lab/resource-compressed.tar.gz"
+		archive_path.parent.mkdir(parents=True, exist_ok=True)
+		archive_path.write_bytes(os.urandom(8 * 1024 * 1024 + 1))
+		cases.append(("compressed", "resource-compressed", archive_path, hashlib.sha256(archive_path.read_bytes()).hexdigest()))
+
+		large = b"x" * (8 * 1024 * 1024 + 1)
+		large_manifest, _ = self._release("resource-member", {"public/large.bin": large})
+		large_manifest.pop("backend")
+		large_archive, large_digest = self._archive(
+			"resource-member", manifest=large_manifest, files={"public/large.bin": large},
+		)
+		cases.append(("member", "resource-member", large_archive, large_digest))
+
+		empty_files = {f"public/{index:03d}.txt": b"" for index in range(257)}
+		count_manifest, _ = self._release("resource-count", empty_files)
+		count_manifest.pop("backend")
+		count_archive, count_digest = self._archive("resource-count", manifest=count_manifest, files=empty_files)
+		cases.append(("count", "resource-count", count_archive, count_digest))
+
+		chunk = b"z" * (1024 * 1024)
+		total_files = {f"public/{index:02d}.bin": chunk for index in range(33)}
+		total_manifest, _ = self._release("resource-total", total_files)
+		total_manifest.pop("backend")
+		total_archive, total_digest = self._archive("resource-total", manifest=total_manifest, files=total_files)
+		cases.append(("total", "resource-total", total_archive, total_digest))
+
+		for label, release_id, archive, digest in cases:
+			with self.subTest(label=label):
+				with self.assertRaises(module.ReleaseError):
+					module.activate(
+						"mobile-lab", release_id, archive, digest,
+						app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+					)
+				self.assertFalse(self.app_root.exists())
 
 
 if __name__ == "__main__":
