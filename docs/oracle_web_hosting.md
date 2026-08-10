@@ -66,14 +66,20 @@ site_config=tools/oracle_web/sites/mobile-lab.json
 로컬에서 고유 backup 경로를 만들고 원격에 전달한다.
 
 ```bash
-backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)
+backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)-$$
 backup_remote="/var/backups/zetin-web/pre-$backup_stamp"
-ssh "$ssh_target" "sudo -n install -d -o root -g root -m 0700 '$backup_remote'"
-ssh "$ssh_target" "sudo -n /usr/sbin/iptables-save | sudo -n tee '$backup_remote/iptables-save.txt' >/dev/null"
+(
+set -euo pipefail
+ssh "$ssh_target" "test ! -e '$backup_remote' && sudo -n install -d -o root -g root -m 0700 '$backup_remote'"
+ssh "$ssh_target" "sudo -n /bin/sh -c 'umask 077; /usr/sbin/iptables-save > \"\$1\"' sh '$backup_remote/iptables-save.txt'"
+ssh "$ssh_target" -- sudo -n test -s "$backup_remote/iptables-save.txt"
 ssh "$ssh_target" "if sudo -n test -f /etc/iptables/rules.v4; then sudo -n cp -a -- /etc/iptables/rules.v4 '$backup_remote/rules.v4'; fi"
 ssh "$ssh_target" "sudo -n cp -a -- /etc/ssh/sshd_config /etc/ssh/sshd_config.d '$backup_remote/'"
 ssh "$ssh_target" "if sudo -n test -d /etc/nginx; then sudo -n cp -a -- /etc/nginx '$backup_remote/nginx'; fi"
 ssh "$ssh_target" -- sudo -n ss -lntup
+ssh "$ssh_target" "sudo -n /bin/sh -c 'umask 077; printf \"%s\\n\" ready > \"\$1\"' sh '$backup_remote/READY'"
+ssh "$ssh_target" -- sudo -n test -s "$backup_remote/READY"
+)
 ```
 
 출력에서 22, 25565, 12222, 13389와 `127.0.0.1:18443`이 예상대로인지 확인한다.
@@ -86,16 +92,28 @@ root helper, Nginx 공통 설정과 hardened systemd template를 설치한다. �
 다르면 `/var/backups/zetin-web/` 아래에 먼저 보관한다.
 
 ```bash
-git diff --quiet HEAD -- tools/oracle_web
-deploy_id=$(git rev-parse --short=12 HEAD)
-bootstrap_local=$(mktemp -d /tmp/zetin-web-bootstrap.XXXXXX)
+deploy_id=$(git rev-parse --short=12 HEAD) &&
+bootstrap_local=$(mktemp -d /tmp/zetin-web-bootstrap.XXXXXX) &&
+bootstrap_remote="/var/tmp/zetin-web-bootstrap-$deploy_id" &&
+(
+set -euo pipefail
+: "${backup_remote:?먼저 변경 전 backup 블록을 같은 shell에서 실행하십시오}"
+ssh "$ssh_target" -- sudo -n test -s "$backup_remote/iptables-save.txt"
+ssh "$ssh_target" -- sudo -n test -s "$backup_remote/READY"
 install -d -m 0700 "$bootstrap_local/oracle_web"
-rsync -a --exclude __pycache__ tools/oracle_web/ "$bootstrap_local/oracle_web/"
-bootstrap_remote="/var/tmp/zetin-web-bootstrap-$deploy_id"
-ssh "$ssh_target" -- install -d -m 0700 "$bootstrap_remote"
+git archive --format=tar HEAD:tools/oracle_web | \
+  tar -x -C "$bootstrap_local/oracle_web"
+test -f "$bootstrap_local/oracle_web/bootstrap_host.sh"
+ssh "$ssh_target" "test ! -e '$bootstrap_remote' && install -d -m 0700 '$bootstrap_remote'"
 scp -r "$bootstrap_local/oracle_web" "$ssh_target:$bootstrap_remote/"
 ssh "$ssh_target" -- sudo -n bash "$bootstrap_remote/oracle_web/bootstrap_host.sh"
+)
 ```
+
+`git archive`는 현재 working tree가 아니라 tracked `HEAD`의
+`tools/oracle_web/`만 추출한다. 따라서 그 아래의 untracked·수정 중 파일은 bundle에
+들어가지 않는다. backup 파일이 없거나 비어 있거나, archive·전송이 실패하면 root
+bootstrap 명령까지 진행하지 않는다.
 
 설치 결과를 확인한다. bootstrap 자체는 Nginx를 start/enable하지 않는다.
 
@@ -189,13 +207,20 @@ find "$config_local" -mindepth 1 -delete && rmdir "$config_local"
 
 ```bash
 firewall_audit=$(mktemp -d /tmp/zetin-web-firewall.XXXXXX)
+(
+set -euo pipefail
 ssh "$ssh_target" -- sudo -n /usr/sbin/iptables-save >"$firewall_audit/live.before"
 ssh "$ssh_target" -- sudo -n cat /etc/iptables/rules.v4 >"$firewall_audit/persistent.before"
+test -s "$firewall_audit/live.before"
+test -s "$firewall_audit/persistent.before"
 ssh "$ssh_target" -- sudo -n /usr/local/sbin/zetin-web-firewall ensure-http
 ssh "$ssh_target" -- sudo -n /usr/sbin/iptables-save >"$firewall_audit/live.after"
 ssh "$ssh_target" -- sudo -n cat /etc/iptables/rules.v4 >"$firewall_audit/persistent.after"
+test -s "$firewall_audit/live.after"
+test -s "$firewall_audit/persistent.after"
 diff -u "$firewall_audit/live.before" "$firewall_audit/live.after" || true
 diff -u "$firewall_audit/persistent.before" "$firewall_audit/persistent.after" || true
+)
 ```
 
 차이는 최종 REJECT 앞의 TCP/80 ACCEPT 한 줄이어야 하며 comment는
@@ -235,6 +260,10 @@ ssh "$ssh_target" 'sudo -n nginx -t && sudo -n systemctl reload nginx.service'
 - 정적 전용은 `backend`와 destination `run`을 둘 다 생략한다.
 - API 포함은 `backend.port`, `backend.health_path`, backend 파일과 destination
   `run`을 함께 둔다. env에서 임의 command 문자열을 실행하지 않는다.
+
+제공된 `render_site`와 Nginx stock template는 exact `/api/scores`만 proxy한다.
+따라서 stock template에서는 `backend.health_path`도 `/api/scores`여야 한다.
+다른 API path는 Nginx template와 테스트를 먼저 검토·추가한 뒤 manifest에 사용한다.
 
 현재 모바일 랩 manifest와 launcher는 다음 명령으로 검토한다.
 
@@ -333,6 +362,8 @@ ssh "$ssh_target" -- curl --fail --silent --show-error --max-time 5 \
   --resolve "$domain:443:127.0.0.1" "https://$domain/" >/dev/null
 ssh "$ssh_target" -- curl --fail --silent --show-error --max-time 5 \
   --resolve "$domain:443:127.0.0.1" "https://$domain/presenter.html" >/dev/null
+ssh "$ssh_target" -- curl --fail --silent --show-error --max-time 5 \
+  --resolve "$domain:443:127.0.0.1" "https://$domain/api/scores" >/dev/null
 ```
 
 운영자 PC에서 공인 IP로 직접 검사한다. 이 검사는 DNS를 바꾸기 전에도 가능하지만
@@ -399,14 +430,21 @@ limit 영향을 받을 수 있으므로 시험 삼아 반복 발급하거나 `--
 먼저 Nginx 설정을 backup하고 실제 운영 이메일로 한 번 발급한다.
 
 ```bash
-backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)
-acme_email=REPLACE_WITH_OPERATIONS_EMAIL
+backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)-$$ &&
+acme_email=REPLACE_WITH_OPERATIONS_EMAIL &&
+(
+set -euo pipefail
+ssh "$ssh_target" -- sudo -n test ! -e \
+  "/var/backups/zetin-web/$site.conf.before-certbot-$backup_stamp"
 ssh "$ssh_target" -- sudo -n cp -a \
   "/etc/nginx/sites-available/$site.conf" \
+  "/var/backups/zetin-web/$site.conf.before-certbot-$backup_stamp"
+ssh "$ssh_target" -- sudo -n test -s \
   "/var/backups/zetin-web/$site.conf.before-certbot-$backup_stamp"
 ssh "$ssh_target" -- sudo -n certbot --nginx \
   --cert-name "$domain" -d "$domain" \
   --email "$acme_email" --agree-tos --no-eff-email
+)
 ```
 
 발급 뒤 config를 `/etc/letsencrypt/live/<domain>/` lineage로 다시 render하여 저장소
@@ -506,10 +544,13 @@ access_log /var/log/nginx/mobile-lab-access.log zetin_event;
 `access_log off`로 되돌리고 reload한 뒤 exact 파일을 비우고 삭제한다.
 
 ```bash
+(
+set -euo pipefail
 ssh "$ssh_target" 'sudo -n nginx -t && sudo -n systemctl reload nginx.service'
 ssh "$ssh_target" -- sudo -n truncate -s 0 -- /var/log/nginx/mobile-lab-access.log
 ssh "$ssh_target" -- sudo -n unlink -- /var/log/nginx/mobile-lab-access.log
 ssh "$ssh_target" -- sudo -n test ! -e /var/log/nginx/mobile-lab-access.log
+)
 ```
 
 삭제 전에 `find /var/log/nginx -maxdepth 1 -type f -name
