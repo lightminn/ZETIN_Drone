@@ -39,7 +39,7 @@ from server import build_server  # noqa: E402
 def payload_for(index: int = 1) -> dict[str, object]:
     return {
         "submission_id": f"01234567-89ab-4cde-8fab-{index:012d}",
-        "nickname": "하늘01",
+        "nickname": f"하늘{index:02d}",
         "score": 876,
         "stability": 87.6,
         "duration_ms": 20000,
@@ -250,6 +250,31 @@ class MobileLabServerTest(unittest.TestCase):
                 set(entry) == {"nickname", "score", "stability", "mode"}
                 for entry in snapshot["scores"]
             )
+        )
+
+    def test_same_nickname_keeps_only_its_best_score(self) -> None:
+        """Retrying under one canonical name must not occupy several leaderboard rows."""
+        attempts = (
+            {**payload_for(80), "nickname": "  파일럿  ", "score": 500, "stability": 50.0},
+            {
+                **payload_for(81),
+                "nickname": "파일럿",
+                "score": 700,
+                "stability": 70.0,
+                "mode": "motion",
+            },
+            {**payload_for(82), "nickname": "파일럿", "score": 700, "stability": 99.0},
+            {**payload_for(83), "nickname": "다른참가자", "score": 600, "stability": 60.0},
+        )
+        for attempt in attempts:
+            self.assertEqual(201, self.post_json(attempt)[0])
+
+        snapshot = self.get_scores()
+        self.assertEqual(2, snapshot["count"])
+        self.assertEqual(["파일럿", "다른참가자"], [entry["nickname"] for entry in snapshot["scores"]])
+        self.assertEqual(
+            {"nickname": "파일럿", "score": 700, "stability": 70.0, "mode": "motion"},
+            snapshot["scores"][0],
         )
 
     def test_unexpected_handler_errors_are_quiet(self) -> None:

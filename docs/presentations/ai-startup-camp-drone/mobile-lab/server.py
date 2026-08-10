@@ -200,10 +200,14 @@ class ScoreStore:
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
-            scores = [
-                {**entry["payload"], "accepted_seq": entry["accepted_seq"]}
-                for entry in self._by_id.values()
-            ]
+            best_by_nickname: dict[str, dict[str, object]] = {}
+            for entry in self._by_id.values():
+                record = {**entry["payload"], "accepted_seq": entry["accepted_seq"]}
+                nickname = str(record["nickname"])
+                current = best_by_nickname.get(nickname)
+                if current is None or int(record["score"]) > int(current["score"]):
+                    best_by_nickname[nickname] = record
+            scores = list(best_by_nickname.values())
         scores.sort(key=lambda record: (-int(record["score"]), int(record["accepted_seq"])))
         return {
             "count": len(scores),

@@ -1,4 +1,5 @@
 import { createChallengeState, restartChallenge, stepChallenge } from "./challenge.mjs";
+import { anonymousNickname } from "./identity.mjs";
 import { OrientationModel, requestSensorAccess } from "./imu.mjs";
 import { joystickVector } from "./joystick.mjs";
 import { submitScore } from "./score-client.mjs";
@@ -24,6 +25,15 @@ const joystickWrap = document.querySelector("[data-joystick-wrap]");
 const joystick = document.querySelector("[data-joystick]");
 const joystickStick = document.querySelector("[data-joystick-stick]");
 const nicknameInput = document.querySelector("[data-nickname]");
+
+let nicknameStorage = null;
+try {
+  nicknameStorage = window.localStorage;
+} catch {
+  // Some private browser modes block even reading the storage property.
+}
+const anonymousAlias = anonymousNickname(nicknameStorage, window.crypto);
+nicknameInput.value = anonymousAlias;
 
 const orientationModel = new OrientationModel();
 let mode = "none";
@@ -367,7 +377,7 @@ function finishChallenge() {
     : 0;
   localResult = Object.freeze({
     submission_id: createSubmissionId(),
-    nickname: nicknameInput.value.trim() || "익명",
+    nickname: nicknameInput.value.trim() || anonymousAlias,
     score: challenge.score,
     stability,
     duration_ms: Math.round(challenge.elapsed * 1000),

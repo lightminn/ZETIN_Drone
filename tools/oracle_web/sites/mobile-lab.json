@@ -19,6 +19,7 @@
     {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/styles.css", "destination": "public/styles.css"},
     {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/src/app.mjs", "destination": "public/src/app.mjs"},
     {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/src/challenge.mjs", "destination": "public/src/challenge.mjs"},
+    {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/src/identity.mjs", "destination": "public/src/identity.mjs"},
     {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/src/imu.mjs", "destination": "public/src/imu.mjs"},
     {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/src/joystick.mjs", "destination": "public/src/joystick.mjs"},
     {"source": "docs/presentations/ai-startup-camp-drone/mobile-lab/src/presenter.mjs", "destination": "public/src/presenter.mjs"},

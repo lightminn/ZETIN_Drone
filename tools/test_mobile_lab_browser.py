@@ -421,6 +421,39 @@ class MobileLabBrowserTests(unittest.TestCase):
             if response.status != 201:
                 raise AssertionError(f"score submission failed: {response.status}")
 
+    def test_default_anonymous_alias_persists_and_replaces_an_empty_submission_name(self) -> None:
+        self._navigate("index.html?sensors=none&clock=manual")
+        alias = self.evaluate("document.querySelector('[data-nickname]').value")
+        self.assertRegex(alias, r"^익명-[0-9A-F]{8}$")
+
+        self._navigate("index.html?sensors=none&clock=manual")
+        self.assertEqual(alias, self.evaluate("document.querySelector('[data-nickname]').value"))
+        self.evaluate(
+            """
+            window.__capturedScore = null;
+            window.fetch = async (input, options = {}) => {
+              if (String(input) !== '/api/scores' || options.method !== 'POST') {
+                throw new Error('unexpected request');
+              }
+              window.__capturedScore = JSON.parse(options.body);
+              return {ok: true, status: 201, json: async () => ({accepted: true})};
+            };
+            """
+        )
+        self.evaluate("document.querySelector('[data-nickname]').value = ''")
+        self._click('[data-action="touch"]')
+        self._click('[data-action="start-challenge"]')
+        self.evaluate("__runFrames(1205)")
+        self._wait_for("document.querySelector('main').dataset.screen === 'result'")
+        self._click('[data-action="submit-score"]')
+        self._wait_for("document.querySelector('[data-submit-status]').textContent.includes('제출했습니다')")
+        self.assertEqual(alias, self.evaluate("window.__capturedScore.nickname"))
+
+    def test_presenter_explains_unique_name_best_score_count(self) -> None:
+        self._navigate("presenter.html", blocked_urls=["*/api/scores"])
+        self.assertEqual("PLAYERS", self.text(".score-count span"))
+        self.assertIn("같은 표시 이름은 최고점", self.text("[data-score-disclaimer]"))
+
     def test_sensor_absence_and_insecure_context_offer_explained_touch_fallback(self) -> None:
         self._navigate("index.html?sensors=none")
         self._wait_for("document.fonts.status === 'loaded'")
