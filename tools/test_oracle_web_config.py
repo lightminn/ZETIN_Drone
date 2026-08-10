@@ -255,6 +255,118 @@ class OracleWebConfigTests(unittest.TestCase):
 					self.assertTrue(policy.is_symlink())
 					self.assertEqual(os.readlink(policy), original.name)
 
+	def test_bootstrap_restores_each_prior_unit_state_without_unnecessary_transitions(self) -> None:
+		"""Rerunning bootstrap must preserve both service-state axes without avoidable restarts."""
+		bubblewrap = shutil.which("bwrap")
+		if bubblewrap is None:
+			self.skipTest("bubblewrap is unavailable")
+		bootstrap = PROJECT_ROOT / "tools/oracle_web/bootstrap_host.sh"
+		units = ("nginx.service", "certbot.timer")
+		cases = (
+			("first-install", (), (), units, units, False),
+			("active-enabled-rerun", units, units, units, units, True),
+			("mixed-rerun", ("nginx.service",), ("certbot.timer",), units, units, False),
+			("inverse-package-effect", units, units, (), (), False),
+		)
+		for label, prior_active, prior_enabled, apt_active, apt_enabled, expect_no_mutations in cases:
+			with self.subTest(label=label):
+				fixture = self.root / label
+				upper = fixture / "upper"
+				work = fixture / "work"
+				bin_dir = upper / "bin"
+				sbin_dir = upper / "sbin"
+				state_dir = sbin_dir / "systemd-state"
+				active_dir = state_dir / "active"
+				enabled_dir = state_dir / "enabled"
+				bin_dir.mkdir(parents=True)
+				active_dir.mkdir(parents=True)
+				enabled_dir.mkdir()
+				work.mkdir()
+				for unit in prior_active:
+					(active_dir / unit).touch()
+				for unit in prior_enabled:
+					(enabled_dir / unit).touch()
+
+				apt = bin_dir / "apt-get"
+				apt.write_text(
+					"#!/bin/sh\n"
+					"test -x /usr/sbin/policy-rc.d || exit 91\n"
+					"policy_status=0\n"
+					"/usr/sbin/policy-rc.d fixture-action || policy_status=$?\n"
+					"test \"$policy_status\" -eq 101 || exit 92\n"
+					"if test \"$1\" = install; then\n"
+					"  for unit in nginx.service certbot.timer; do\n"
+					"    rm -f -- \"/usr/sbin/systemd-state/active/$unit\"\n"
+					"    rm -f -- \"/usr/sbin/systemd-state/enabled/$unit\"\n"
+					"  done\n"
+					"  for unit in ${FAKE_APT_ACTIVE:-}; do\n"
+					"    : >\"/usr/sbin/systemd-state/active/$unit\"\n"
+					"  done\n"
+					"  for unit in ${FAKE_APT_ENABLED:-}; do\n"
+					"    : >\"/usr/sbin/systemd-state/enabled/$unit\"\n"
+					"  done\n"
+					"fi\n",
+					encoding="utf-8",
+				)
+				systemctl = bin_dir / "systemctl"
+				systemctl.write_text(
+					"#!/bin/sh\n"
+					"state=/usr/sbin/systemd-state\n"
+					"command=$1; shift\n"
+					"case \"$command\" in\n"
+					"  is-active|is-enabled)\n"
+					"    if test \"${1:-}\" = --quiet; then shift; fi\n"
+					"    test \"$#\" -eq 1 || exit 93\n"
+					"    test -f \"$state/${command#is-}/$1\"\n"
+					"    ;;\n"
+					"  start|stop|enable|disable)\n"
+					"    now=0\n"
+					"    if test \"${1:-}\" = --now; then now=1; shift; fi\n"
+					"    for unit do\n"
+					"      printf '%s %s\\n' \"$command\" \"$unit\" >>\"$state/operations.log\"\n"
+					"      case \"$command\" in\n"
+					"        start) : >\"$state/active/$unit\" ;;\n"
+					"        stop) rm -f -- \"$state/active/$unit\" ;;\n"
+					"        enable) : >\"$state/enabled/$unit\" ;;\n"
+					"        disable)\n"
+					"          rm -f -- \"$state/enabled/$unit\"\n"
+					"          if test \"$now\" -eq 1; then rm -f -- \"$state/active/$unit\"; fi\n"
+					"          ;;\n"
+					"      esac\n"
+					"    done\n"
+					"    ;;\n"
+					"  daemon-reload) ;;\n"
+					"  *) exit 94 ;;\n"
+					"esac\n",
+					encoding="utf-8",
+				)
+				nginx = sbin_dir / "nginx"
+				nginx.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+				for executable in (apt, systemctl, nginx):
+					os.chmod(executable, 0o755)
+
+				command = [
+					bubblewrap,
+					"--unshare-user", "--uid", "0", "--gid", "0",
+					"--ro-bind", "/", "/",
+					"--overlay-src", "/usr", "--overlay", str(upper), str(work), "/usr",
+					"--tmpfs", "/etc", "--ro-bind", "/etc/passwd", "/etc/passwd",
+					"--ro-bind", "/etc/group", "/etc/group",
+					"--tmpfs", "/srv", "--tmpfs", "/var", "--dir", "/var/tmp",
+					"--tmpfs", "/usr/local", "--dev", "/dev", "--proc", "/proc",
+					"--setenv", "FAKE_APT_ACTIVE", " ".join(apt_active),
+					"--setenv", "FAKE_APT_ENABLED", " ".join(apt_enabled),
+					"/usr/bin/bash", str(bootstrap),
+				]
+				completed = subprocess.run(command, capture_output=True, text=True)
+				self.assertEqual(completed.returncode, 0, completed.stderr)
+				for unit in units:
+					self.assertEqual((active_dir / unit).exists(), unit in prior_active, f"{unit} active drift")
+					self.assertEqual((enabled_dir / unit).exists(), unit in prior_enabled, f"{unit} enabled drift")
+				if expect_no_mutations:
+					operations = state_dir / "operations.log"
+					self.assertFalse(operations.exists(), operations.read_text() if operations.exists() else "")
+
 	def test_bootstrap_retains_recovery_material_when_policy_restoration_fails(self) -> None:
 		"""Failed guard removal or prior-policy restore must remain visible and recoverable."""
 		bubblewrap = shutil.which("bwrap")

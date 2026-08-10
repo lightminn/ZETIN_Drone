@@ -15,6 +15,56 @@ policy_path=/usr/sbin/policy-rc.d
 policy_backup="$work_dir/policy-rc.d.original"
 policy_saved=0
 policy_active=0
+managed_units=(nginx.service certbot.timer)
+unit_was_active=()
+unit_was_enabled=()
+
+capture_unit_states() {
+	local unit
+	for unit in "${managed_units[@]}"; do
+		if /usr/bin/systemctl is-active --quiet "$unit"; then
+			unit_was_active+=(1)
+		else
+			unit_was_active+=(0)
+		fi
+		if /usr/bin/systemctl is-enabled --quiet "$unit"; then
+			unit_was_enabled+=(1)
+		else
+			unit_was_enabled+=(0)
+		fi
+	done
+}
+
+restore_unit_states() {
+	local index unit active_now enabled_now prior_active prior_enabled
+	for index in "${!managed_units[@]}"; do
+		unit=${managed_units[$index]}
+		prior_active=${unit_was_active[$index]}
+		prior_enabled=${unit_was_enabled[$index]}
+		active_now=0
+		enabled_now=0
+		if /usr/bin/systemctl is-active --quiet "$unit"; then
+			active_now=1
+		fi
+		if /usr/bin/systemctl is-enabled --quiet "$unit"; then
+			enabled_now=1
+		fi
+		if (( active_now != prior_active )); then
+			if (( prior_active )); then
+				/usr/bin/systemctl start "$unit"
+			else
+				/usr/bin/systemctl stop "$unit"
+			fi
+		fi
+		if (( enabled_now != prior_enabled )); then
+			if (( prior_enabled )); then
+				/usr/bin/systemctl enable "$unit"
+			else
+				/usr/bin/systemctl disable "$unit"
+			fi
+		fi
+	done
+}
 
 restore_policy_rc() {
 	local status=0
@@ -66,6 +116,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+capture_unit_states
+
 backup_target() {
 	local target=$1
 	local backup="$backup_root/$backup_stamp/${target#/}"
@@ -109,6 +161,7 @@ install -o root -g root -m 0755 -- "$policy_source" "$policy_path"
 DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install --yes \
 	nginx certbot python3-certbot-nginx curl rsync
 restore_policy_rc
+restore_unit_states
 
 install -d -o root -g root -m 0755 \
 	/srv/zetin-web/apps \

@@ -115,11 +115,17 @@ ssh "$ssh_target" -- sudo -n bash "$bootstrap_remote/oracle_web/bootstrap_host.s
 들어가지 않는다. backup 파일이 없거나 비어 있거나, archive·전송이 실패하면 root
 bootstrap 명령까지 진행하지 않는다.
 
-설치 결과를 확인한다. bootstrap 자체는 Nginx를 start/enable하지 않는다.
+설치 결과를 확인한다. 최초 실행 전에 `nginx.service`와 `certbot.timer`가 없었다면
+두 unit은 설치 뒤에도 inactive·disabled여야 한다. bootstrap을 재실행하면 시작 시점의
+active/inactive와 enabled/disabled를 각각 보존한다. 따라서 이미 active·enabled인
+Nginx를 불필요하게 stop/start하거나 disable하지 않는다. 아래 상태 단정은 unit이
+없던 호스트의 최초 설치에만 사용하고, 재실행에서는 실행 전 기록과 실행 후 상태를
+비교한다.
 
 ```bash
 ssh "$ssh_target" -- nginx -v
 ssh "$ssh_target" -- certbot --version
+ssh "$ssh_target" 'test "$(sudo -n systemctl show -p ActiveState --value nginx.service)" = inactive && test "$(sudo -n systemctl show -p UnitFileState --value nginx.service)" = disabled && test "$(sudo -n systemctl show -p ActiveState --value certbot.timer)" = inactive && test "$(sudo -n systemctl show -p UnitFileState --value certbot.timer)" = disabled'
 ssh "$ssh_target" -- sudo -n systemd-analyze verify /etc/systemd/system/zetin-webapp@.service
 ssh "$ssh_target" -- sudo -n nginx -t
 ```
