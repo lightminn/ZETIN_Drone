@@ -28,6 +28,26 @@ test("submitScore resolves rejected fetches as offline without changing the call
   assert.deepEqual(payload, before);
 });
 
+test("submitScore keeps the local result intact when the score service is at capacity", async () => {
+  const localResult = { score: 500, stability: 75, mode: "touch" };
+  const before = structuredClone(localResult);
+
+  const result = await submitScore(
+    async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "score submission capacity reached" }),
+    }),
+    localResult,
+  );
+
+  assert.deepEqual(result, {
+    status: "rejected",
+    response: { error: "score submission capacity reached" },
+  });
+  assert.deepEqual(localResult, before);
+});
+
 test("submitScore keeps a local result object independent from later response changes", async () => {
   const serverResponse = { accepted: true };
   const result = await submitScore(

@@ -5,12 +5,17 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import signal
+import socket
+import ssl
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from http.client import HTTPResponse, RemoteDisconnected
+from http.client import HTTPResponse, HTTPSConnection, RemoteDisconnected
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -27,6 +32,59 @@ SIBLING_FONTS = MOBILE_LAB.parent / "vendor" / "uos-slide-template" / "fonts"
 sys.path.insert(0, str(MOBILE_LAB))
 
 from server import build_server  # noqa: E402
+
+
+# Self-signed localhost material used only by the black-box TLS regression test.
+TEST_CERTIFICATE = """-----BEGIN CERTIFICATE-----
+MIIDCTCCAfGgAwIBAgIUAOfYBdBPCJ5Zt6LAtEz31NWkf64wDQYJKoZIhvcNAQEL
+BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI2MDgwOTIyNTcyNloXDTM2MDgw
+NjIyNTcyNlowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
+AAOCAQ8AMIIBCgKCAQEA8Q2Rgy+vRRJpRTYih3yUqp4nwl8yquiv9guZTAAAFjpt
+U0HNf4qbCS/ZGdQoNyRx7AmSv2b/i8kO0lRv1ehg+locmBc8ND2r+iOcR46OGcXn
+qXdQq/2gorU26weFThE69EYBBLkXXPSXOKOTRvm0ZDfK10+XMRxOWtQzvi5eN6Bc
+GZaDVKjs54+w8Dl9IRPRB+vsK7qa8VmNl9P1W6uWXNd/xmxRWiRhxmL3pkeifi40
+3+liLOm4Hh5ir5vi3LKRNK6goqrnJs4GhnYbl8yrrsd4xV7klEEWsfrAB7JbyM0i
+yLH3+RHy4xFQfLRIgJu+va9aGuKcCNB4RdOZynVY2QIDAQABo1MwUTAdBgNVHQ4E
+FgQUX/KjNPKumvVd9ViwQbHTAlVsnQEwHwYDVR0jBBgwFoAUX/KjNPKumvVd9Viw
+QbHTAlVsnQEwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEATmoi
+YG6TZRfhJEYn/6+LFQ8Ysi+i6w0+3FwpRRy7Z0OeNX2tljEIUCWzRQA2JgzuthE2
+83G5nvET/4LJIufX302ppnns+peFY+0XkpFQFltXvW9z9PS5h5Tba8Tl6C5+oWfE
+t4fNguKVQt9wJYS00B6/W51iqnmqhxCosk7AXJj5PBUX1dN4NR8SFG14gDbXuI9d
+eLeV6eDrmNiBle3qJ3fdowA6FBYuc8HCbWLAYcdq/wVNn8s9R24nQQp6Q/o4xrU7
+WyLVT/ouktRsIL1KC/s94ytTZ90f95Uc4L/ecXNZAbS/lC4jGDSoPJhPIERuwRsr
+BF0SIBHabNXmSiOHHA==
+-----END CERTIFICATE-----
+"""
+
+TEST_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDxDZGDL69FEmlF
+NiKHfJSqnifCXzKq6K/2C5lMAAAWOm1TQc1/ipsJL9kZ1Cg3JHHsCZK/Zv+LyQ7S
+VG/V6GD6WhyYFzw0Pav6I5xHjo4Zxeepd1Cr/aCitTbrB4VOETr0RgEEuRdc9Jc4
+o5NG+bRkN8rXT5cxHE5a1DO+Ll43oFwZloNUqOznj7DwOX0hE9EH6+wruprxWY2X
+0/Vbq5Zc13/GbFFaJGHGYvemR6J+LjTf6WIs6bgeHmKvm+LcspE0rqCiqucmzgaG
+dhuXzKuux3jFXuSUQRax+sAHslvIzSLIsff5EfLjEVB8tEiAm769r1oa4pwI0HhF
+05nKdVjZAgMBAAECggEAA2uDra8nGCkqMZ7fSSy29uxE4QpZKTKyYM+ZSKPn0+Bf
+xQFx2KC/HiAZnQO/xurFo1ZKCKmXWosTs6PNnA+j+lN1RLLOfnGVWquxGnJ2+gZ3
+iNXEFDmssNpHos365Qves86wYxwvF7CUnt6dQG10W22T0K1yuEdN8tIvJp4fOpWM
+/ZbjbuQhn3n42gx5he35eElOW9cWeqKeBZka3Di5HobC7bhA6CkDtNP/8CkpA7Wl
+FgcmjPmsar8DIejdus+cNjMIr+/nxUeD3OD95MRTViZUIJiFFslSjpbP7Fo7hT+j
+Wu4bvnVbn3E0BFcFm9HelH2HMQFYaEELD9o+eiF53QKBgQD+AqNNa5AoqfhjPPZv
+86joJAiaoCFpr+YfSVRl2vIhA7OtlU1AmqB22QD6s5UgtLKqBDGB11p2CxzhM6Zn
+IpKcQkyGznw/Hq1b5M7ND+4ELBfRHq+jpnLjqpSDCxeHkMzmAlScYLlZWaNrzrvh
+Twi2kzwuxWGEv5bNga1vz0K0DQKBgQDy8PKNgpznbLt39z23y0B22AKCaDFbsemH
+XbF+Ib9FLjjtg4HtNsB5mzhXStswLQOOzYnIr57MMZ95RgheaoEQ8vnx/QYc5/ER
+5ct0f//ZIpbyRU23JqNeu7Zc7xblojDQAg9nER21bn7ZxP2K+DZTeSFhYUJ18AxI
+6bhImE0I/QKBgQCtN/dNEJEaae6tHiGgbrU8uXX0nEas3/s6UrNvUkPUJ8YcFbi8
+2bWb1phIXrbPuuor7vgj50wVO7bSDHrp0jXQwZWWSLGKCc2G4R310WsrBTaosRht
+rVCj2Ou2AZZmKGTSZbx1d7BuMiazmiOdnlv+xaFA8/FwqYaZVlmD6f8+8QKBgQDT
+M9O6YJWlv+qO1dvLACFv8ETmOEzIybgbHcIjxJTzQMbu/cgjgNj+H4pwoTxC+q9A
+I8IoPT2RiYZ5uP+njXHdWU8gKHd7A82ZYKxrAKhdjeuqfcOdeTLINerJinXedw12
+mIPpd4DbbU9MZSyC91zLXuA9N3++5kzXypCSVA2MxQKBgFWvVjvuDd5m9k6HqQJm
+13moVL5tWK+9DrQq8pO7WqGfEvNsMLz+5ZASLffD0MHMoH8tRqrllRrmfy0HYEEy
+fa8bo+KLIjcq87AYIVDk9xjA7v2h6HJ8lKN7HWYUsYRCkjr1YFbmLW05GcDs8VbT
+gFrMthb5tMH0DI1k9YL8tbyr
+-----END PRIVATE KEY-----
+"""
 
 
 def payload_for(index: int = 1) -> dict[str, object]:
@@ -298,6 +356,200 @@ class MobileLabServerTest(unittest.TestCase):
         self.assertEqual(49, statuses.count(200))
         self.assertTrue(all(body["accepted"] for _, _, body in retry_results))
         self.assertEqual(51, self.get_scores()["count"])
+
+    def test_submission_capacity_keeps_existing_retries_idempotent(self) -> None:
+        """A full leaderboard must preserve retries, conflicts, and its last snapshot."""
+        for index in range(1, 501):
+            status, _, _ = self.post_json(payload_for(index))
+            self.assertEqual(201, status, index)
+        before_rejection = self.get_scores()
+        self.assertEqual(500, before_rejection["count"])
+
+        retry = payload_for(1)
+        status, headers, duplicate = self.post_json(retry)
+        self.assertEqual(200, status)
+        self.assertEqual("no-store", headers["Cache-Control"])
+        self.assertTrue(duplicate["duplicate"])
+
+        conflict = {**retry, "score": 875}
+        status, _, rejected = self.post_json(conflict)
+        self.assertEqual(409, status)
+        self.assertEqual(
+            "submission_id already belongs to a different payload", rejected["error"]
+        )
+
+        status, headers, rejected = self.post_json(payload_for(501))
+        self.assertEqual(503, status)
+        self.assertEqual("no-store", headers["Cache-Control"])
+        self.assertEqual({"error": "score submission capacity reached"}, rejected)
+        self.assertEqual(before_rejection, self.get_scores())
+
+        burst_httpd = build_server("127.0.0.1", 0, self._temporary_directory.name)
+        burst_thread = threading.Thread(target=burst_httpd.serve_forever, daemon=True)
+        burst_thread.start()
+        burst_host, burst_port = burst_httpd.server_address[:2]
+        burst_url = f"http://{burst_host}:{burst_port}"
+
+        def submit_to_burst(payload: object) -> tuple[int, dict[str, object]]:
+            request = Request(
+                f"{burst_url}/api/scores",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                response: HTTPResponse = urlopen(request, timeout=5)
+            except HTTPError as error:
+                response = error
+            with response:
+                return response.status, json.loads(response.read())
+
+        try:
+            for index in range(1, 500):
+                status, _ = submit_to_burst(payload_for(index))
+                self.assertEqual(201, status, index)
+            with ThreadPoolExecutor(max_workers=50) as executor:
+                results = list(
+                    executor.map(submit_to_burst, (payload_for(index) for index in range(500, 550)))
+                )
+            statuses = [status for status, _ in results]
+            self.assertEqual(1, statuses.count(201))
+            self.assertEqual(49, statuses.count(503))
+            self.assertTrue(
+                all(
+                    body == {"error": "score submission capacity reached"}
+                    for status, body in results
+                    if status == 503
+                )
+            )
+            snapshot = urlopen(f"{burst_url}/api/scores", timeout=5)
+            with snapshot:
+                self.assertEqual(500, json.loads(snapshot.read())["count"])
+        finally:
+            burst_httpd.shutdown()
+            burst_thread.join(timeout=5)
+            burst_httpd.server_close()
+
+
+class MobileLabTLSConcurrencyTest(unittest.TestCase):
+    """A stalled TLS client must not block the classroom accept loop."""
+
+    @contextlib.contextmanager
+    def tls_server(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            certificate_path = temporary_path / "localhost-cert.pem"
+            private_key_path = temporary_path / "localhost-key.pem"
+            certificate_path.write_text(TEST_CERTIFICATE, encoding="ascii")
+            private_key_path.write_text(TEST_PRIVATE_KEY, encoding="ascii")
+
+            reservation = socket.socket()
+            reservation.bind(("127.0.0.1", 0))
+            port = reservation.getsockname()[1]
+            reservation.close()
+
+            process = subprocess.Popen(
+                (
+                    sys.executable,
+                    str(MOBILE_LAB / "server.py"),
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(port),
+                    "--cert",
+                    str(certificate_path),
+                    "--key",
+                    str(private_key_path),
+                ),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            try:
+                yield process, port
+            finally:
+                shutdown_started = time.monotonic()
+                if process.poll() is None:
+                    process.send_signal(signal.SIGINT)
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
+                    self.fail("TLS server close exceeded two seconds")
+                self.assertLess(time.monotonic() - shutdown_started, 2)
+
+    def wait_for_raw_connection(self, process: subprocess.Popen[bytes], port: int) -> socket.socket:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                self.fail(f"TLS server exited with status {process.returncode}")
+            try:
+                return socket.create_connection(("127.0.0.1", port), timeout=0.1)
+            except OSError:
+                time.sleep(0.02)
+        self.fail("TLS server did not start")
+
+    def get_scores(self, port: int) -> tuple[float, int, dict[str, object]]:
+        connection = HTTPSConnection(
+            "127.0.0.1",
+            port,
+            context=ssl._create_unverified_context(),
+            timeout=2,
+        )
+        started = time.monotonic()
+        try:
+            connection.request("GET", "/api/scores")
+            response = connection.getresponse()
+            return time.monotonic() - started, response.status, json.loads(response.read())
+        finally:
+            connection.close()
+
+    def assert_socket_closed(self, client: socket.socket, timeout_seconds: float) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        client.settimeout(0.1)
+        while time.monotonic() < deadline:
+            try:
+                received = client.recv(1)
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            self.assertEqual(b"", received)
+            return
+        self.fail("idle TLS socket remained open")
+
+    def test_idle_tcp_client_does_not_block_a_valid_tls_request(self) -> None:
+        """Wrapping the listener with eager handshakes would serialize all clients."""
+        with self.tls_server() as (process, port):
+            idle_client = self.wait_for_raw_connection(process, port)
+            try:
+                elapsed, status, body = self.get_scores(port)
+                self.assertLess(elapsed, 2)
+                self.assertEqual(200, status)
+                self.assertEqual({"count": 0, "scores": []}, body)
+            finally:
+                idle_client.close()
+
+    def test_idle_tls_handshakes_are_bounded_reclaimed_and_do_not_delay_shutdown(self) -> None:
+        """Excess raw TCP clients must not retain unbounded TLS workers."""
+        with self.tls_server() as (process, port):
+            idle_clients = [self.wait_for_raw_connection(process, port)]
+            idle_clients.extend(
+                socket.create_connection(("127.0.0.1", port), timeout=1)
+                for _ in range(11)
+            )
+            try:
+                self.assert_socket_closed(idle_clients[-1], 0.75)
+                for client in idle_clients[:-1]:
+                    self.assert_socket_closed(client, 1.5)
+
+                elapsed, status, body = self.get_scores(port)
+                self.assertLess(elapsed, 2)
+                self.assertEqual(200, status)
+                self.assertEqual({"count": 0, "scores": []}, body)
+            finally:
+                for client in idle_clients:
+                    client.close()
 
 
 class DefaultMobileLabTopologyTest(unittest.TestCase):

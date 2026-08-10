@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import mimetypes
+import socket
 import ssl
 import threading
 import unicodedata
@@ -17,6 +18,10 @@ from urllib.parse import unquote, urlsplit
 
 
 MAX_REQUEST_BYTES = 4096
+MAX_UNIQUE_SUBMISSIONS = 500
+TLS_HANDSHAKE_TIMEOUT_SECONDS = 1.0
+HTTP_READ_TIMEOUT_SECONDS = 5.0
+MAX_CONCURRENT_TLS_HANDSHAKES = 8
 ALLOWED_FIELDS = frozenset(
     {"submission_id", "nickname", "score", "stability", "duration_ms", "mode"}
 )
@@ -39,13 +44,47 @@ class SubmissionConflict(ValueError):
     """A submission ID was already accepted with a different payload."""
 
 
+class SubmissionCapacityExceeded(ValueError):
+    """The score service has reached its unique submission capacity."""
+
+
 class MobileLabHTTPServer(ThreadingHTTPServer):
     """Threaded server sized to accept a full classroom submission burst."""
 
     request_queue_size = 64
 
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self._tls_handshake_slots = threading.BoundedSemaphore(
+            MAX_CONCURRENT_TLS_HANDSHAKES
+        )
+
     def handle_error(self, request: object, client_address: object) -> None:
         del request, client_address
+
+    def process_request_thread(
+        self, request: socket.socket, client_address: tuple[str, int]
+    ) -> None:
+        if isinstance(request, ssl.SSLSocket):
+            if not self._tls_handshake_slots.acquire(blocking=False):
+                request.close()
+                return
+            try:
+                request.settimeout(TLS_HANDSHAKE_TIMEOUT_SECONDS)
+                request.do_handshake()
+                request.settimeout(HTTP_READ_TIMEOUT_SECONDS)
+            except (OSError, ssl.SSLError):
+                request.close()
+                return
+            finally:
+                self._tls_handshake_slots.release()
+
+        try:
+            self.finish_request(request, client_address)
+        except Exception:
+            self.handle_error(request, client_address)
+        finally:
+            self.shutdown_request(request)
 
 
 def _invalid(message: str) -> None:
@@ -120,10 +159,17 @@ def _validate_payload(payload: object) -> dict[str, object]:
 class ScoreStore:
     """Atomically accepts idempotent submissions and returns ranked snapshots."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_submissions: int = MAX_UNIQUE_SUBMISSIONS) -> None:
+        if (
+            isinstance(max_submissions, bool)
+            or not isinstance(max_submissions, int)
+            or max_submissions < 1
+        ):
+            raise ValueError("max_submissions must be a positive integer")
         self._lock = threading.Lock()
         self._by_id: dict[str, dict[str, object]] = {}
         self._next_sequence = 1
+        self._max_submissions = max_submissions
 
     @staticmethod
     def _public_record(record: dict[str, object]) -> dict[str, object]:
@@ -140,6 +186,9 @@ class ScoreStore:
                         "submission_id already belongs to a different payload"
                     )
                 return self._public_record(existing["payload"]), False
+
+            if len(self._by_id) >= self._max_submissions:
+                raise SubmissionCapacityExceeded("score submission capacity reached")
 
             accepted_seq = self._next_sequence
             self._next_sequence += 1
@@ -162,11 +211,16 @@ class ScoreStore:
         }
 
 
-def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTPServer:
+def build_server(
+    host: str,
+    port: int,
+    static_root: str | Path,
+    max_submissions: int = MAX_UNIQUE_SUBMISSIONS,
+) -> MobileLabHTTPServer:
     """Build a thread-safe score API and static server rooted at ``static_root``."""
     root = Path(static_root).resolve()
     font_root = (root.parent / "vendor" / "uos-slide-template" / "fonts").resolve()
-    store = ScoreStore()
+    store = ScoreStore(max_submissions=max_submissions)
 
     class ScoreRequestHandler(BaseHTTPRequestHandler):
         server_version = "MobileLabScoreServer/1.0"
@@ -268,6 +322,9 @@ def build_server(host: str, port: int, static_root: str | Path) -> ThreadingHTTP
             except SubmissionConflict as error:
                 self._send_json(HTTPStatus.CONFLICT, {"error": str(error)})
                 return
+            except SubmissionCapacityExceeded as error:
+                self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(error)})
+                return
             self._send_json(
                 HTTPStatus.CREATED if created else HTTPStatus.OK,
                 {"accepted": True, "duplicate": not created, "record": record},
@@ -294,7 +351,11 @@ def main() -> None:
     if arguments.cert:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(arguments.cert, arguments.key)
-        httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+        httpd.socket = context.wrap_socket(
+            httpd.socket,
+            server_side=True,
+            do_handshake_on_connect=False,
+        )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

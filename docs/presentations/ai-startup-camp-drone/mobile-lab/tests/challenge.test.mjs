@@ -27,12 +27,18 @@ function runSeed(seed, inputForState = () => ({})) {
   let maxTilt = 0;
 
   for (let index = 0; index < 1200; index += 1) {
-    state = stepChallenge(state, inputForState(state), FIXED_STEP);
+    const previousState = state;
+    const beforeUpdate = structuredClone(previousState);
+    state = stepChallenge(previousState, inputForState(previousState), FIXED_STEP);
+    assert.deepEqual(previousState, beforeUpdate);
     history.push([state.roll, state.pitch]);
     maxTilt = Math.max(maxTilt, Math.hypot(state.roll, state.pitch));
   }
 
-  return { state, history, maxTilt };
+  const elapsedMs = state.elapsed * 1000;
+  assert.equal(elapsedMs, 20_000, `seed ${seed.toString(16)} calibration duration`);
+  assert.equal(state.finished, true, `seed ${seed.toString(16)} calibration completion`);
+  return { state, history, maxTilt, elapsedMs };
 }
 
 test("identical seeded fixed-step inputs produce byte-for-byte equal terminal states", () => {
