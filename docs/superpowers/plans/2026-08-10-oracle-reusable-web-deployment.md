@@ -250,9 +250,12 @@ mock SSH가 아니라 임시 `/srv` 대체 root와 실제 tar를 사용한다.
 - 실패 중 임시 디렉터리만 해당 site 아래에서 정리하고 다른 site/release는 유지한다.
 - rollback은 존재하는 검증된 release로만 current를 교체하고 삭제하지 않는다.
 - pre-switch `nginx -t` 실패는 current를 바꾸지 않는다.
-- static member만 바뀐 release는 backend service를 restart하지 않아 기존 점수를
-  보존한다. `backend/` 또는 `run` hash 변경과 첫 배포만 service를 restart하고 결과에
-  `score_reset: true`를 명시한다.
+- 정적 전용 release(`backend: null`)는 첫 배포와 정적 변경 모두 systemd 앱을
+  만들거나 restart하지 않고 `score_reset: false`다. API release는 첫 배포 또는
+  `backend/`·`run` hash 변경 때 service를 restart하고 `score_reset: true`다. API에서
+  정적으로 전환할 때는 기존 service를 stop하고 `score_reset: true`다. backend가 없는
+  `release.json`에 `backend/`나 `run` member가 있거나, backend가 있는데 둘 중 하나가
+  없으면 preflight에서 inconsistent release로 거부한다.
 - switch 후 loopback API 또는 local-SNI HTTPS health 실패는 이전 current로 원자
   복구하고 필요한 service restart와 Nginx reload를 수행한다. rollback 실패도 원래
   오류와 함께 비정상 종료로 보존한다.
@@ -280,7 +283,7 @@ activation의 고정 순서는 다음이다.
 
 1. `/usr/sbin/nginx -t`
 2. `current.next` relative symlink를 만들고 `os.replace()`로 current 교체
-3. 첫 배포 또는 backend/run hash 변경 때만
+3. 첫 API 배포 또는 backend/run hash 변경 때만
    `systemctl restart zetin-webapp@<validated-site>.service`
 4. `systemctl reload nginx`
 5. manifest의 loopback backend health 확인
