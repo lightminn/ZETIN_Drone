@@ -42,8 +42,8 @@
 5. 거부 뒤 GET count와 top 10 snapshot은 바뀌지 않는다.
 6. 499개를 채운 뒤 서로 다른 50개를 동시에 제출하면 정확히 1개만 성공하고 49개는
    cap 거부이며 최종 count는 500이다.
-7. `submitScore()`가 503을 받아도 호출자가 보유한 로컬 결과 객체를 유지하고 calm
-   offline 결과를 반환한다.
+7. `submitScore()`가 503을 받아도 호출자가 보유한 payload를 바꾸지 않고 기존 계약인
+   calm `{status: "rejected", response}`를 반환한다. 화면의 로컬 결과는 유지된다.
 
 Run and confirm RED:
 
@@ -66,12 +66,14 @@ max_submissions=MAX_UNIQUE_SUBMISSIONS)`로 작은 cap을 주입할 수 있게 �
 existing = self._by_id.get(submission_id)
 if existing is not None:
     # 동일 payload retry 또는 conflict를 먼저 처리
-if len(self._by_id) >= MAX_UNIQUE_SUBMISSIONS:
+if len(self._by_id) >= self._max_submissions:
     raise SubmissionCapacityExceeded("score submission capacity reached")
 # 신규 record 삽입
 ```
 
-HTTP handler는 이 예외만 503으로 직렬화하고 `Cache-Control: no-store`를 유지한다. 클라이언트 결과 보존 동작은 기존 `score-client.mjs` 계약을 바꾸지 않는다.
+생성자는 양의 정수 cap만 `self._max_submissions`에 저장한다. HTTP handler는 이 예외만
+503으로 직렬화하고 `Cache-Control: no-store`를 유지한다. 클라이언트 결과 보존 동작은
+기존 `score-client.mjs`의 rejected 계약을 바꾸지 않는다.
 
 - [ ] **Step 3: idle TLS를 accept HOL에서 제한된 worker 경계로 옮긴다**
 
@@ -126,13 +128,16 @@ git commit -m "fix: harden mobile lab score service"
 임시 repo fixture로 builder CLI를 실행해 다음을 검증한다.
 
 - 산출물 member가 정확히 `release.json`, `public/index.html`, `public/presenter.html`, `public/styles.css`, 7개 `public/src/*.mjs`, QR 라이브러리 3파일, 글꼴 3파일, `backend/server.py`, `run`이다.
-- `tests/`, `README.md`, presentation HTML/PPTX, `scripts/control_dualsense.py`, PDF, `.git`, 인증서·키는 없다.
+- `tests/`, 모바일 랩 top-level `README.md`, presentation HTML/PPTX,
+  `scripts/control_dualsense.py`, PDF, `.git`, 인증서·키는 없다. 공개 allowlist에 명시된
+  QR 라이브러리의 `public/vendor/qrcode-generator/README.md`는 포함한다.
 - archive member는 regular file뿐이고 uid/gid 0, uname/gname `root`, mtime 0이다.
 - launcher만 0555, 나머지 archive 파일은 0444다. host helper가 필요한 directory를
   0555로 만든다.
 - 동일 입력과 release ID로 두 번 만든 `.tar.gz` SHA-256이 같다.
-- 누락·dirty allowlist 파일, 잘못된 release ID, repo 밖 output/member 경로는 비정상
-  종료한다. allowlist 밖 사용자 PDF가 dirty/untracked인 것은 build를 막지 않는다.
+- 누락·dirty allowlist 파일, 잘못된 release ID, repo 밖으로 탈출하는 source/member
+  경로는 비정상 종료한다. output archive는 명시적 `/tmp` 등 repo 밖 경로를 허용한다.
+  allowlist 밖 사용자 PDF가 dirty/untracked인 것은 build를 막지 않는다.
 - manifest의 absolute/traversal/backslash/glob source·destination, 중복 destination,
   symlink/non-regular source, 잘못된 health path·port를 거부한다.
 
@@ -190,15 +195,29 @@ file이고 `git diff --quiet HEAD -- <literal paths>`인지를 확인한다. 그
   --release-id <clean-git-sha> --output /tmp/mobile-lab-<sha>.tar.gz
 ```
 
-`release.json`은 schema 1, site, release ID, source commit, 각 member의 SHA-256,
-byte size와 mode를 key 정렬 JSON으로 기록한다. archive `.sha256` sidecar도 만든다.
+`release.json`은 schema 1, site, release ID, source commit, `server_name`, `public_ipv4`,
+`https_health_paths`, optional backend port/health path, 각 member의 SHA-256, byte size와
+mode를 key 정렬 JSON으로 기록한다. 원격 activation과 status는 이 immutable metadata를
+읽는다. archive `.sha256` sidecar도 만든다.
 launcher는 자신의 release root를 계산해 다음만 실행한다.
 
 ```text
 /usr/bin/python3 backend/server.py --host 127.0.0.1 --port $ZETIN_WEB_PORT --static-root public
 ```
 
-- [ ] **Step 3: 제품 repo에서 실물 archive 검사**
+- [ ] **Step 3: 시험 및 구현 파일 커밋**
+
+```bash
+PYTHONPYCACHEPREFIX=/tmp/oracle-web-release \
+  /home/light/anaconda3/bin/python -m unittest tools.test_oracle_web_release -v
+git diff --check
+git add tools/oracle_web/__init__.py tools/oracle_web/common.py \
+  tools/oracle_web/site_manifest.py tools/oracle_web/build_release.py \
+  tools/oracle_web/sites tools/test_oracle_web_release.py
+git commit -m "feat: build allowlisted Oracle web releases"
+```
+
+- [ ] **Step 4: clean commit의 제품 repo에서 실물 archive 검사**
 
 ```bash
 release_id=$(git rev-parse --short=12 HEAD)
@@ -211,18 +230,6 @@ sha256sum "/tmp/mobile-lab-$release_id.tar.gz"
 ```
 
 `tar -tzf` 전체 목록을 확인해 사용자 PDF, PPTX, 펌웨어, 지상국, 테스트가 없음을 확인한다.
-
-- [ ] **Step 4: 시험 및 커밋**
-
-```bash
-PYTHONPYCACHEPREFIX=/tmp/oracle-web-release \
-  /home/light/anaconda3/bin/python -m unittest tools.test_oracle_web_release -v
-git diff --check
-git add tools/oracle_web/__init__.py tools/oracle_web/common.py \
-  tools/oracle_web/site_manifest.py tools/oracle_web/build_release.py \
-  tools/oracle_web/sites tools/test_oracle_web_release.py
-git commit -m "feat: build allowlisted Oracle web releases"
-```
 
 ---
 
@@ -257,7 +264,7 @@ CLI는 서버에서 root로 다음처럼 사용한다.
 ```bash
 sudo -n /usr/local/sbin/zetin-web-release activate \
   --site mobile-lab --release-id <id> \
-  --archive /var/tmp/zetin-web-mobile-lab-<id>.tar.gz --sha256 <hex>
+  --archive /var/tmp/zetin-web-staging/mobile-lab/<id>.tar.gz --sha256 <hex>
 sudo -n /usr/local/sbin/zetin-web-release rollback \
   --site mobile-lab --release-id <previous-id>
 sudo -n /usr/local/sbin/zetin-web-release status --site mobile-lab
@@ -346,9 +353,14 @@ CLI를 임시 output directory에 실행해 실제 생성 파일을 검사한다
 
 `bootstrap_host.sh`는 root가 아니면 실패하고, 다음만 수행한다.
 
-1. `apt-get update`, `apt-get install --yes nginx certbot python3-certbot-nginx`.
+1. `apt-get update`, `apt-get install --yes nginx certbot python3-certbot-nginx curl rsync`.
 2. `/srv/zetin-web/apps`, `/etc/zetin-web`, `/etc/zetin-web/tls`, `/var/lib/zetin-web`를 0755/root로 만든다.
-3. version-controlled `host_release.py`, `host_firewall.py`, systemd template, Nginx limits를 `install`로 root 소유 배치한다.
+3. `tools/oracle_web` Python package를 root-owned
+   `/usr/local/lib/zetin-web/oracle_web/`에 설치한다. 고정 wrapper
+   `/usr/local/sbin/zetin-web-release`와 `/usr/local/sbin/zetin-web-firewall`은
+   `PYTHONPATH=/usr/local/lib/zetin-web /usr/bin/python3 -m
+   oracle_web.<host_module>`만 실행한다. systemd template와 Nginx limits도 `install`로
+   root 소유 배치한다.
 4. 기존 대상 파일 내용이 다르면 `/var/backups/zetin-web/<UTC timestamp>/`에 mode 0600 복사한 뒤 교체한다.
 5. `systemctl daemon-reload`, `nginx -t`를 실행한다. 사이트 생성·방화벽·인증서·DNS는 건드리지 않는다.
 
@@ -410,7 +422,7 @@ CLI 계약:
 /home/light/anaconda3/bin/python -m tools.oracle_web.deploy_release deploy \
   --target Oracle --site mobile-lab --release-id <id> --archive /tmp/mobile-lab-<id>.tar.gz
 /home/light/anaconda3/bin/python -m tools.oracle_web.check_status \
-  --target Oracle --site mobile-lab
+  --target Oracle --site-config tools/oracle_web/sites/mobile-lab.json
 /home/light/anaconda3/bin/python -m tools.oracle_web.deploy_release rollback \
   --target Oracle --site mobile-lab --release-id <previous-id>
 ```
@@ -458,7 +470,9 @@ git commit -m "feat: deploy Oracle web releases over SSH"
 - Create: `docs/oracle_web_hosting.md`
 - Modify: `docs/README.md`
 - Modify: `docs/presentations/ai-startup-camp-drone/mobile-lab/README.md`
+- Modify: `docs/presentations/ai-startup-camp-drone/mobile-lab/presenter.html`
 - Modify: `tools/check_repo_layout.py`
+- Modify: `tools/test_mobile_lab_browser.py`
 - Modify: `tools/test_repo_layout.py`
 
 - [ ] **Step 1: 공통 운영 문서 작성**
@@ -474,11 +488,18 @@ git commit -m "feat: deploy Oracle web releases over SSH"
 - 실패 시 current rollback, Nginx config rollback, firewall backup 복원
 - 기존 tunnel 보존 항목과 금지된 broad firewall/recursive delete 명령
 - OCI ingress와 DNS는 별도 계층이며 각각 확인해야 한다는 절차
+- 기본 access log는 개인정보 최소화를 위해 꺼 두며, 일시 진단 로그를 켜야 할 때는
+  참가자 사전 공지, 최대 보존 기간, 행사 후 명시 삭제와 삭제 확인 절차
 - 다음 행사 체크리스트와 확인하지 않은 reboot/실기기/행사 Wi-Fi 경계
 
 - [ ] **Step 2: 모바일 랩 README를 공개 URL 기준으로 갱신**
 
 학생 `https://uos-drone.kro.kr/`, 발표자 `/presenter.html`, 선택 API `/api/scores`를 첫 경로로 추가하고 공통 운영 문서에 상대 링크한다. 기존 LAN HTTP/8443 절차는 비상·로컬 리허설로 유지하며 공개 production 권장으로 표현하지 않는다. 500 고유 제출 상한, 서버 재시작 시 순위 초기화, 로컬 결과 유지, 실제 기체 비연결을 명시한다.
+
+앱의 `presenter.html`에는 순위가 클라이언트 제출값을 모은 교육용 비공식 결과이며
+실제 비행 성능·검증값이 아니라는 짧은 안내를 추가한다. 먼저 Chrome presenter test가
+이 문구를 실제 렌더링된 text로 찾지 못하는 RED를 확인하고, 기존 layout을 바꾸지 않는
+copy만 추가한다.
 
 - [ ] **Step 3: 링크·diff 검사 및 커밋**
 
@@ -489,11 +510,15 @@ git commit -m "feat: deploy Oracle web releases over SSH"
 
 ```bash
 /home/light/anaconda3/bin/python -m unittest tools.test_repo_layout -v
+MOBILE_LAB_SCREENSHOT_DIR=/tmp/oracle-doc-browser \
+  /home/light/anaconda3/bin/python -m unittest \
+  tools.test_mobile_lab_browser.MobileLabBrowserTests.test_presenter_renders_total_count_and_ordered_scores_from_product_server -v
 /home/light/anaconda3/bin/python tools/check_repo_layout.py
 git diff --check
 git add docs/oracle_web_hosting.md docs/README.md \
   docs/presentations/ai-startup-camp-drone/mobile-lab/README.md \
-  tools/check_repo_layout.py tools/test_repo_layout.py
+  docs/presentations/ai-startup-camp-drone/mobile-lab/presenter.html \
+  tools/check_repo_layout.py tools/test_mobile_lab_browser.py tools/test_repo_layout.py
 git commit -m "docs: add reusable Oracle web hosting runbook"
 ```
 
@@ -569,10 +594,17 @@ ssh -o BatchMode=yes Oracle \
 
 - [ ] **Step 2: bootstrap bundle 전송·실행**
 
-`mktemp -d`로 로컬 임시 staging을 만들고 `tools/oracle_web/`의 bootstrap script, host helper, templates만 복사한 뒤 SCP한다. 원격 `/var/tmp/zetin-web-bootstrap-<release-id>`에서 다음을 실행한다.
+tracked clean commit에서 ID와 explicit staging을 만든다.
 
 ```bash
-ssh Oracle 'sudo -n bash /var/tmp/zetin-web-bootstrap-<release-id>/bootstrap_host.sh'
+deploy_id=$(git rev-parse --short=12 HEAD)
+bootstrap_local=$(mktemp -d /tmp/zetin-web-bootstrap.XXXXXX)
+install -d -m 0700 "$bootstrap_local/oracle_web"
+rsync -a --exclude __pycache__ tools/oracle_web/ "$bootstrap_local/oracle_web/"
+bootstrap_remote="/var/tmp/zetin-web-bootstrap-$deploy_id"
+ssh Oracle -- install -d -m 0700 "$bootstrap_remote"
+scp -r "$bootstrap_local/oracle_web" "Oracle:$bootstrap_remote/"
+ssh Oracle -- sudo -n bash "$bootstrap_remote/oracle_web/bootstrap_host.sh"
 ```
 
 실행 뒤 `nginx -v`, `certbot --version`, `systemd-analyze verify /etc/systemd/system/zetin-webapp@.service`, `nginx -t`를 확인한다.
@@ -589,7 +621,31 @@ root 0644/0600으로 install한다. world-readable `/tmp` 파일명이나 명령
 /etc/zetin-web/tls/uos-drone.kro.kr/privkey.pem
 ```
 
-local/remote certificate SHA-256과 `openssl x509 -checkend 86400 -noout`만 비교하며 key 본문을 출력하지 않는다. 렌더링한 `mobile-lab.conf`, `mobile-lab.env`를 root 소유로 설치하고 sites-enabled에는 relative symlink를 만든다. 배포 사이트가 검증된 뒤 Ubuntu 기본 `sites-enabled/default` symlink만 제거한다. `nginx -t` 성공 전 reload하지 않는다.
+로컬 source는 다음 고정 경로이며 변수에는 key 본문이 아니라 경로만 둔다.
+
+```bash
+cert_source=/home/light/.local/share/letsencrypt/live/uos-drone.kro.kr/fullchain.pem
+key_source=/home/light/.local/share/letsencrypt/live/uos-drone.kro.kr/privkey.pem
+config_local=$(mktemp -d /tmp/zetin-web-site-config.XXXXXX)
+/home/light/anaconda3/bin/python -m tools.oracle_web.render_site \
+  --site-config tools/oracle_web/sites/mobile-lab.json \
+  --certificate /etc/zetin-web/tls/uos-drone.kro.kr/fullchain.pem \
+  --private-key /etc/zetin-web/tls/uos-drone.kro.kr/privkey.pem \
+  --output-dir "$config_local"
+cert_stage=/var/tmp/zetin-web-cert-stage
+ssh Oracle -- install -d -m 0700 "$cert_stage"
+scp "$cert_source" "Oracle:$cert_stage/fullchain.pem"
+scp "$key_source" "Oracle:$cert_stage/privkey.pem"
+scp "$config_local/mobile-lab.conf" "$config_local/mobile-lab.env" \
+  "Oracle:$cert_stage/"
+```
+
+root install 명령은 staging의 regular file·mode를 확인하고 TLS target directory를
+0755로 만든 뒤 certificate 0644, key 0600, Nginx config/env 0644로 배치한다. local/remote
+certificate SHA-256과 `openssl x509 -checkend 86400 -noout`만 비교하며 key 본문을
+출력하지 않는다. sites-enabled에는 `../sites-available/mobile-lab.conf` relative
+symlink를 만든다. 배포 사이트가 검증된 뒤 Ubuntu 기본 `sites-enabled/default`
+symlink만 제거한다. `nginx -t` 성공 전 reload하지 않는다.
 
 - [ ] **Step 4: host firewall에 80만 멱등 추가**
 
@@ -605,6 +661,10 @@ UDP/51820이 추가되어 `/etc/iptables/rules.v4`보다 한 줄 많으므로 �
 삽입 전후 `iptables-save`와 `/etc/iptables/rules.v4`를 비교해 tagged 80 한 줄 외 변화가
 없는지 확인한다. rollback은 helper가 이 comment rule만 live/영속에서 제거한다. 다른
 규칙 순서·수·listener를 변경하지 않는다. OCI ingress는 이 단계와 별개다.
+
+```bash
+ssh Oracle -- sudo -n /usr/local/sbin/zetin-web-firewall ensure-http
+```
 
 - [ ] **Step 5: Nginx를 준비하고 release를 활성화**
 
@@ -622,9 +682,35 @@ current를 전환하고 첫 backend를 restart한 뒤 Nginx reload와 health, �
 책임진다. systemd가 `127.0.0.1:18080`, Nginx가 80/443에만 listen하는지 확인하고 공개
 18080/8000/8443에 새 listener를 만들지 않았음을 확인한다.
 
+```bash
+release_id=$(git rev-parse --short=12 HEAD)
+release_archive="/tmp/mobile-lab-$release_id.tar.gz"
+/home/light/anaconda3/bin/python -m tools.oracle_web.deploy_release deploy \
+  --target Oracle --site mobile-lab --release-id "$release_id" \
+  --archive "$release_archive"
+```
+
 - [ ] **Step 6: DNS 전 기능·rollback integration 검증**
 
-원격 localhost와 로컬 SSH port forward를 사용해 학생, 발표자, JS, 글꼴, GET/POST API, invalid body/method, 보안 헤더, 50 동시 제출을 검사한다. 빈 정적-only canary release를 사용하지 말고 현재 release를 두 ID로 복제해 current를 이전/새 ID 사이 rollback한 뒤 원래 production ID로 복구한다. 기존 tunnel listener와 `ssh Oracle` 연결이 유지되는지 다시 확인한다.
+원격 localhost와 로컬 SSH port forward를 사용해 학생, 발표자, JS, 글꼴, GET/POST API,
+invalid body/method, 보안 헤더, 50 동시 제출을 검사한다.
+
+자동 rollback 실서버 drill은 DNS cutover 전에 별도 임시 local Git clone에서만 만든다.
+현재 HEAD를 `/tmp` clone하고 그 clone의 `server.py` 시작부에 즉시 비정상 종료를
+`apply_patch`로 넣어 commit한 다음 같은 manifest로 `rollback-drill-<sha>` release를
+만든다. 이를 deploy하면 helper가 current를 canary로 전환하고 backend hash 변경을
+감지해 restart한 뒤 loopback health 실패를 보아야 한다. deploy exit는 비정상이어야
+하며, 직후 다음을 모두 확인한다.
+
+- current symlink가 원래 production release ID로 복구됨
+- production backend가 active이고 `/api/scores` 200
+- Nginx local-SNI HTTPS health 200
+- 실패 canary release는 immutable directory로 남고 자동 삭제되지 않음
+- helper stderr/JSON이 원래 health 실패와 rollback 성공을 함께 보고함
+
+그 다음 명시 rollback subcommand로 정상 release 두 ID 사이 전환도 확인하고 원래
+production ID로 복구한다. 기존 tunnel listener와 `ssh Oracle` 연결이 유지되는지 다시
+확인한다.
 
 OCI 443 판별은 Nginx가 실제 listen한 뒤 원격의 443 INPUT accept-rule packet counter를
 기록하고, 로컬에서 공인 IP에 TLS ClientHello를 보낸 다음 같은 counter를 다시 읽어
@@ -641,7 +727,12 @@ OCI 443 판별은 Nginx가 실제 listen한 뒤 원격의 443 INPUT accept-rule 
 
 - [ ] **Step 1: 필요한 외부 ingress와 DNS 최소 조치**
 
-구성된 OCI CLI/자격이 없으므로 OCI ingress가 막혀 있으면 사용자에게 Security List/NSG의 IPv4 TCP 80,443 ingress 추가 위치와 정확한 source `0.0.0.0/0`/destination port만 요청한다. 서버가 준비된 뒤 사용자가 A record를 `140.83.83.165`로 바꾸도록 요청한다. 검증되지 않은 AAAA는 추가하지 않는다.
+passive tcpdump 비교에서 같은 출발지의 TCP/25565 SYN은 VM에 도착했지만 80·443 SYN은
+도착하지 않아 현재 OCI/상위 ingress 차단이 확인됐다. 구성된 OCI CLI/자격이 없으므로
+서버 내부 검증 후 사용자에게 전용 stateful NSG의 IPv4 TCP 80,443 ingress 추가와 VNIC
+연결을 요청한다. source는 `0.0.0.0/0`, destination port는 각각 80과 443이며 기존
+Security List를 교체하지 않는다. 외부 IP health가 통과한 뒤 사용자가 A record를
+`140.83.83.165`로 바꾸도록 요청한다. 검증되지 않은 AAAA는 추가하지 않는다.
 
 - [ ] **Step 2: public DNS와 HTTPS 검증**
 
@@ -664,7 +755,7 @@ curl --fail --silent --show-error --head \
 
 - [ ] **Step 4: HTTP-01 renewal 준비 상태 확인**
 
-공개 80이 도달한 뒤 Certbot HTTP-01 lineage를 만들거나 기존 bootstrap 인증서 만료 전에 전환한다. `kro.kr` 공유 rate limit을 확인하고 불필요한 강제 재발급은 하지 않는다. managed lineage가 준비된 경우에만 `certbot renew --dry-run`과 timer를 통과했다고 보고하고, 아니면 만료일 2026-11-07 전 남은 운영 조치로 명시한다.
+공개 80이 도달한 뒤 Certbot HTTP-01 lineage를 만들거나 기존 bootstrap 인증서 만료 전에 전환한다. `kro.kr` 공유 rate limit을 확인하고 불필요한 강제 재발급은 하지 않는다. managed lineage가 준비된 경우에만 `certbot renew --dry-run`과 timer를 통과했다고 보고한다. 자동 renewal이 준비되지 않으면 Git push는 가능하지만 “재사용 호스트 기반 완료”로 표시하지 않고, 만료일 2026-11-07 전 반드시 해결할 미완료 운영 항목으로 명시한다.
 
 - [ ] **Step 5: 최종 fresh verification, exact staging, push**
 
