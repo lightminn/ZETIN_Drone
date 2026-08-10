@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tarfile
@@ -130,33 +131,54 @@ class OracleWebDeployTests(unittest.TestCase):
 		self.assertEqual(runner.commands, [])
 		commands = [json.loads(line) for line in output.splitlines()]
 		self.assertEqual(len(commands), 4)
-		snapshot = commands[1][2]
+		snapshot = commands[1][-2]
 		self.assertRegex(snapshot, r"/snapshots/zetin-web-deploy-[^/]+/mobile-lab-release-1\.tar\.gz\Z")
 		self.assertEqual(
 			commands,
 			[
 				[
-					"/usr/bin/ssh", "--", "Oracle", "/usr/bin/install", "-d", "-m", "0700",
+					"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+					"Oracle", "/usr/bin/install", "-d", "-m", "0700",
 					"/var/tmp/zetin-web-staging/mobile-lab",
 				],
 				[
-					"/usr/bin/scp", "--", snapshot,
+					"/usr/bin/scp", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", snapshot,
 					"Oracle:/var/tmp/zetin-web-staging/mobile-lab/release-1.tar.gz",
 				],
 				[
-					"/usr/bin/ssh", "--", "Oracle", "/usr/bin/sudo", "-n",
+					"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+					"Oracle", "/usr/bin/sudo", "-n",
 					"/usr/local/sbin/zetin-web-release", "activate", "--site", "mobile-lab",
 					"--release-id", "release-1", "--archive",
 					"/var/tmp/zetin-web-staging/mobile-lab/release-1.tar.gz", "--sha256", digest,
 				],
 				[
-					"/usr/bin/ssh", "--", "Oracle", "/usr/bin/rm", "--",
+					"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+					"Oracle", "/usr/bin/rm", "--",
 					"/var/tmp/zetin-web-staging/mobile-lab/release-1.tar.gz", "&&",
-					"/usr/bin/rmdir", "--", "/var/tmp/zetin-web-staging/mobile-lab",
+					"/usr/bin/rmdir", "--ignore-fail-on-non-empty", "--",
+					"/var/tmp/zetin-web-staging/mobile-lab",
 				],
 			],
 		)
 		self.assertEqual(list(self.snapshots.iterdir()), [], "dry-run snapshot must be removed")
+
+	def test_every_ssh_and_scp_command_forces_noninteractive_connection_options(self) -> None:
+		"""An auth prompt can stall a 50-person deployment while an inherited host-key policy stays required."""
+		archive = self._archive()
+		status, output, error = self._deploy_main(
+			[
+				"deploy", "--target", "Oracle", "--site", "mobile-lab",
+				"--release-id", "release-1", "--archive", str(archive), "--dry-run",
+			],
+			ScriptedRunner(),
+		)
+		self.assertEqual(status, 0, error)
+		for command in (json.loads(line) for line in output.splitlines()):
+			self.assertIn(command[0], ("/usr/bin/ssh", "/usr/bin/scp"))
+			self.assertIn(("-o", "BatchMode=yes"), tuple(zip(command, command[1:])))
+			self.assertIn(("-o", "ConnectTimeout=10"), tuple(zip(command, command[1:])))
+			self.assertNotIn("StrictHostKeyChecking=no", command)
 
 	def test_deploy_rejects_invalid_identifiers_archive_types_and_metadata_mismatch(self) -> None:
 		"""Relaxed values could become SSH options, remote paths, or activate the wrong release."""
@@ -210,7 +232,7 @@ class OracleWebDeployTests(unittest.TestCase):
 				replacement.write_bytes(b"not the validated release")
 				os.replace(replacement, archive)
 			if command[0] == "/usr/bin/scp":
-				uploaded.append(Path(command[2]).read_bytes())
+				uploaded.append(Path(command[-2]).read_bytes())
 
 		activation = json.dumps(
 			{"current": "release-1", "previous": None, "backend_restarted": True, "score_reset": True}
@@ -284,6 +306,39 @@ class OracleWebDeployTests(unittest.TestCase):
 				self.assertEqual(output, "")
 				self.assertNotIn("secret nickname", error)
 
+	def test_nonempty_site_staging_directory_does_not_hide_successful_activation(self) -> None:
+		"""A stale failed archive may keep the site directory nonempty, but archive rm remains mandatory."""
+		archive = self._archive()
+		activation = json.dumps(
+			{"current": "release-1", "previous": None, "backend_restarted": True, "score_reset": True}
+		).encode()
+
+		class StaleArtifactRunner(ScriptedRunner):
+			def __call__(self, command, *, timeout: int):
+				recorded = tuple(command)
+				self.commands.append(recorded)
+				self.timeouts.append(timeout)
+				if len(self.commands) == 3:
+					return subprocess.CompletedProcess(recorded, 0, activation, b"")
+				if len(self.commands) == 4 and "--ignore-fail-on-non-empty" not in recorded:
+					return subprocess.CompletedProcess(recorded, 39, b"", b"stale artifact")
+				return subprocess.CompletedProcess(recorded, 0, b"", b"")
+
+		runner = StaleArtifactRunner()
+		status, output, error = self._deploy_main(
+			[
+				"deploy", "--target", "Oracle", "--site", "mobile-lab",
+				"--release-id", "release-1", "--archive", str(archive),
+			],
+			runner,
+		)
+		self.assertEqual(status, 0, error)
+		self.assertTrue(json.loads(output)["score_reset"])
+		self.assertEqual(
+			runner.commands[3][-4:],
+			("/usr/bin/rmdir", "--ignore-fail-on-non-empty", "--", "/var/tmp/zetin-web-staging/mobile-lab"),
+		)
+
 	def test_rollback_invokes_only_fixed_helper_and_surfaces_score_reset(self) -> None:
 		"""A wrapper-side service command or arbitrary rollback text broadens deploy authority."""
 		payload = json.dumps(
@@ -301,7 +356,8 @@ class OracleWebDeployTests(unittest.TestCase):
 		self.assertEqual(
 			runner.commands,
 			[(
-				"/usr/bin/ssh", "--", "Oracle", "/usr/bin/sudo", "-n",
+				"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+				"Oracle", "/usr/bin/sudo", "-n",
 				"/usr/local/sbin/zetin-web-release", "rollback", "--site", "mobile-lab",
 				"--release-id", "release-0",
 			)],
@@ -317,6 +373,52 @@ class OracleWebDeployTests(unittest.TestCase):
 		self.assertEqual(completed.returncode, 0)
 		self.assertEqual(completed.stdout, literal.encode())
 		self.assertFalse(marker.exists())
+
+	def test_bounded_runner_uses_devnull_new_session_and_kills_descendant_pipe_holders(self) -> None:
+		"""Killing only the direct child leaves inherited pipes open and can hang forever after timeout."""
+		module = self._deploy_module()
+		identity = module._bounded_subprocess(
+			(
+				sys.executable,
+				"-c",
+				"import os; print(os.readlink('/proc/self/fd/0')); print(os.getpid() == os.getpgrp())",
+			),
+			timeout=2,
+			capture_limit=4096,
+		)
+		self.assertEqual(identity.stdout.splitlines(), [b"/dev/null", b"True"])
+
+		script = (
+			"import subprocess,sys,time; "
+			"child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(2)']); "
+			"print(child.pid, flush=True); time.sleep(2.5)"
+		)
+		started = __import__("time").monotonic()
+		with self.assertRaises(subprocess.TimeoutExpired) as caught:
+			module._bounded_subprocess(
+				(sys.executable, "-c", script), timeout=0.15, capture_limit=4096,
+			)
+		elapsed = __import__("time").monotonic() - started
+		self.assertLess(elapsed, 1.0, "descendant-held output pipes must not delay timeout return")
+		child_pid = int(caught.exception.output.splitlines()[0])
+		state_path = Path(f"/proc/{child_pid}/stat")
+		if state_path.exists():
+			try:
+				state = state_path.read_text().split()[2]
+			except FileNotFoundError:
+				state = "gone"
+			self.assertIn(state, ("Z", "gone"), "descendant must be killed with its group")
+
+	def test_bounded_runner_keeps_timeout_when_child_closes_both_pipes_early(self) -> None:
+		"""EOF on both capture pipes is not process completion and must not bypass the command deadline."""
+		module = self._deploy_module()
+		script = "import os,time; os.close(1); os.close(2); time.sleep(2)"
+		started = __import__("time").monotonic()
+		with self.assertRaises(subprocess.TimeoutExpired):
+			module._bounded_subprocess(
+				(sys.executable, "-c", script), timeout=0.15, capture_limit=4096,
+			)
+		self.assertLess(__import__("time").monotonic() - started, 1.0)
 
 
 class OracleWebStatusTests(unittest.TestCase):
@@ -346,13 +448,16 @@ class OracleWebStatusTests(unittest.TestCase):
 		path.write_text(json.dumps(value) + "\n", encoding="utf-8")
 		return path
 
-	def _main(self, manifest: Path, runner: ScriptedRunner):
+	def _main(self, manifest: Path, runner: ScriptedRunner, *, tcp_connector=None):
 		stdout = io.StringIO()
 		stderr = io.StringIO()
 		with redirect_stdout(stdout), redirect_stderr(stderr):
+			if tcp_connector is None:
+				def tcp_connector(_address, _timeout):
+					raise ConnectionRefusedError()
+			kwargs = {"runner": runner, "tcp_connector": tcp_connector}
 			status = self._module().main(
-				["--target", "Oracle", "--site-config", str(manifest)],
-				runner=runner,
+				["--target", "Oracle", "--site-config", str(manifest)], **kwargs,
 			)
 		return status, stdout.getvalue(), stderr.getvalue()
 
@@ -368,26 +473,31 @@ class OracleWebStatusTests(unittest.TestCase):
 		self.assertEqual(result["current_release"], {"state": "ok", "value": "release-1"})
 		self.assertEqual(result["backend"], {"state": "not_applicable"})
 		self.assertEqual(result["loopback_api"], {"state": "not_applicable"})
-		self.assertEqual(len(runner.commands), 8)
+		self.assertEqual(len(runner.commands), 6)
 		joined = "\n".join(" ".join(command) for command in runner.commands)
 		self.assertNotIn("zetin-webapp@", joined)
 		self.assertNotIn("18080", joined)
 		self.assertEqual(
 			runner.commands[0],
 			(
-				"/usr/bin/ssh", "--", "Oracle", "/usr/bin/sudo", "-n",
+				"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+				"Oracle", "/usr/bin/sudo", "-n",
 				"/usr/local/sbin/zetin-web-release", "status", "--site", "mobile-lab",
 			),
 		)
 		self.assertEqual(
 			runner.commands[1],
-			("/usr/bin/ssh", "--", "Oracle", "/usr/bin/systemctl", "is-active", "nginx.service"),
+			(
+				"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+				"Oracle", "/usr/bin/systemctl", "is-active", "nginx.service",
+			),
 		)
 		self.assertEqual(
 			runner.commands[2],
 			(
-				"/usr/bin/ssh", "--", "Oracle", "/usr/bin/curl", "--fail", "--silent",
-				"--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve",
+				"/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--",
+				"Oracle", "/usr/bin/curl", "--fail", "--silent", "--show-error", "--output",
+				"/dev/null", "--noproxy", "'*'", "--max-time", "5", "--resolve",
 				"uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/",
 			),
 		)
@@ -400,10 +510,11 @@ class OracleWebStatusTests(unittest.TestCase):
 				"https://uos-drone.kro.kr/",
 			),
 		)
-		self.assertEqual(runner.commands[6][-1], "http://140.83.83.165:8000/")
-		self.assertEqual(runner.commands[7][-2:], ("--insecure", "https://140.83.83.165:8443/"))
 		for command in runner.commands[2:]:
-			self.assertIn(("--noproxy", "*"), tuple(zip(command, command[1:])))
+			self.assertTrue(
+				("--noproxy", "*") in tuple(zip(command, command[1:]))
+				or ("--noproxy", "'*'") in tuple(zip(command, command[1:])),
+			)
 
 	def test_api_status_reports_every_probe_state_without_response_data(self) -> None:
 		"""Collapsing probe states or echoing output hides failures and can expose score bodies."""
@@ -421,7 +532,19 @@ class OracleWebStatusTests(unittest.TestCase):
 			(0, secret, secret),
 		]
 		runner = ScriptedRunner(outcomes)
-		status, output, error = self._main(self._manifest(backend=True), runner)
+
+		class Connected:
+			def close(self) -> None:
+				pass
+
+		def connector(address, _timeout):
+			if address[1] == 8443:
+				return Connected()
+			raise ConnectionRefusedError()
+
+		status, output, error = self._main(
+			self._manifest(backend=True), runner, tcp_connector=connector,
+		)
 		self.assertEqual(status, 0, error)
 		result = json.loads(output)
 		self.assertEqual(result["nginx"]["state"], "inactive")
@@ -429,15 +552,94 @@ class OracleWebStatusTests(unittest.TestCase):
 		self.assertEqual(result["loopback_api"]["state"], "failed")
 		self.assertEqual([item["state"] for item in result["remote_local_sni_https"]], ["ok", "failed"])
 		self.assertEqual([item["state"] for item in result["local_public_ip_https"]], ["ok", "ok"])
-		self.assertEqual(result["negative_ports"]["8000"]["state"], "closed_or_filtered")
+		self.assertEqual(result["negative_ports"]["8000"]["state"], "closed")
 		self.assertEqual(result["negative_ports"]["8443"]["state"], "open")
 		self.assertNotIn("private-student", output)
 		self.assertNotIn("privkey.pem", output)
 		self.assertNotIn("private-student", error)
-		self.assertEqual(len(runner.commands), 10)
+		self.assertEqual(len(runner.commands), 8)
 		joined = "\n".join(" ".join(command) for command in runner.commands)
 		self.assertIn("zetin-webapp@mobile-lab.service", joined)
 		self.assertIn("http://127.0.0.1:18080/api/scores", joined)
+
+	def test_remote_manifest_tokens_remain_inert_after_openssh_argv_join(self) -> None:
+		"""OpenSSH joins remote argv through a shell, so manifest paths must survive as one literal token."""
+		module = self._module()
+		payloads = (
+			"/; /usr/bin/id",
+			"/$(/usr/bin/printf EXPANDED)",
+			"/\n/usr/bin/id",
+			"/single'and\"double",
+		)
+		for index, payload in enumerate(payloads):
+			with self.subTest(payload=payload):
+				value = {
+					"schema_version": 1,
+					"site": "mobile-lab",
+					"server_name": "uos-drone.kro.kr",
+					"public_ipv4": "140.83.83.165",
+					"https_health_paths": [payload],
+					"backend": {"port": 18080, "health_path": payload},
+					"files": [{"source": "fixture", "destination": "public/index.html"}],
+				}
+				path = self.root / f"hostile-{index}.json"
+				path.write_text(json.dumps(value) + "\n", encoding="utf-8")
+				manifest = module.load_site_manifest(path)
+				commands = module._status_commands("Oracle", manifest)
+				for command, expected in (
+					(commands["remote_https"][0], f"https://uos-drone.kro.kr{payload}"),
+					(commands["loopback_api"], f"http://127.0.0.1:18080{payload}"),
+				):
+					target_index = command.index("Oracle")
+					joined = " ".join(command[target_index + 1 :])
+					modeled = subprocess.run(
+						[
+							"/bin/sh", "-c",
+							"set -- " + joined + "; /usr/bin/printf '%s\\0' \"$@\"",
+						],
+						capture_output=True,
+						check=False,
+					)
+					self.assertEqual(modeled.returncode, 0, modeled.stderr.decode(errors="replace"))
+					arguments = modeled.stdout.rstrip(b"\0").split(b"\0")
+					self.assertIn(expected.encode(), arguments)
+					self.assertNotIn(b"uid=", modeled.stdout)
+
+	def test_negative_ports_use_tcp_connect_states_not_http_exit_codes(self) -> None:
+		"""HTTP/TLS handshake errors and open sockets that do not reply must never be labeled closed."""
+		calls: list[tuple[tuple[str, int], float]] = []
+
+		class Connected:
+			def close(self) -> None:
+				pass
+
+		def connector(address, timeout):
+			calls.append((address, timeout))
+			if address[1] == 8000:
+				return Connected()
+			raise ConnectionRefusedError()
+
+		runner = ScriptedRunner(self._successes(6))
+		status, output, error = self._main(
+			self._manifest(backend=False), runner, tcp_connector=connector,
+		)
+		self.assertEqual(status, 0, error)
+		result = json.loads(output)
+		self.assertEqual(result["negative_ports"]["8000"]["state"], "open")
+		self.assertEqual(result["negative_ports"]["8443"]["state"], "closed")
+		self.assertEqual(calls, [(('140.83.83.165', 8000), 3.0), (('140.83.83.165', 8443), 3.0)])
+		joined = "\n".join(" ".join(command) for command in runner.commands)
+		self.assertNotIn(":8000", joined)
+		self.assertNotIn(":8443", joined)
+
+		for exception in (socket.timeout(), OSError("route unavailable")):
+			with self.subTest(exception=type(exception).__name__):
+				def unavailable(_address, _timeout, error=exception):
+					raise error
+				state = self._module()._tcp_connect_state(
+					"140.83.83.165", 8000, connector=unavailable,
+				)
+				self.assertEqual(state, {"state": "indeterminate"})
 
 	def test_status_helper_timeout_nonzero_malformed_and_oversize_are_calm(self) -> None:
 		"""Untrusted helper output must not crash, grow output, or leak response content."""
@@ -492,6 +694,23 @@ class OracleWebStatusTests(unittest.TestCase):
 				self.assertNotEqual(status, 0)
 				self.assertEqual(stdout.getvalue(), "")
 				self.assertEqual(runner.commands, [])
+
+		unsafe = json.loads(self._manifest(backend=False).read_text(encoding="utf-8"))
+		unsafe["https_health_paths"] = ["/nul\0path"]
+		unsafe_path = self.root / "nul-path.json"
+		unsafe_path.write_text(json.dumps(unsafe) + "\n", encoding="utf-8")
+		runner = ScriptedRunner()
+		stdout = io.StringIO()
+		stderr = io.StringIO()
+		with redirect_stdout(stdout), redirect_stderr(stderr):
+			status = self._module().main(
+				["--target", "Oracle", "--site-config", str(unsafe_path)],
+				runner=runner,
+				tcp_connector=lambda _address, _timeout: None,
+			)
+		self.assertNotEqual(status, 0)
+		self.assertEqual(stdout.getvalue(), "")
+		self.assertEqual(runner.commands, [])
 
 
 if __name__ == "__main__":

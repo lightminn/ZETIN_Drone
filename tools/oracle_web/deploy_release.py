@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import re
 import selectors
+import shlex
+import signal
 import stat
 import subprocess
 import sys
@@ -27,9 +29,13 @@ ROOT_HELPER = "/usr/local/sbin/zetin-web-release"
 REMOTE_STAGING_ROOT = "/var/tmp/zetin-web-staging"
 COMMAND_TIMEOUT = 30
 MAX_HELPER_OUTPUT = 64 * 1024
+SSH_CONNECT_TIMEOUT = 10
+SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}")
+TIMEOUT_DRAIN_SECONDS = 1.0
 
 _TARGET_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,252}\Z")
 Runner = Callable[..., subprocess.CompletedProcess[bytes]]
+_REMOTE_AND = object()
 
 
 class DeployError(RuntimeError):
@@ -138,28 +144,59 @@ def _remove_snapshot(directory: Path, snapshot: Path) -> None:
 		directory.rmdir()
 
 
+def _quote_remote_token(value: str) -> str:
+	if not isinstance(value, str) or "\0" in value:
+		raise DeployError("remote command token must be a NUL-free string")
+	return shlex.quote(value)
+
+
+def _ssh_command(target: str, *remote: object) -> list[str]:
+	"""Quote every data token for OpenSSH's remote shell; allow only one fixed AND sentinel."""
+	quoted: list[str] = []
+	for token in remote:
+		if token is _REMOTE_AND:
+			quoted.append("&&")
+		elif isinstance(token, str):
+			quoted.append(_quote_remote_token(token))
+		else:
+			raise DeployError("invalid remote command token")
+	return [SSH, *SSH_OPTIONS, "--", target, *quoted]
+
+
 def _deploy_commands(target: str, site: str, release_id: str, snapshot: Path, digest: str) -> list[list[str]]:
 	remote_directory = f"{REMOTE_STAGING_ROOT}/{site}"
 	remote_archive = f"{remote_directory}/{release_id}.tar.gz"
 	return [
-		[SSH, "--", target, "/usr/bin/install", "-d", "-m", "0700", remote_directory],
-		[SCP, "--", str(snapshot), f"{target}:{remote_archive}"],
-		[
-			SSH, "--", target, SUDO, "-n", ROOT_HELPER, "activate", "--site", site,
+		_ssh_command(target, "/usr/bin/install", "-d", "-m", "0700", remote_directory),
+		[SCP, *SSH_OPTIONS, "--", str(snapshot), f"{target}:{remote_archive}"],
+		_ssh_command(
+			target, SUDO, "-n", ROOT_HELPER, "activate", "--site", site,
 			"--release-id", release_id, "--archive", remote_archive, "--sha256", digest,
-		],
-		[
-			SSH, "--", target, "/usr/bin/rm", "--", remote_archive, "&&",
-			"/usr/bin/rmdir", "--", remote_directory,
-		],
+		),
+		_ssh_command(
+			target, "/usr/bin/rm", "--", remote_archive, _REMOTE_AND,
+			"/usr/bin/rmdir", "--ignore-fail-on-non-empty", "--", remote_directory,
+		),
 	]
 
 
 def _rollback_command(target: str, site: str, release_id: str) -> list[str]:
-	return [
-		SSH, "--", target, SUDO, "-n", ROOT_HELPER, "rollback", "--site", site,
+	return _ssh_command(
+		target, SUDO, "-n", ROOT_HELPER, "rollback", "--site", site,
 		"--release-id", release_id,
-	]
+	)
+
+
+def _kill_process_group(process: subprocess.Popen[bytes]) -> None:
+	try:
+		os.killpg(process.pid, signal.SIGKILL)
+	except ProcessLookupError:
+		pass
+	except OSError:
+		try:
+			process.kill()
+		except ProcessLookupError:
+			pass
 
 
 def _bounded_subprocess(
@@ -169,7 +206,14 @@ def _bounded_subprocess(
 	capture_limit: int,
 ) -> subprocess.CompletedProcess[bytes]:
 	argv = list(command)
-	process = subprocess.Popen(argv, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	process = subprocess.Popen(
+		argv,
+		shell=False,
+		stdin=subprocess.DEVNULL,
+		stdout=subprocess.PIPE,
+		stderr=subprocess.PIPE,
+		start_new_session=True,
+	)
 	if process.stdout is None or process.stderr is None:
 		process.kill()
 		raise OSError("cannot capture subprocess output")
@@ -179,18 +223,21 @@ def _bounded_subprocess(
 	outputs = {"stdout": bytearray(), "stderr": bytearray()}
 	deadline = time.monotonic() + timeout
 	timed_out = False
+	drain_deadline: float | None = None
 	try:
 		while selector.get_map():
-			remaining = None if timed_out else deadline - time.monotonic()
-			if remaining is not None and remaining <= 0:
-				process.kill()
+			now = time.monotonic()
+			if not timed_out and now >= deadline:
+				_kill_process_group(process)
 				timed_out = True
-				remaining = None
-			events = selector.select(remaining)
-			if not events and not timed_out:
-				process.kill()
-				timed_out = True
+				drain_deadline = now + TIMEOUT_DRAIN_SECONDS
+			if timed_out and drain_deadline is not None and now >= drain_deadline:
+				for key in list(selector.get_map().values()):
+					selector.unregister(key.fileobj)
+					key.fileobj.close()
 				continue
+			wait_until = drain_deadline if timed_out else deadline
+			events = selector.select(max(0.0, wait_until - now))
 			for key, _ in events:
 				chunk = os.read(key.fd, 64 * 1024)
 				if not chunk:
@@ -203,7 +250,19 @@ def _bounded_subprocess(
 					output.extend(chunk[:remaining_capture])
 	finally:
 		selector.close()
-	returncode = process.wait()
+	if not timed_out:
+		try:
+			returncode = process.wait(timeout=max(0.0, deadline - time.monotonic()))
+		except subprocess.TimeoutExpired:
+			_kill_process_group(process)
+			timed_out = True
+			returncode = process.wait(timeout=TIMEOUT_DRAIN_SECONDS)
+	else:
+		try:
+			returncode = process.wait(timeout=TIMEOUT_DRAIN_SECONDS)
+		except subprocess.TimeoutExpired:
+			_kill_process_group(process)
+			returncode = process.wait(timeout=TIMEOUT_DRAIN_SECONDS)
 	stdout = bytes(outputs["stdout"])
 	stderr = bytes(outputs["stderr"])
 	if timed_out:

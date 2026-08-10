@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 from pathlib import Path
+import socket
 import subprocess
 import sys
 from typing import Any, Callable, Sequence
 
 from .common import validate_release_id
-from .deploy_release import DeployError, ROOT_HELPER, SSH, SUDO, _bounded_subprocess, validate_target
+from .deploy_release import DeployError, ROOT_HELPER, SUDO, _bounded_subprocess, _ssh_command, validate_target
 from .site_manifest import ManifestError, SiteManifest, load_site_manifest
 
 
@@ -19,6 +21,7 @@ SYSTEMCTL = "/usr/bin/systemctl"
 PROBE_TIMEOUT = 10
 MAX_CAPTURE_BYTES = 64 * 1024
 Runner = Callable[..., subprocess.CompletedProcess[bytes]]
+TcpConnector = Callable[[tuple[str, int], float], Any]
 
 
 def _default_runner(command: Sequence[str], *, timeout: int) -> subprocess.CompletedProcess[bytes]:
@@ -58,14 +61,24 @@ def _http_state(execution: dict[str, Any]) -> dict[str, object]:
 	return {"state": "failed", "returncode": execution["returncode"]}
 
 
-def _negative_state(execution: dict[str, Any]) -> dict[str, object]:
-	if execution["kind"] == "unavailable":
-		return {"state": "unavailable"}
-	if execution["kind"] == "timeout":
-		return {"state": "closed_or_filtered"}
-	if execution["returncode"] == 0:
+def _tcp_connect_state(
+	host: str,
+	port: int,
+	*,
+	connector: TcpConnector = socket.create_connection,
+) -> dict[str, object]:
+	try:
+		connection = connector((host, port), 3.0)
+	except ConnectionRefusedError:
+		return {"state": "closed"}
+	except OSError as error:
+		if error.errno == errno.ECONNREFUSED:
+			return {"state": "closed"}
+		return {"state": "indeterminate"}
+	try:
 		return {"state": "open"}
-	return {"state": "closed_or_filtered"}
+	finally:
+		connection.close()
 
 
 def _current_state(execution: dict[str, Any]) -> dict[str, object]:
@@ -90,7 +103,7 @@ def _current_state(execution: dict[str, Any]) -> dict[str, object]:
 
 
 def _ssh(target: str, *remote: str) -> list[str]:
-	return [SSH, "--", target, *remote]
+	return _ssh_command(target, *remote)
 
 
 def _curl_base() -> list[str]:
@@ -125,17 +138,6 @@ def _status_commands(target: str, manifest: SiteManifest) -> dict[str, Any]:
 			]
 			for path in manifest.https_health_paths
 		],
-		"negative": {
-			"8000": [
-				CURL, "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*",
-				"--connect-timeout", "2", "--max-time", "3", f"http://{public_ip}:8000/",
-			],
-			"8443": [
-				CURL, "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*",
-				"--connect-timeout", "2", "--max-time", "3", "--insecure",
-				f"https://{public_ip}:8443/",
-			],
-		},
 	}
 	if manifest.backend is not None:
 		commands["backend"] = _ssh(
@@ -149,7 +151,13 @@ def _status_commands(target: str, manifest: SiteManifest) -> dict[str, Any]:
 	return commands
 
 
-def collect_status(target: str, manifest: SiteManifest, *, runner: Runner) -> dict[str, object]:
+def collect_status(
+	target: str,
+	manifest: SiteManifest,
+	*,
+	runner: Runner,
+	tcp_connector: TcpConnector = socket.create_connection,
+) -> dict[str, object]:
 	commands = _status_commands(target, manifest)
 	result: dict[str, object] = {
 		"schema_version": 1,
@@ -172,8 +180,8 @@ def collect_status(target: str, manifest: SiteManifest, *, runner: Runner) -> di
 		for path, command in zip(manifest.https_health_paths, commands["local_https"])
 	]
 	result["negative_ports"] = {
-		port: _negative_state(_execute(runner, command))
-		for port, command in commands["negative"].items()
+		str(port): _tcp_connect_state(manifest.public_ipv4, port, connector=tcp_connector)
+		for port in (8000, 8443)
 	}
 	return result
 
@@ -185,7 +193,12 @@ def _arguments() -> argparse.ArgumentParser:
 	return parser
 
 
-def main(argv: Sequence[str] | None = None, *, runner: Runner | None = None) -> int:
+def main(
+	argv: Sequence[str] | None = None,
+	*,
+	runner: Runner | None = None,
+	tcp_connector: TcpConnector = socket.create_connection,
+) -> int:
 	arguments = _arguments().parse_args(argv)
 	try:
 		target = validate_target(arguments.target)
@@ -193,7 +206,16 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner | None = None) -> 
 	except (DeployError, ManifestError, OSError, ValueError):
 		print(json.dumps({"error": "invalid status configuration"}), file=sys.stderr)
 		return 1
-	result = collect_status(target, manifest, runner=runner or _default_runner)
+	try:
+		result = collect_status(
+			target,
+			manifest,
+			runner=runner or _default_runner,
+			tcp_connector=tcp_connector,
+		)
+	except DeployError:
+		print(json.dumps({"error": "invalid status configuration"}), file=sys.stderr)
+		return 1
 	print(json.dumps(result, sort_keys=True))
 	return 0
 
