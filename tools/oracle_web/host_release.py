@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import fcntl
+import gzip
 import hashlib
 import hmac
 import io
@@ -31,6 +32,7 @@ CURL = "/usr/bin/curl"
 CommandRunner = Callable[[Sequence[str]], None]
 
 MAX_COMPRESSED_BYTES = 8 * 1024 * 1024
+MAX_DECOMPRESSED_TAR_BYTES = 40 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 256
 MAX_MEMBER_BYTES = 8 * 1024 * 1024
 MAX_UNPACKED_BYTES = 32 * 1024 * 1024
@@ -170,6 +172,13 @@ def _validate_manifest(raw: Any, requested_site: str, requested_release: str) ->
 			if parent.as_posix() in member_paths:
 				raise ReleaseError(f"release member path is also a file parent: {parent.as_posix()}")
 			parent = parent.parent
+	run_present = "run" in member_paths
+	backend_members_present = any(path.startswith("backend/") for path in member_paths)
+	if backend is None:
+		if run_present or backend_members_present:
+			raise ReleaseError("inconsistent release: static release contains backend runtime members")
+	elif not run_present or not backend_members_present:
+		raise ReleaseError("inconsistent release: backend release requires both backend/ and run members")
 
 	validated: dict[str, Any] = {
 		"schema_version": 1,
@@ -192,7 +201,11 @@ def _read_archive(
 	requested_release: str,
 ) -> tuple[dict[str, Any], list[tuple[tarfile.TarInfo, bytes]], bytes]:
 	try:
-		with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
+		with gzip.GzipFile(fileobj=io.BytesIO(archive_bytes), mode="rb") as compressed:
+			tar_bytes = compressed.read(MAX_DECOMPRESSED_TAR_BYTES + 1)
+		if len(tar_bytes) > MAX_DECOMPRESSED_TAR_BYTES:
+			raise ReleaseError("decompressed tar stream exceeds size limit")
+		with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:") as archive:
 			members: list[tarfile.TarInfo] = []
 			total_size = 0
 			while True:

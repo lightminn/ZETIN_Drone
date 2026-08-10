@@ -433,6 +433,17 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 			],
 		)
 
+		self.runner.commands.clear()
+		run_only_files = dict(files)
+		run_only_files["run"] = b"#!/bin/sh\nexec python3 -u backend/server.py\n"
+		run_result = self._activate("run-change", files=run_only_files)
+		self.assertTrue(run_result["backend_restarted"])
+		self.assertTrue(run_result["score_reset"])
+		self.assertIn(
+			("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
+			self.runner.commands,
+		)
+
 	def test_loopback_health_failure_restores_previous_release_and_runtime(self) -> None:
 		"""A failed backend health check must perform a real symlink and runtime rollback."""
 		self._activate("old")
@@ -752,6 +763,22 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 		self.assertFalse(first_result["score_reset"])
 		self.assertFalse(any(command[1] in ("restart", "stop") for command in self.runner.commands if len(command) > 1))
 
+		second_static_manifest, second_static_files = self._release(
+			"second-static", {"public/index.html": b"second static\n"},
+		)
+		second_static_manifest.pop("backend")
+		second_archive, second_digest = self._archive(
+			"second-static", manifest=second_static_manifest, files=second_static_files,
+		)
+		self.runner.commands.clear()
+		second_result = self._module().activate(
+			"mobile-lab", "second-static", second_archive, second_digest,
+			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+		)
+		self.assertFalse(second_result["backend_restarted"])
+		self.assertFalse(second_result["score_reset"])
+		self.assertFalse(any(command[1] in ("restart", "stop") for command in self.runner.commands if len(command) > 1))
+
 		self.runner.commands.clear()
 		self._activate("backend-old")
 		self.assertIn(("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"), self.runner.commands)
@@ -815,6 +842,39 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 				("/usr/bin/systemctl", "reload", "nginx"),
 			],
 		)
+
+	def test_manifest_runtime_members_must_match_backend_topology(self) -> None:
+		"""Static releases cannot smuggle runtime files, and API releases need both runtime parts."""
+		static_manifest, static_files = self._release("static-has-runtime")
+		static_manifest.pop("backend")
+		missing_run_files = {
+			"public/index.html": b"api without run\n",
+			"backend/server.py": b"print('api')\n",
+		}
+		missing_run_manifest, _ = self._release("api-missing-run", missing_run_files)
+		missing_backend_files = {
+			"public/index.html": b"api without backend code\n",
+			"run": b"#!/bin/sh\nexit 0\n",
+		}
+		missing_backend_manifest, _ = self._release("api-missing-backend", missing_backend_files)
+		cases = (
+			("static-has-runtime", static_manifest, static_files),
+			("api-missing-run", missing_run_manifest, missing_run_files),
+			("api-missing-backend", missing_backend_manifest, missing_backend_files),
+		)
+
+		for release_id, manifest, files in cases:
+			with self.subTest(release_id=release_id):
+				archive, digest = self._archive(release_id, manifest=manifest, files=files)
+				case_app_root = Path(self.tempdir.name) / f"apps-{release_id}"
+				runner = RecordingRunner()
+				with self.assertRaises(self._module().ReleaseError):
+					self._module().activate(
+						"mobile-lab", release_id, archive, digest,
+						app_root=case_app_root, staging_root=self.staging_root, runner=runner,
+					)
+				self.assertFalse(case_app_root.exists())
+				self.assertEqual(runner.commands, [])
 
 	def test_concurrent_activation_cannot_let_older_recovery_overwrite_newer_success(self) -> None:
 		"""The site transaction lock must cover current inspection through health recovery."""
@@ -949,6 +1009,32 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 						app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
 					)
 				self.assertFalse(self.app_root.exists())
+
+	def test_expanded_pax_metadata_is_bounded_before_tar_parsing(self) -> None:
+		"""A tiny gzip must not make tarfile expand attacker-sized PAX metadata first."""
+		release_id = "resource-pax"
+		archive_path = self.staging_root / "mobile-lab" / f"{release_id}.tar.gz"
+		archive_path.parent.mkdir(parents=True, exist_ok=True)
+		oversized_name = "x" * (40 * 1024 * 1024 + 1024)
+		with tarfile.open(archive_path, "w:gz", format=tarfile.PAX_FORMAT) as archive:
+			member = tarfile.TarInfo(oversized_name)
+			member.mode = 0o444
+			member.size = 0
+			archive.addfile(member, io.BytesIO(b""))
+		self.assertLess(archive_path.stat().st_size, 128 * 1024)
+		digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+
+		with self.assertRaisesRegex(
+			self._module().ReleaseError,
+			"decompressed tar stream exceeds size limit",
+		):
+			self._module().activate(
+				"mobile-lab", release_id, archive_path, digest,
+				app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			)
+
+		self.assertFalse(self.app_root.exists())
+		self.assertEqual(self.runner.commands, [])
 
 
 if __name__ == "__main__":
