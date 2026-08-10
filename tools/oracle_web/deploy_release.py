@@ -28,6 +28,7 @@ SUDO = "/usr/bin/sudo"
 ROOT_HELPER = "/usr/local/sbin/zetin-web-release"
 REMOTE_STAGING_ROOT = "/var/tmp/zetin-web-staging"
 COMMAND_TIMEOUT = 30
+ACTIVATION_TIMEOUT = 300
 MAX_HELPER_OUTPUT = 64 * 1024
 SSH_CONNECT_TIMEOUT = 10
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}")
@@ -48,6 +49,14 @@ class CommandFailure(DeployError):
 	def __init__(self, step: str, returncode: int) -> None:
 		super().__init__(f"{step} failed with exit code {returncode}")
 		self.returncode = returncode
+
+
+class AmbiguousOutcome(DeployError):
+	"""Raised when one safe reconciliation cannot determine activation state."""
+
+
+class _UncertainActivation(DeployError):
+	"""Internal signal for a transport or result boundary that needs reconciliation."""
 
 
 def validate_target(value: str) -> str:
@@ -274,9 +283,15 @@ def _default_runner(command: Sequence[str], *, timeout: int) -> subprocess.Compl
 	return _bounded_subprocess(command, timeout=timeout, capture_limit=MAX_HELPER_OUTPUT)
 
 
-def _run(runner: Runner, command: Sequence[str], step: str) -> subprocess.CompletedProcess[bytes]:
+def _run(
+	runner: Runner,
+	command: Sequence[str],
+	step: str,
+	*,
+	timeout: int = COMMAND_TIMEOUT,
+) -> subprocess.CompletedProcess[bytes]:
 	try:
-		completed = runner(command, timeout=COMMAND_TIMEOUT)
+		completed = runner(command, timeout=timeout)
 	except subprocess.TimeoutExpired as error:
 		raise CommandFailure(step, 124) from error
 	except OSError as error:
@@ -317,6 +332,44 @@ def _activation_result(output: bytes, requested_release: str) -> dict[str, objec
 	}
 
 
+def _activation_attempt(
+	runner: Runner,
+	command: Sequence[str],
+	requested_release: str,
+) -> dict[str, object]:
+	try:
+		completed = runner(command, timeout=ACTIVATION_TIMEOUT)
+	except subprocess.TimeoutExpired as error:
+		raise _UncertainActivation("release activation transport timed out") from error
+	except OSError as error:
+		raise CommandFailure("release activation", 127) from error
+	if completed.returncode == 255:
+		raise _UncertainActivation("release activation SSH transport failed")
+	if completed.returncode != 0:
+		raise CommandFailure("release activation", completed.returncode)
+	try:
+		return _activation_result(completed.stdout, requested_release)
+	except DeployError as error:
+		raise _UncertainActivation("release activation returned an uncertain result") from error
+
+
+def _activate_with_reconciliation(
+	runner: Runner,
+	command: Sequence[str],
+	requested_release: str,
+) -> dict[str, object]:
+	try:
+		return _activation_attempt(runner, command, requested_release)
+	except _UncertainActivation:
+		pass
+	try:
+		return _activation_attempt(runner, command, requested_release)
+	except DeployError as error:
+		raise AmbiguousOutcome(
+			"release activation outcome remains ambiguous after one reconciliation attempt"
+		) from error
+
+
 def deploy(
 	target: str,
 	site: str,
@@ -341,8 +394,7 @@ def deploy(
 			return commands
 		_run(runner, commands[0], "remote staging directory creation")
 		_run(runner, commands[1], "release upload")
-		activation = _run(runner, commands[2], "release activation")
-		result = _activation_result(activation.stdout, release_id)
+		result = _activate_with_reconciliation(runner, commands[2], release_id)
 		_run(runner, commands[3], "remote staging cleanup")
 		return result
 	finally:
@@ -351,7 +403,12 @@ def deploy(
 
 def rollback(target: str, site: str, release_id: str, *, runner: Runner) -> dict[str, object]:
 	target, site, release_id = _validate_identifiers(target, site, release_id)
-	completed = _run(runner, _rollback_command(target, site, release_id), "release rollback")
+	completed = _run(
+		runner,
+		_rollback_command(target, site, release_id),
+		"release rollback",
+		timeout=ACTIVATION_TIMEOUT,
+	)
 	return _activation_result(completed.stdout, release_id)
 
 
@@ -403,6 +460,12 @@ def main(
 				runner=command_runner,
 			)
 			print(json.dumps(result, sort_keys=True))
+	except AmbiguousOutcome as error:
+		print(
+			json.dumps({"error": str(error), "outcome": "ambiguous"}, sort_keys=True),
+			file=sys.stderr,
+		)
+		return 1
 	except CommandFailure as error:
 		print(json.dumps({"error": str(error)}, sort_keys=True), file=sys.stderr)
 		return error.returncode if error.returncode != 0 else 1

@@ -346,7 +346,7 @@ ssh "$ssh_target" -- sudo -n systemctl status "zetin-webapp@$site.service" --no-
 ssh "$ssh_target" -- sudo -n systemd-analyze security "zetin-webapp@$site.service" --no-pager
 ssh "$ssh_target" -- sudo -n ss -lntp
 ssh "$ssh_target" -- curl --fail --silent --show-error --max-time 5 \
-  "http://127.0.0.1:18080/api/scores"
+  "http://127.0.0.1:18080/api/scores" >/dev/null
 ```
 
 Nginx만 공개 80/443에 있고 API는 `127.0.0.1:18080`이어야 한다. 기존 22, 25565,
@@ -373,7 +373,7 @@ OCI 443 ingress가 열려 있어야 한다.
 curl --fail --silent --show-error --max-time 10 \
   --resolve "$domain:443:$public_ipv4" "https://$domain/" >/dev/null
 curl --fail --silent --show-error --max-time 10 \
-  --resolve "$domain:443:$public_ipv4" "https://$domain/api/scores"
+  --resolve "$domain:443:$public_ipv4" "https://$domain/api/scores" >/dev/null
 ```
 
 통합 status 명령은 current, Nginx, 선택 backend·loopback API, 원격 local-SNI HTTPS,
@@ -417,7 +417,7 @@ dig +short A uos-drone.kro.kr @1.1.1.1
 dig +short A uos-drone.kro.kr @8.8.8.8
 curl --fail --silent --show-error https://uos-drone.kro.kr/ >/dev/null
 curl --fail --silent --show-error https://uos-drone.kro.kr/presenter.html >/dev/null
-curl --fail --silent --show-error https://uos-drone.kro.kr/api/scores
+curl --fail --silent --show-error https://uos-drone.kro.kr/api/scores >/dev/null
 ```
 
 ## Certbot HTTP-01 자동 갱신 전환

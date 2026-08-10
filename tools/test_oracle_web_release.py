@@ -13,6 +13,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -187,6 +188,45 @@ class OracleWebReleaseTests(unittest.TestCase):
                 self.assertEqual(member["sha256"], hashlib.sha256(content).hexdigest())
                 self.assertEqual(member["size"], len(content))
                 self.assertEqual(member["mode"], 0o555 if destination == "run" else 0o444)
+
+    def test_build_pins_payload_to_head_if_worktree_changes_after_clean_check(self) -> None:
+        """Reading the worktree after the clean gate can archive bytes absent from source_commit."""
+        from tools.oracle_web import build_release as builder
+
+        source, destination = FILE_PAIRS[0]
+        source_path = self.repo / source
+        committed = subprocess.check_output(
+            ["git", "show", f"HEAD:{source}"],
+            cwd=self.repo,
+        )
+        changed = b"changed immediately after the clean check\n"
+        archive_path = Path(self.tempdir.name) / "mutated-after-clean.tar.gz"
+        original_ensure_clean = builder._ensure_clean
+        clean_calls: list[tuple[str, ...]] = []
+
+        def mutate_after_clean(repo_root: Path, paths: list[str], *extra: str) -> None:
+            original_ensure_clean(repo_root, paths, *extra)
+            clean_calls.append(tuple(paths))
+            source_path.write_bytes(changed)
+
+        with mock.patch.object(builder, "_ensure_clean", side_effect=mutate_after_clean):
+            builder.build_release(self.repo, self.config_path, "abc123", archive_path)
+
+        self.assertEqual(len(clean_calls), 1)
+        with tarfile.open(archive_path, "r:gz") as archive:
+            release = json.loads(archive.extractfile("release.json").read())
+            archived = archive.extractfile(destination).read()
+        source_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.repo,
+            text=True,
+        ).strip()
+        member = next(item for item in release["members"] if item["path"] == destination)
+
+        self.assertEqual(release["source_commit"], source_commit)
+        self.assertEqual(archived, committed, "archive payload must be the source_commit Git blob")
+        self.assertEqual(member["sha256"], hashlib.sha256(committed).hexdigest())
+        self.assertEqual(member["size"], len(committed))
 
     def test_excludes_everything_outside_the_literal_allowlist(self) -> None:
         """Replacing the allowlist with a directory copy leaks unsafe repository files."""

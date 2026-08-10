@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import signal
+import shutil
 import socket
 import ssl
 import subprocess
@@ -21,8 +22,9 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MOBILE_LAB = (
-    Path(__file__).resolve().parents[1]
+    PROJECT_ROOT
     / "docs"
     / "presentations"
     / "ai-startup-camp-drone"
@@ -32,59 +34,6 @@ SIBLING_FONTS = MOBILE_LAB.parent / "vendor" / "uos-slide-template" / "fonts"
 sys.path.insert(0, str(MOBILE_LAB))
 
 from server import build_server  # noqa: E402
-
-
-# Self-signed localhost material used only by the black-box TLS regression test.
-TEST_CERTIFICATE = """-----BEGIN CERTIFICATE-----
-MIIDCTCCAfGgAwIBAgIUAOfYBdBPCJ5Zt6LAtEz31NWkf64wDQYJKoZIhvcNAQEL
-BQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI2MDgwOTIyNTcyNloXDTM2MDgw
-NjIyNTcyNlowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
-AAOCAQ8AMIIBCgKCAQEA8Q2Rgy+vRRJpRTYih3yUqp4nwl8yquiv9guZTAAAFjpt
-U0HNf4qbCS/ZGdQoNyRx7AmSv2b/i8kO0lRv1ehg+locmBc8ND2r+iOcR46OGcXn
-qXdQq/2gorU26weFThE69EYBBLkXXPSXOKOTRvm0ZDfK10+XMRxOWtQzvi5eN6Bc
-GZaDVKjs54+w8Dl9IRPRB+vsK7qa8VmNl9P1W6uWXNd/xmxRWiRhxmL3pkeifi40
-3+liLOm4Hh5ir5vi3LKRNK6goqrnJs4GhnYbl8yrrsd4xV7klEEWsfrAB7JbyM0i
-yLH3+RHy4xFQfLRIgJu+va9aGuKcCNB4RdOZynVY2QIDAQABo1MwUTAdBgNVHQ4E
-FgQUX/KjNPKumvVd9ViwQbHTAlVsnQEwHwYDVR0jBBgwFoAUX/KjNPKumvVd9Viw
-QbHTAlVsnQEwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEATmoi
-YG6TZRfhJEYn/6+LFQ8Ysi+i6w0+3FwpRRy7Z0OeNX2tljEIUCWzRQA2JgzuthE2
-83G5nvET/4LJIufX302ppnns+peFY+0XkpFQFltXvW9z9PS5h5Tba8Tl6C5+oWfE
-t4fNguKVQt9wJYS00B6/W51iqnmqhxCosk7AXJj5PBUX1dN4NR8SFG14gDbXuI9d
-eLeV6eDrmNiBle3qJ3fdowA6FBYuc8HCbWLAYcdq/wVNn8s9R24nQQp6Q/o4xrU7
-WyLVT/ouktRsIL1KC/s94ytTZ90f95Uc4L/ecXNZAbS/lC4jGDSoPJhPIERuwRsr
-BF0SIBHabNXmSiOHHA==
------END CERTIFICATE-----
-"""
-
-TEST_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
-MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDxDZGDL69FEmlF
-NiKHfJSqnifCXzKq6K/2C5lMAAAWOm1TQc1/ipsJL9kZ1Cg3JHHsCZK/Zv+LyQ7S
-VG/V6GD6WhyYFzw0Pav6I5xHjo4Zxeepd1Cr/aCitTbrB4VOETr0RgEEuRdc9Jc4
-o5NG+bRkN8rXT5cxHE5a1DO+Ll43oFwZloNUqOznj7DwOX0hE9EH6+wruprxWY2X
-0/Vbq5Zc13/GbFFaJGHGYvemR6J+LjTf6WIs6bgeHmKvm+LcspE0rqCiqucmzgaG
-dhuXzKuux3jFXuSUQRax+sAHslvIzSLIsff5EfLjEVB8tEiAm769r1oa4pwI0HhF
-05nKdVjZAgMBAAECggEAA2uDra8nGCkqMZ7fSSy29uxE4QpZKTKyYM+ZSKPn0+Bf
-xQFx2KC/HiAZnQO/xurFo1ZKCKmXWosTs6PNnA+j+lN1RLLOfnGVWquxGnJ2+gZ3
-iNXEFDmssNpHos365Qves86wYxwvF7CUnt6dQG10W22T0K1yuEdN8tIvJp4fOpWM
-/ZbjbuQhn3n42gx5he35eElOW9cWeqKeBZka3Di5HobC7bhA6CkDtNP/8CkpA7Wl
-FgcmjPmsar8DIejdus+cNjMIr+/nxUeD3OD95MRTViZUIJiFFslSjpbP7Fo7hT+j
-Wu4bvnVbn3E0BFcFm9HelH2HMQFYaEELD9o+eiF53QKBgQD+AqNNa5AoqfhjPPZv
-86joJAiaoCFpr+YfSVRl2vIhA7OtlU1AmqB22QD6s5UgtLKqBDGB11p2CxzhM6Zn
-IpKcQkyGznw/Hq1b5M7ND+4ELBfRHq+jpnLjqpSDCxeHkMzmAlScYLlZWaNrzrvh
-Twi2kzwuxWGEv5bNga1vz0K0DQKBgQDy8PKNgpznbLt39z23y0B22AKCaDFbsemH
-XbF+Ib9FLjjtg4HtNsB5mzhXStswLQOOzYnIr57MMZ95RgheaoEQ8vnx/QYc5/ER
-5ct0f//ZIpbyRU23JqNeu7Zc7xblojDQAg9nER21bn7ZxP2K+DZTeSFhYUJ18AxI
-6bhImE0I/QKBgQCtN/dNEJEaae6tHiGgbrU8uXX0nEas3/s6UrNvUkPUJ8YcFbi8
-2bWb1phIXrbPuuor7vgj50wVO7bSDHrp0jXQwZWWSLGKCc2G4R310WsrBTaosRht
-rVCj2Ou2AZZmKGTSZbx1d7BuMiazmiOdnlv+xaFA8/FwqYaZVlmD6f8+8QKBgQDT
-M9O6YJWlv+qO1dvLACFv8ETmOEzIybgbHcIjxJTzQMbu/cgjgNj+H4pwoTxC+q9A
-I8IoPT2RiYZ5uP+njXHdWU8gKHd7A82ZYKxrAKhdjeuqfcOdeTLINerJinXedw12
-mIPpd4DbbU9MZSyC91zLXuA9N3++5kzXypCSVA2MxQKBgFWvVjvuDd5m9k6HqQJm
-13moVL5tWK+9DrQq8pO7WqGfEvNsMLz+5ZASLffD0MHMoH8tRqrllRrmfy0HYEEy
-fa8bo+KLIjcq87AYIVDk9xjA7v2h6HJ8lKN7HWYUsYRCkjr1YFbmLW05GcDs8VbT
-gFrMthb5tMH0DI1k9YL8tbyr
------END PRIVATE KEY-----
-"""
 
 
 def payload_for(index: int = 1) -> dict[str, object]:
@@ -434,14 +383,53 @@ class MobileLabServerTest(unittest.TestCase):
 class MobileLabTLSConcurrencyTest(unittest.TestCase):
     """A stalled TLS client must not block the classroom accept loop."""
 
+    def test_tracked_repository_contains_no_literal_private_key_pem(self) -> None:
+        """TLS regressions must generate throwaway keys instead of committing PEM."""
+        private_key_pattern = (
+            "-----BEGIN " + "(RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+        )
+        result = subprocess.run(
+            ("git", "grep", "-n", "-E", "-e", private_key_pattern, "--"),
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+
     @contextlib.contextmanager
     def tls_server(self):
+        openssl = shutil.which("openssl")
+        if openssl is None:
+            self.skipTest("openssl is unavailable")
+
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
             certificate_path = temporary_path / "localhost-cert.pem"
             private_key_path = temporary_path / "localhost-key.pem"
-            certificate_path.write_text(TEST_CERTIFICATE, encoding="ascii")
-            private_key_path.write_text(TEST_PRIVATE_KEY, encoding="ascii")
+            subprocess.run(
+                (
+                    openssl,
+                    "req",
+                    "-x509",
+                    "-newkey",
+                    "rsa:2048",
+                    "-nodes",
+                    "-sha256",
+                    "-days",
+                    "1",
+                    "-subj",
+                    "/CN=localhost",
+                    "-keyout",
+                    str(private_key_path),
+                    "-out",
+                    str(certificate_path),
+                ),
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=10,
+            )
 
             reservation = socket.socket()
             reservation.bind(("127.0.0.1", 0))

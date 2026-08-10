@@ -109,6 +109,18 @@ class OracleWebConfigTests(unittest.TestCase):
 		self.assertNotIn("alias ", site)
 		self.assertNotRegex(site, r"@@[A-Z_]+@@")
 
+	def test_http_redirect_and_https_content_servers_both_disable_access_logs(self) -> None:
+		"""Neither public listener may inherit a global request access log."""
+		result = self._render()
+		self.assertEqual(result.returncode, 0, result.stderr)
+		site = (self.output / "mobile-lab.conf").read_text(encoding="utf-8")
+		server_blocks = site.split("server {")[1:]
+		self.assertEqual(2, len(server_blocks), site)
+		http_block = next(block for block in server_blocks if "listen 80;" in block)
+		https_block = next(block for block in server_blocks if "listen 443 ssl;" in block)
+		self.assertIn("access_log off;", http_block)
+		self.assertIn("access_log off;", https_block)
+
 	def test_rejects_invalid_domain_backend_port_and_nonabsolute_tls_paths(self) -> None:
 		"""Relaxed values permit config injection, privileged ports, or ambiguous TLS files."""
 		cases: list[tuple[str, object, str | None, str | None]] = [

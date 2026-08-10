@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from typing import Any, Callable, Sequence
 
 from .common import validate_release_id, validate_site_name
@@ -36,6 +37,10 @@ MAX_DECOMPRESSED_TAR_BYTES = 40 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 256
 MAX_MEMBER_BYTES = 8 * 1024 * 1024
 MAX_UNPACKED_BYTES = 32 * 1024 * 1024
+ROOT_COMMAND_TIMEOUT_SECONDS = 120
+BACKEND_READY_TIMEOUT_SECONDS = 30
+BACKEND_READY_RETRY_SECONDS = 1
+BACKEND_READY_MAX_ATTEMPTS = 31
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _SOURCE_COMMIT_RE = re.compile(r"[0-9a-f]{40,64}\Z")
@@ -673,31 +678,121 @@ def _recover_switch(
 	runner: CommandRunner,
 ) -> list[str]:
 	errors: list[str] = []
+	restored = False
 	try:
 		if previous is None:
 			_remove_new_current(site_root, new_release)
 		else:
 			_atomic_switch(site_root, site, previous)
+		restored = True
 	except ReleaseError as error:
 		errors.append(str(error))
 	if previous_manifest is not None:
 		recovery_action = _runtime_action(new_manifest, previous_manifest)
 	else:
 		recovery_action = "stop" if new_manifest.get("backend") is not None else None
-	if recovery_action is not None:
+	if restored and recovery_action is not None:
 		try:
 			_run_runtime_action(runner, site, recovery_action)
 		except ReleaseError as error:
 			errors.append(str(error))
-	try:
-		_command(runner, (SYSTEMCTL, "reload", "nginx"))
-	except ReleaseError as error:
-		errors.append(str(error))
+	if restored:
+		try:
+			_command(runner, (SYSTEMCTL, "reload", "nginx"))
+		except ReleaseError as error:
+			errors.append(str(error))
+	if restored and previous_manifest is not None:
+		try:
+			_verify_release_health(
+				previous_manifest,
+				runner,
+				wait_for_backend=recovery_action == "restart",
+			)
+		except ReleaseError as error:
+			errors.append(str(error))
 	return errors
 
 
 def _curl_base() -> tuple[str, ...]:
-	return (CURL, "--fail", "--silent", "--show-error", "--max-time", "5")
+	return (
+		CURL, "--fail", "--silent", "--show-error", "--output", "/dev/null",
+		"--noproxy", "*", "--max-time", "5",
+	)
+
+
+def _backend_health_command(manifest: dict[str, Any]) -> tuple[str, ...] | None:
+	backend = manifest.get("backend")
+	if not isinstance(backend, dict):
+		return None
+	return (*_curl_base(), f"http://127.0.0.1:{backend['port']}{backend['health_path']}")
+
+
+def _wait_for_backend(runner: CommandRunner, command: Sequence[str]) -> None:
+	deadline = time.monotonic() + BACKEND_READY_TIMEOUT_SECONDS
+	last_error: ReleaseError | None = None
+	for _attempt in range(BACKEND_READY_MAX_ATTEMPTS):
+		try:
+			_command(runner, command)
+			return
+		except ReleaseError as error:
+			last_error = error
+		remaining = deadline - time.monotonic()
+		if remaining <= 0:
+			break
+		time.sleep(min(BACKEND_READY_RETRY_SECONDS, remaining))
+	if last_error is None:
+		raise ReleaseError("backend readiness check did not run")
+	raise ReleaseError(f"backend readiness deadline exceeded: {last_error}") from last_error
+
+
+def _verify_release_health(
+	manifest: dict[str, Any],
+	runner: CommandRunner,
+	*,
+	wait_for_backend: bool,
+) -> None:
+	backend_command = _backend_health_command(manifest)
+	if backend_command is not None:
+		if wait_for_backend:
+			_wait_for_backend(runner, backend_command)
+		else:
+			_command(runner, backend_command)
+	for path in manifest["https_health_paths"]:
+		domain = manifest["server_name"]
+		_command(
+			runner,
+			(*_curl_base(), "--resolve", f"{domain}:443:127.0.0.1", f"https://{domain}{path}"),
+		)
+
+
+def _reconcile_current(
+	*,
+	site_root: Path,
+	site: str,
+	release_id: str,
+	manifest: dict[str, Any],
+	runner: CommandRunner,
+) -> dict[str, object]:
+	"""Conservatively finish a possibly interrupted activation of current."""
+	_command(runner, NGINX_TEST)
+	_atomic_switch(site_root, site, release_id)
+	runtime_action = "restart" if manifest.get("backend") is not None else "stop"
+	try:
+		_run_runtime_action(runner, site, runtime_action)
+		_command(runner, (SYSTEMCTL, "reload", "nginx"))
+		_verify_release_health(
+			manifest,
+			runner,
+			wait_for_backend=runtime_action == "restart",
+		)
+	except ReleaseError as error:
+		raise ReleaseError(f"current release reconciliation failed: {error}") from error
+	return {
+		"current": release_id,
+		"previous": release_id,
+		"backend_restarted": runtime_action == "restart",
+		"score_reset": True,
+	}
 
 
 def _switch_and_verify(
@@ -712,17 +807,16 @@ def _switch_and_verify(
 ) -> dict[str, object]:
 	_command(runner, NGINX_TEST)
 	_atomic_switch(site_root, site, release_id)
-	backend = manifest.get("backend")
 	runtime_action = _runtime_action(previous_manifest, manifest)
 	backend_restarted = runtime_action == "restart"
 	try:
 		_run_runtime_action(runner, site, runtime_action)
 		_command(runner, (SYSTEMCTL, "reload", "nginx"))
-		if isinstance(backend, dict):
-			_command(runner, (*_curl_base(), f"http://127.0.0.1:{backend['port']}{backend['health_path']}"))
-		for path in manifest["https_health_paths"]:
-			domain = manifest["server_name"]
-			_command(runner, (*_curl_base(), "--resolve", f"{domain}:443:127.0.0.1", f"https://{domain}{path}"))
+		_verify_release_health(
+			manifest,
+			runner,
+			wait_for_backend=runtime_action == "restart",
+		)
 	except ReleaseError as activation_error:
 		rollback_errors = _recover_switch(
 			site_root,
@@ -766,7 +860,13 @@ def _activate_prevalidated(
 	if os.path.lexists(final_release):
 		_validate_installed_release(final_release, manifest, release_bytes)
 		if previous == release_id:
-			return {"current": release_id, "previous": previous, "backend_restarted": False, "score_reset": False}
+			return _reconcile_current(
+				site_root=site_root,
+				site=site,
+				release_id=release_id,
+				manifest=manifest,
+				runner=runner,
+			)
 	else:
 		temporary = Path(tempfile.mkdtemp(prefix=f".{release_id}.tmp.", dir=releases))
 		try:
@@ -883,7 +983,12 @@ def status(site: str, *, app_root: Path = APP_ROOT) -> dict[str, object]:
 
 
 def _default_runner(command: Sequence[str]) -> None:
-	subprocess.run(list(command), check=True)
+	subprocess.run(
+		list(command),
+		check=True,
+		timeout=ROOT_COMMAND_TIMEOUT_SECONDS,
+		stdout=subprocess.DEVNULL,
+	)
 
 
 def _arguments() -> argparse.ArgumentParser:

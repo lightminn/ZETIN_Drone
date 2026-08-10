@@ -1,4 +1,5 @@
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -17,6 +18,13 @@ from check_repo_layout import (  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ORACLE_RUNBOOK = REPO_ROOT / "docs" / "oracle_web_hosting.md"
+ORACLE_PLAN = (
+    REPO_ROOT
+    / "docs"
+    / "superpowers"
+    / "plans"
+    / "2026-08-10-oracle-reusable-web-deployment.md"
+)
 BASH_BLOCK_RE = re.compile(r"```bash\n(.*?)\n```", re.DOTALL)
 
 
@@ -112,6 +120,10 @@ class OracleRunbookSafetyTest(unittest.TestCase):
     def setUpClass(cls):
         cls.text = ORACLE_RUNBOOK.read_text(encoding="utf-8")
         cls.bash_blocks = BASH_BLOCK_RE.findall(cls.text)
+        cls.plan_text = ORACLE_PLAN.read_text(encoding="utf-8")
+        task8_start = cls.plan_text.index("## Task 8:")
+        task8_end = cls.plan_text.index("## Task 9:", task8_start)
+        cls.task8 = cls.plan_text[task8_start:task8_end]
 
     def block_containing(self, fragment):
         matches = [block for block in self.bash_blocks if fragment in block]
@@ -188,6 +200,46 @@ class OracleRunbookSafetyTest(unittest.TestCase):
         )
         block = self.block_containing('https://$domain/presenter.html')
         self.assertIn('https://$domain/api/scores', block)
+
+    def test_task8_names_the_hardened_runbook_as_normative_and_has_no_stale_pipeline(self):
+        self.assertIn(
+            "[Oracle 재사용 웹 호스팅 운영 가이드](../../oracle_web_hosting.md)",
+            self.task8,
+        )
+        self.assertRegex(self.task8, r"실행 명령.{0,20}정본")
+        self.assertIn("set -euo pipefail", self.task8)
+        self.assertIn("sudo -n /bin/sh -c", self.task8)
+        self.assertIn('sudo -n test -s "$backup_remote/iptables-save.txt"', self.task8)
+        self.assertIn('sudo -n test -s "$backup_remote/READY"', self.task8)
+        self.assertIn("git archive --format=tar HEAD:tools/oracle_web", self.task8)
+        self.assertIn('tar -x -C "$bootstrap_local/oracle_web"', self.task8)
+        self.assertNotIn("| sudo -n tee", self.task8)
+        self.assertNotIn("rsync ", self.task8)
+
+    def test_every_runbook_score_get_probe_discards_the_response_body(self):
+        score_probe_lines = [
+            line.strip()
+            for block in self.bash_blocks
+            for line in block.splitlines()
+            if "/api/scores" in line
+        ]
+        self.assertEqual(4, len(score_probe_lines), score_probe_lines)
+        for line in score_probe_lines:
+            with self.subTest(command=line):
+                self.assertRegex(line, r"(?:>/dev/null|--output /dev/null)\s*$")
+
+    def test_oracle_plan_bash_fences_are_shell_syntax(self):
+        plan_blocks = BASH_BLOCK_RE.findall(self.plan_text)
+        self.assertGreater(len(plan_blocks), 0)
+        for index, block in enumerate(plan_blocks, 1):
+            with self.subTest(block=index):
+                result = subprocess.run(
+                    ("bash", "-n"),
+                    input=block,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
 
 
 if __name__ == "__main__":

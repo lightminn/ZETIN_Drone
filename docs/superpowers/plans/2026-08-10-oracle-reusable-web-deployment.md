@@ -266,10 +266,10 @@ CLI는 서버에서 root로 다음처럼 사용한다.
 
 ```bash
 sudo -n /usr/local/sbin/zetin-web-release activate \
-  --site mobile-lab --release-id <id> \
-  --archive /var/tmp/zetin-web-staging/mobile-lab/<id>.tar.gz --sha256 <hex>
+  --site mobile-lab --release-id '<id>' \
+  --archive '/var/tmp/zetin-web-staging/mobile-lab/<id>.tar.gz' --sha256 '<hex>'
 sudo -n /usr/local/sbin/zetin-web-release rollback \
-  --site mobile-lab --release-id <previous-id>
+  --site mobile-lab --release-id '<previous-id>'
 sudo -n /usr/local/sbin/zetin-web-release status --site mobile-lab
 ```
 
@@ -423,11 +423,11 @@ CLI 계약:
 
 ```bash
 /home/light/anaconda3/bin/python -m tools.oracle_web.deploy_release deploy \
-  --target Oracle --site mobile-lab --release-id <id> --archive /tmp/mobile-lab-<id>.tar.gz
+  --target Oracle --site mobile-lab --release-id '<id>' --archive '/tmp/mobile-lab-<id>.tar.gz'
 /home/light/anaconda3/bin/python -m tools.oracle_web.check_status \
   --target Oracle --site-config tools/oracle_web/sites/mobile-lab.json
 /home/light/anaconda3/bin/python -m tools.oracle_web.deploy_release rollback \
-  --target Oracle --site mobile-lab --release-id <previous-id>
+  --target Oracle --site mobile-lab --release-id '<previous-id>'
 ```
 
 `--dry-run`은 실행 없이 argv를 JSON lines로 출력한다. 시험은 다음을 검증한다.
@@ -583,31 +583,53 @@ tar -tvzf "/tmp/mobile-lab-$release_id.tar.gz"
 **Files:**
 - Remote system paths only; never add generated secrets/config to Git.
 
+실제 Oracle 변경에 쓰는 실행 명령의 정본은 [Oracle 재사용 웹 호스팅 운영 가이드](../../oracle_web_hosting.md)다.
+아래 명령은 그 운영 가이드의 최초 bootstrap 절차와 함께 갱신해야 하며, 둘이 다르면 실행을
+멈추고 운영 가이드를 따른다. Step 1과 Step 2는 같은 로컬 shell에서 연속 실행한다.
+
 - [ ] **Step 1: 변경 전 복구 자료와 불변 listener 캡처**
 
 ```bash
-ssh -o BatchMode=yes Oracle \
-  'sudo -n install -d -m 0700 /var/backups/zetin-web/pre-mobile-lab && \
-   sudo -n iptables-save | sudo -n tee /var/backups/zetin-web/pre-mobile-lab/iptables.rules >/dev/null && \
-   sudo -n cp -a /etc/ssh/sshd_config /etc/ssh/sshd_config.d /var/backups/zetin-web/pre-mobile-lab/ && \
-   ss -lntp'
+backup_stamp=$(date -u +%Y%m%dT%H%M%SZ)-$$ &&
+backup_remote="/var/backups/zetin-web/pre-$backup_stamp" &&
+(
+set -euo pipefail
+ssh Oracle "test ! -e '$backup_remote' && sudo -n install -d -o root -g root -m 0700 '$backup_remote'"
+ssh Oracle "sudo -n /bin/sh -c 'umask 077; /usr/sbin/iptables-save > \"\$1\"' sh '$backup_remote/iptables-save.txt'"
+ssh Oracle -- sudo -n test -s "$backup_remote/iptables-save.txt"
+ssh Oracle "if sudo -n test -f /etc/iptables/rules.v4; then sudo -n cp -a -- /etc/iptables/rules.v4 '$backup_remote/rules.v4'; fi"
+ssh Oracle "sudo -n cp -a -- /etc/ssh/sshd_config /etc/ssh/sshd_config.d '$backup_remote/'"
+ssh Oracle "if sudo -n test -d /etc/nginx; then sudo -n cp -a -- /etc/nginx '$backup_remote/nginx'; fi"
+ssh Oracle -- sudo -n ss -lntup
+ssh Oracle "sudo -n /bin/sh -c 'umask 077; printf \"%s\\n\" ready > \"\$1\"' sh '$backup_remote/READY'"
+ssh Oracle -- sudo -n test -s "$backup_remote/READY"
+)
 ```
 
 출력에서 기존 listener 22, 25565, 12222, 13389, loopback 18443을 기록한다. private key는 backup이나 출력에 포함하지 않는다.
 
 - [ ] **Step 2: bootstrap bundle 전송·실행**
 
-tracked clean commit에서 ID와 explicit staging을 만든다.
+tracked `HEAD`에서만 ID와 explicit staging을 만든다. 변경 전 backup 파일이나 READY
+marker가 없거나 비어 있으면 root bootstrap 전에 중단한다.
 
 ```bash
-deploy_id=$(git rev-parse --short=12 HEAD)
-bootstrap_local=$(mktemp -d /tmp/zetin-web-bootstrap.XXXXXX)
+deploy_id=$(git rev-parse --short=12 HEAD) &&
+bootstrap_local=$(mktemp -d /tmp/zetin-web-bootstrap.XXXXXX) &&
+bootstrap_remote="/var/tmp/zetin-web-bootstrap-$deploy_id" &&
+(
+set -euo pipefail
+: "${backup_remote:?먼저 변경 전 backup 블록을 같은 shell에서 실행하십시오}"
+ssh Oracle -- sudo -n test -s "$backup_remote/iptables-save.txt"
+ssh Oracle -- sudo -n test -s "$backup_remote/READY"
 install -d -m 0700 "$bootstrap_local/oracle_web"
-rsync -a --exclude __pycache__ tools/oracle_web/ "$bootstrap_local/oracle_web/"
-bootstrap_remote="/var/tmp/zetin-web-bootstrap-$deploy_id"
-ssh Oracle -- install -d -m 0700 "$bootstrap_remote"
+git archive --format=tar HEAD:tools/oracle_web | \
+  tar -x -C "$bootstrap_local/oracle_web"
+test -f "$bootstrap_local/oracle_web/bootstrap_host.sh"
+ssh Oracle "test ! -e '$bootstrap_remote' && install -d -m 0700 '$bootstrap_remote'"
 scp -r "$bootstrap_local/oracle_web" "Oracle:$bootstrap_remote/"
 ssh Oracle -- sudo -n bash "$bootstrap_remote/oracle_web/bootstrap_host.sh"
+)
 ```
 
 실행 뒤 `nginx -v`, `certbot --version`, `systemd-analyze verify /etc/systemd/system/zetin-webapp@.service`, `nginx -t`를 확인한다.
@@ -744,7 +766,7 @@ Google·Cloudflare DoH 양쪽의 A가 `140.83.83.165`로 일치한 뒤 다음을
 ```bash
 curl --fail --silent --show-error https://uos-drone.kro.kr/ >/dev/null
 curl --fail --silent --show-error https://uos-drone.kro.kr/presenter.html >/dev/null
-curl --fail --silent --show-error https://uos-drone.kro.kr/api/scores
+curl --fail --silent --show-error https://uos-drone.kro.kr/api/scores >/dev/null
 curl --fail --silent --show-error --head https://uos-drone.kro.kr/src/app.mjs
 curl --fail --silent --show-error --head \
   https://uos-drone.kro.kr/vendor/uos-slide-template/fonts/NotoSansCJKkr-Regular.woff2

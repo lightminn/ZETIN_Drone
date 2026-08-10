@@ -253,7 +253,91 @@ class OracleWebDeployTests(unittest.TestCase):
 		self.assertEqual(uploaded, [original])
 		self.assertIn(digest, runner.commands[2])
 		self.assertEqual(json.loads(output)["score_reset"], True)
+		self.assertEqual(
+			runner.timeouts,
+			[30, 30, 300, 30],
+		)
 		self.assertEqual(list(self.snapshots.iterdir()), [], "snapshot must be removed after success")
+
+	def test_timeout_after_remote_switch_reconciles_once_with_identical_activation(self) -> None:
+		"""Killing SSH after current changes must trigger one same-command state reconciliation."""
+		archive = self._archive()
+		activation = json.dumps(
+			{"current": "release-1", "previous": "release-0", "backend_restarted": True, "score_reset": True}
+		).encode()
+		timed_out = subprocess.TimeoutExpired(
+			["ssh"], 30, output=b'{"current":"release-1"', stderr=b"transport closed",
+		)
+		runner = ScriptedRunner(
+			[(0, b"", b""), (0, b"", b""), timed_out, (0, activation, b""), (0, b"", b"")],
+		)
+
+		status, output, error = self._deploy_main(
+			[
+				"deploy", "--target", "Oracle", "--site", "mobile-lab",
+				"--release-id", "release-1", "--archive", str(archive),
+			],
+			runner,
+		)
+
+		self.assertEqual(status, 0, error)
+		self.assertEqual(json.loads(output)["current"], "release-1")
+		self.assertEqual(len(runner.commands), 5)
+		self.assertEqual(runner.commands[2], runner.commands[3])
+		self.assertEqual(runner.timeouts[2:4], [300, 300])
+		self.assertIn("/usr/bin/rm", runner.commands[4])
+
+	def test_rc255_or_malformed_success_output_each_get_one_safe_reconciliation(self) -> None:
+		"""Transport loss and truncated helper JSON share the same fixed recovery boundary."""
+		activation = json.dumps(
+			{"current": "release-1", "previous": None, "backend_restarted": True, "score_reset": True}
+		).encode()
+		for label, uncertain in (
+			("ssh-255", (255, b"", b"transport lost")),
+			("truncated-json", (0, b'{"current":"release-1"', b"")),
+		):
+			with self.subTest(label=label):
+				archive = self._archive()
+				runner = ScriptedRunner(
+					[(0, b"", b""), (0, b"", b""), uncertain, (0, activation, b""), (0, b"", b"")],
+				)
+				status, output, error = self._deploy_main(
+					[
+						"deploy", "--target", "Oracle", "--site", "mobile-lab",
+						"--release-id", "release-1", "--archive", str(archive),
+					],
+					runner,
+				)
+				self.assertEqual(status, 0, error)
+				self.assertEqual(json.loads(output)["current"], "release-1")
+				self.assertEqual(runner.commands[2], runner.commands[3])
+				self.assertIn("/usr/bin/rm", runner.commands[4])
+
+	def test_second_reconciliation_failure_is_explicitly_ambiguous_without_cleanup(self) -> None:
+		"""Two uncertain outcomes must retain the archive and never claim rollback or cleanup."""
+		archive = self._archive()
+		first = subprocess.TimeoutExpired(["ssh"], 30, output=b"partial", stderr=b"lost")
+		runner = ScriptedRunner(
+			[(0, b"", b""), (0, b"", b""), first, (255, b"", b"lost again")],
+		)
+
+		status, output, error = self._deploy_main(
+			[
+				"deploy", "--target", "Oracle", "--site", "mobile-lab",
+				"--release-id", "release-1", "--archive", str(archive),
+			],
+			runner,
+		)
+
+		self.assertNotEqual(status, 0)
+		self.assertEqual(output, "")
+		failure = json.loads(error)
+		self.assertEqual(failure.get("outcome"), "ambiguous")
+		self.assertIn("reconciliation", failure["error"])
+		self.assertEqual(len(runner.commands), 4)
+		self.assertEqual(runner.commands[2], runner.commands[3])
+		self.assertFalse(any("/usr/bin/rm" in command for command in runner.commands))
+		self.assertEqual(list(self.snapshots.iterdir()), [])
 
 	def test_each_deploy_failure_stops_later_steps_and_preserves_exit_code(self) -> None:
 		"""Continuing after staging, upload, or activation failure can activate unverified state."""
@@ -302,8 +386,10 @@ class OracleWebDeployTests(unittest.TestCase):
 					runner,
 				)
 				self.assertNotEqual(status, 0)
-				self.assertEqual(len(runner.commands), 3, "cleanup requires a valid successful activation")
+				self.assertEqual(len(runner.commands), 4, "one reconciliation is required before ambiguity")
+				self.assertEqual(runner.commands[2], runner.commands[3])
 				self.assertEqual(output, "")
+				self.assertEqual(json.loads(error)["outcome"], "ambiguous")
 				self.assertNotIn("secret nickname", error)
 
 	def test_nonempty_site_staging_directory_does_not_hide_successful_activation(self) -> None:
@@ -362,6 +448,7 @@ class OracleWebDeployTests(unittest.TestCase):
 				"--release-id", "release-0",
 			)],
 		)
+		self.assertEqual(runner.timeouts, [300])
 		self.assertEqual(json.loads(output), json.loads(payload))
 
 	def test_default_runner_uses_argv_without_a_local_shell(self) -> None:
@@ -405,7 +492,7 @@ class OracleWebDeployTests(unittest.TestCase):
 		if state_path.exists():
 			try:
 				state = state_path.read_text().split()[2]
-			except FileNotFoundError:
+			except OSError:
 				state = "gone"
 			self.assertIn(state, ("Z", "gone"), "descendant must be killed with its group")
 

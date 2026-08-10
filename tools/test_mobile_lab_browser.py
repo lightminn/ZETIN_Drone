@@ -690,6 +690,53 @@ class MobileLabBrowserTests(unittest.TestCase):
         self.assertEqual(1, probe["maxConcurrent"])
         self.assertIn("선택 기능", self.text("[data-board-status]"))
 
+    def test_optional_nickname_warns_against_personal_info_before_public_display(self) -> None:
+        for width, height in ((360, 800), (390, 844)):
+            with self.subTest(viewport=f"{width}x{height}"):
+                self._navigate("index.html?sensors=none", width=width, height=height)
+                privacy = self.evaluate(
+                    """
+                    (() => {
+                      const input = document.querySelector('[data-nickname]');
+                      const warning = document.querySelector('#nickname-privacy');
+                      if (!input || !warning) return null;
+                      const style = getComputedStyle(warning);
+                      const rect = warning.getBoundingClientRect();
+                      const dock = document.querySelector('.action-dock').getBoundingClientRect();
+                      return {
+                        autocomplete: input.getAttribute('autocomplete'),
+                        required: input.required,
+                        fieldText: input.closest('label').textContent.trim(),
+                        warningText: warning.textContent.trim(),
+                        display: style.display,
+                        visibility: style.visibility,
+                        opacity: style.opacity,
+                        rect: {left: rect.left, right: rect.right, width: rect.width,
+                               height: rect.height, bottom: rect.bottom},
+                        dockTop: dock.top,
+                        scrollWidth: document.documentElement.scrollWidth,
+                        innerWidth,
+                      };
+                    })()
+                    """
+                )
+                self.assertIsNotNone(privacy)
+                self.assertEqual("off", privacy["autocomplete"])
+                self.assertFalse(privacy["required"])
+                self.assertIn("선택", privacy["fieldText"])
+                for phrase in ("실명", "연락처", "개인정보", "표시 이름과 점수", "발표자 화면", "공개"):
+                    self.assertIn(phrase, privacy["warningText"])
+                self.assertNotEqual("none", privacy["display"])
+                self.assertNotEqual("hidden", privacy["visibility"])
+                self.assertNotEqual("0", privacy["opacity"])
+                self.assertGreater(privacy["rect"]["width"], 0)
+                self.assertGreater(privacy["rect"]["height"], 0)
+                self.assertGreaterEqual(privacy["rect"]["left"], 0)
+                self.assertLessEqual(privacy["rect"]["right"], width)
+                self.assertLessEqual(privacy["rect"]["bottom"], privacy["dockTop"])
+                self.assertLessEqual(privacy["scrollWidth"], privacy["innerWidth"])
+                self._screenshot(f"student-privacy-{width}x{height}.png")
+
     def test_mobile_viewports_have_no_horizontal_overflow_or_clipped_actions(self) -> None:
         def open_student_state(state: str, width: int, height: int) -> None:
             parameters = "sensors=none&clock=manual" if state == "result" else "sensors=none"

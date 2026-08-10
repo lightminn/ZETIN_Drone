@@ -8,6 +8,8 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -206,9 +208,9 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 				("/usr/sbin/nginx", "-t"),
 				("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
 				("/usr/bin/systemctl", "reload", "nginx"),
-				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:18080/api/scores"),
-				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/"),
-				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/presenter.html"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "http://127.0.0.1:18080/api/scores"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/presenter.html"),
 			],
 		)
 		self.assertTrue(archive.is_file(), "the host helper must leave staging cleanup to the deploy wrapper")
@@ -354,24 +356,56 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 				self._assert_activation_rejected("bad-manifest", archive, digest)
 		self.assertEqual(self.runner.commands, [])
 
-	def test_existing_release_is_idempotent_only_while_all_immutable_bytes_match(self) -> None:
-		"""Overwriting an existing release ID would make rollback history mutable."""
+	def test_same_current_release_reentry_reconciles_partial_runtime_and_stale_next(self) -> None:
+		"""Returning early can bless a switched symlink whose backend was never restarted."""
 		archive, digest = self._archive("same")
 		self._module().activate(
 			"mobile-lab", "same", archive, digest,
 			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
 		)
 		self.runner.commands.clear()
+		next_link = self.app_root / "mobile-lab/current.next"
+		os.symlink("releases/same", next_link)
+
+		class StaleBackendRunner(RecordingRunner):
+			def __init__(self) -> None:
+				super().__init__()
+				self.runtime_restarted = False
+
+			def __call__(self, command) -> None:
+				recorded = tuple(command)
+				self.commands.append(recorded)
+				if recorded == ("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"):
+					self.runtime_restarted = True
+				if (
+					recorded[-1] == "http://127.0.0.1:18080/api/scores"
+					and not self.runtime_restarted
+				):
+					raise RuntimeError("stale backend still serves the old current target")
+
+		reconciliation = StaleBackendRunner()
 
 		result = self._module().activate(
 			"mobile-lab", "same", archive, digest,
-			app_root=self.app_root, staging_root=self.staging_root, runner=self.runner,
+			app_root=self.app_root, staging_root=self.staging_root, runner=reconciliation,
 		)
 		self.assertEqual(
 			result,
-			{"current": "same", "previous": "same", "backend_restarted": False, "score_reset": False},
+			{"current": "same", "previous": "same", "backend_restarted": True, "score_reset": True},
 		)
-		self.assertEqual(self.runner.commands, [])
+		self.assertFalse(next_link.exists())
+		self.assertTrue(reconciliation.runtime_restarted)
+		self.assertEqual(
+			reconciliation.commands,
+			[
+				("/usr/sbin/nginx", "-t"),
+				("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
+				("/usr/bin/systemctl", "reload", "nginx"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "http://127.0.0.1:18080/api/scores"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/presenter.html"),
+			],
+		)
 
 		installed = self.app_root / "mobile-lab/releases/same/public/index.html"
 		os.chmod(installed, 0o644)
@@ -444,18 +478,60 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 			self.runner.commands,
 		)
 
+	def test_backend_restart_waits_for_delayed_type_simple_readiness(self) -> None:
+		"""A type=simple restart may return before the backend accepts loopback requests."""
+		module = self._module()
+
+		class DelayedReadyRunner(RecordingRunner):
+			def __init__(self) -> None:
+				super().__init__()
+				self.backend_attempts = 0
+
+			def __call__(self, command) -> None:
+				recorded = tuple(command)
+				self.commands.append(recorded)
+				if recorded[-1] == "http://127.0.0.1:18080/api/scores":
+					self.backend_attempts += 1
+					if self.backend_attempts < 3:
+						raise RuntimeError("backend is still starting")
+
+		runner = DelayedReadyRunner()
+		archive, digest = self._archive("delayed-ready")
+		with mock.patch("time.sleep") as sleep:
+			try:
+				result = module.activate(
+					"mobile-lab", "delayed-ready", archive, digest,
+					app_root=self.app_root, staging_root=self.staging_root, runner=runner,
+				)
+			except module.ReleaseError as error:
+				self.fail(f"delayed backend readiness was not retried: {error}")
+
+		self.assertEqual(result["current"], "delayed-ready")
+		self.assertEqual(runner.backend_attempts, 3)
+		self.assertEqual(sleep.call_count, 2)
+		for command in runner.commands:
+			if command[0] == "/usr/bin/curl":
+				self.assertIn(("--max-time", "5"), tuple(zip(command, command[1:])))
+				self.assertIn(("--output", "/dev/null"), tuple(zip(command, command[1:])))
+				self.assertIn(("--noproxy", "*"), tuple(zip(command, command[1:])))
+
 	def test_loopback_health_failure_restores_previous_release_and_runtime(self) -> None:
 		"""A failed backend health check must perform a real symlink and runtime rollback."""
 		self._activate("old")
 		_, files = self._release("new")
 		files["backend/server.py"] = b"raise SystemExit('broken')\n"
 		archive, digest = self._archive("new", files=files)
+		module = self._module()
 		failing = RecordingRunner(
 			lambda command, _index: "new loopback health failed"
-			if command[-1] == "http://127.0.0.1:18080/api/scores" else None
+			if (
+				self._current_target() == "releases/new"
+				and command[-1] == "http://127.0.0.1:18080/api/scores"
+			) else None
 		)
 
-		error = self._assert_activation_rejected("new", archive, digest, runner=failing)
+		with mock.patch.object(module, "BACKEND_READY_TIMEOUT_SECONDS", 0, create=True):
+			error = self._assert_activation_rejected("new", archive, digest, runner=failing)
 
 		self.assertIn("new loopback health failed", str(error))
 		self.assertEqual(self._current_target(), "releases/old")
@@ -466,9 +542,12 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 				("/usr/sbin/nginx", "-t"),
 				("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
 				("/usr/bin/systemctl", "reload", "nginx"),
-				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--max-time", "5", "http://127.0.0.1:18080/api/scores"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "http://127.0.0.1:18080/api/scores"),
 				("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
 				("/usr/bin/systemctl", "reload", "nginx"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "http://127.0.0.1:18080/api/scores"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/"),
+				("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/presenter.html"),
 			],
 		)
 
@@ -480,13 +559,19 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 		archive, digest = self._archive("new", files=files)
 		failing = RecordingRunner(
 			lambda command, _index: "local SNI failed"
-			if command[-1] == "https://uos-drone.kro.kr/presenter.html" else None
+			if (
+				self._current_target() == "releases/new"
+				and command[-1] == "https://uos-drone.kro.kr/presenter.html"
+			) else None
 		)
 
 		self._assert_activation_rejected("new", archive, digest, runner=failing)
 
 		self.assertEqual(self._current_target(), "releases/old")
-		self.assertEqual(failing.commands[-1], ("/usr/bin/systemctl", "reload", "nginx"))
+		self.assertEqual(
+			failing.commands[-1],
+			("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/presenter.html"),
+		)
 		self.assertNotIn(
 			("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
 			failing.commands,
@@ -500,19 +585,58 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 		archive, digest = self._archive("new", files=files)
 
 		def fail_new_and_recovery(command: tuple[str, ...], index: int) -> str | None:
-			if command[-1] == "http://127.0.0.1:18080/api/scores":
+			if (
+				self._current_target() == "releases/new"
+				and command[-1] == "http://127.0.0.1:18080/api/scores"
+			):
 				return "original health error"
 			if index > 4 and command == ("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"):
 				return "recovery restart error"
 			return None
 
 		failing = RecordingRunner(fail_new_and_recovery)
-		error = self._assert_activation_rejected("new", archive, digest, runner=failing)
+		with mock.patch.object(self._module(), "BACKEND_READY_TIMEOUT_SECONDS", 0, create=True):
+			error = self._assert_activation_rejected("new", archive, digest, runner=failing)
 
 		self.assertEqual(self._current_target(), "releases/old")
 		self.assertIn("original health error", str(error))
 		self.assertIn("rollback failed", str(error))
 		self.assertIn("recovery restart error", str(error))
+
+	def test_recovery_rejects_previous_release_when_its_backend_dies(self) -> None:
+		"""Restoring only the symlink must not be reported as a successful rollback."""
+		self._activate("old")
+		_, files = self._release("new")
+		files["backend/server.py"] = b"print('new backend')\n"
+		archive, digest = self._archive("new", files=files)
+		new_https_failed = False
+
+		def fail_new_then_previous(command: tuple[str, ...], _index: int) -> str | None:
+			nonlocal new_https_failed
+			if (
+				self._current_target() == "releases/new"
+				and command[-1] == "https://uos-drone.kro.kr/"
+			):
+				new_https_failed = True
+				return "new release HTTPS failed"
+			if (
+				new_https_failed
+				and self._current_target() == "releases/old"
+				and command[-1] == "http://127.0.0.1:18080/api/scores"
+			):
+				return "previous backend is dead"
+			return None
+
+		module = self._module()
+		failing = RecordingRunner(fail_new_then_previous)
+		with mock.patch.object(module, "BACKEND_READY_TIMEOUT_SECONDS", 0, create=True):
+			error = self._assert_activation_rejected("new", archive, digest, runner=failing)
+
+		self.assertEqual(self._current_target(), "releases/old")
+		self.assertIn("new release HTTPS failed", str(error))
+		self.assertIn("rollback failed", str(error))
+		self.assertIn("previous backend is dead", str(error))
+		self.assertNotIn("activation rolled back", str(error))
 
 	def test_first_deploy_post_switch_failure_removes_only_current_link(self) -> None:
 		"""With no previous release, recovery must unlink current but retain the immutable release."""
@@ -587,7 +711,10 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 		self._activate("new", files=files)
 		failing = RecordingRunner(
 			lambda command, _index: "old release HTTPS failed"
-			if command[-1] == "https://uos-drone.kro.kr/" else None
+			if (
+				self._current_target() == "releases/old"
+				and command[-1] == "https://uos-drone.kro.kr/"
+			) else None
 		)
 
 		with self.assertRaises(self._module().ReleaseError) as raised:
@@ -634,6 +761,88 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 			{"current": "cli-release", "previous": None, "backend_restarted": True, "score_reset": True},
 		)
 		self.assertEqual(output.getvalue().count("\n"), 1)
+
+	def test_real_health_children_cannot_contaminate_cli_stdout_with_response_bodies(self) -> None:
+		"""Inherited curl stdout must not prepend API, static, or font bytes to helper JSON."""
+		manifest, files = self._release("body-output")
+		manifest["https_health_paths"] = ["/", "/assets/demo.woff2"]
+		archive, digest = self._archive("body-output", manifest=manifest, files=files)
+		fake_curl = Path(self.tempdir.name) / "fake-curl"
+		fake_curl.write_text(
+			f"#!{sys.executable}\n"
+			"import sys\n"
+			"url = sys.argv[-1]\n"
+			"if '/api/scores' in url:\n"
+			"\tbody = b'API_RESPONSE_BODY'\n"
+			"elif url.endswith('.woff2'):\n"
+			"\tbody = b'FONT_RESPONSE_BODY'\n"
+			"else:\n"
+			"\tbody = b'STATIC_RESPONSE_BODY'\n"
+			"if '--output' in sys.argv:\n"
+			"\tdestination = sys.argv[sys.argv.index('--output') + 1]\n"
+			"\twith open(destination, 'wb') as stream:\n"
+			"\t\tstream.write(body)\n"
+			"else:\n"
+			"\tsys.stdout.buffer.write(body)\n"
+			"\tsys.stdout.buffer.flush()\n",
+			encoding="utf-8",
+		)
+		os.chmod(fake_curl, 0o755)
+		fake_root_command = Path(self.tempdir.name) / "fake-root-command"
+		fake_root_command.write_text(
+			f"#!{sys.executable}\n"
+			"import sys\n"
+			"sys.stdout.write('ROOT_CHILD_STDOUT')\n"
+			"sys.stdout.flush()\n",
+			encoding="utf-8",
+		)
+		os.chmod(fake_root_command, 0o755)
+		driver = """
+import sys
+from pathlib import Path
+from tools.oracle_web import host_release
+
+host_release.CURL = sys.argv[1]
+host_release.NGINX_TEST = (sys.argv[6], "nginx-test")
+host_release.SYSTEMCTL = sys.argv[6]
+
+raise SystemExit(host_release.main(
+	[
+		"activate", "--site", "mobile-lab", "--release-id", "body-output",
+		"--archive", sys.argv[2], "--sha256", sys.argv[3],
+	],
+	app_root=Path(sys.argv[4]),
+	staging_root=Path(sys.argv[5]),
+	require_root=False,
+))
+"""
+		completed = subprocess.run(
+			[
+				sys.executable, "-c", driver, str(fake_curl), str(archive), digest,
+				str(self.app_root), str(self.staging_root), str(fake_root_command),
+			],
+			cwd=Path(__file__).resolve().parents[1],
+			capture_output=True,
+			check=False,
+		)
+		expected = {
+			"current": "body-output", "previous": None,
+			"backend_restarted": True, "score_reset": True,
+		}
+		self.assertEqual(completed.returncode, 0, completed.stderr.decode(errors="replace"))
+		self.assertEqual(completed.stdout, (json.dumps(expected, sort_keys=True) + "\n").encode())
+
+	def test_default_root_runner_bounds_a_hung_system_command(self) -> None:
+		"""A stuck systemctl child must not hold the root helper transaction forever."""
+		module = self._module()
+		started = time.monotonic()
+		with mock.patch.object(module, "ROOT_COMMAND_TIMEOUT_SECONDS", 0.05, create=True):
+			with self.assertRaises(module.ReleaseError):
+				module._command(
+					module._default_runner,
+					(sys.executable, "-c", "import time; time.sleep(0.4)"),
+				)
+		self.assertLess(time.monotonic() - started, 0.3)
 
 	def test_archive_bytes_cannot_change_between_checksum_and_manifest_parse(self) -> None:
 		"""Reopening the staging pathname after hashing can activate different, unverified bytes."""
@@ -827,7 +1036,10 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 		archive3, digest3 = self._archive("static-fail", manifest=static2_manifest, files=static2_files)
 		failing = RecordingRunner(
 			lambda command, _index: "static HTTPS failed"
-			if command[-1] == "https://uos-drone.kro.kr/" else None
+			if (
+				self._current_target() == "releases/static-fail"
+				and command[-1] == "https://uos-drone.kro.kr/"
+			) else None
 		)
 		with self.assertRaises(self._module().ReleaseError):
 			self._module().activate(
@@ -835,12 +1047,13 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 				app_root=self.app_root, staging_root=self.staging_root, runner=failing,
 			)
 		self.assertEqual(self._current_target(), "releases/reordered-again")
+		self.assertIn(
+			("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
+			failing.commands,
+		)
 		self.assertEqual(
-			failing.commands[-2:],
-			[
-				("/usr/bin/systemctl", "restart", "zetin-webapp@mobile-lab.service"),
-				("/usr/bin/systemctl", "reload", "nginx"),
-			],
+			failing.commands[-1],
+			("/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "--noproxy", "*", "--max-time", "5", "--resolve", "uos-drone.kro.kr:443:127.0.0.1", "https://uos-drone.kro.kr/presenter.html"),
 		)
 
 	def test_explicit_null_backend_is_a_static_release(self) -> None:
@@ -918,7 +1131,10 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 
 		def runner_a(command, _index=[0]):
 			_index[0] += 1
-			if command[-1] == "http://127.0.0.1:18080/api/scores":
+			if (
+				self._current_target() == "releases/new-a"
+				and command[-1] == "http://127.0.0.1:18080/api/scores"
+			):
 				a_at_health.set()
 				self.assertTrue(release_a.wait(5))
 				raise RuntimeError("new-a health failed")
@@ -945,14 +1161,15 @@ class OracleWebHostReleaseTests(unittest.TestCase):
 
 		thread_a = threading.Thread(target=activate_a)
 		thread_b = threading.Thread(target=activate_b)
-		thread_a.start()
-		self.assertTrue(a_at_health.wait(5))
-		thread_b.start()
-		time.sleep(0.1)
-		self.assertFalse(b_finished.is_set(), "new-b must wait for new-a's transaction lock")
-		release_a.set()
-		thread_a.join(5)
-		thread_b.join(5)
+		with mock.patch.object(self._module(), "BACKEND_READY_TIMEOUT_SECONDS", 0, create=True):
+			thread_a.start()
+			self.assertTrue(a_at_health.wait(5))
+			thread_b.start()
+			time.sleep(0.1)
+			self.assertFalse(b_finished.is_set(), "new-b must wait for new-a's transaction lock")
+			release_a.set()
+			thread_a.join(5)
+			thread_b.join(5)
 		self.assertFalse(thread_a.is_alive())
 		self.assertFalse(thread_b.is_alive())
 		self.assertIsInstance(results["a"], self._module().ReleaseError)
