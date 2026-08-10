@@ -252,6 +252,36 @@ class OracleWebReleaseTests(unittest.TestCase):
         self._commit_config(manifest)
         self.assertNotEqual(self._build(Path(self.tempdir.name) / "duplicate.tar.gz").returncode, 0)
 
+    def test_rejects_noncanonical_or_release_metadata_manifest_paths(self) -> None:
+        """Raw path aliases could overwrite release metadata or evade destination uniqueness."""
+        source = FILE_PAIRS[0][0]
+        cases = {
+            "source dot": ("source", "."),
+            "source dot segment": ("source", source.replace("/index.html", "/./index.html")),
+            "source duplicate separator": ("source", source.replace("/mobile-lab/", "/mobile-lab//")),
+            "source trailing separator": ("source", f"{source}/"),
+            "destination dot": ("destination", "."),
+            "destination release metadata": ("destination", "release.json"),
+            "destination dot release metadata": ("destination", "./release.json"),
+            "destination dot segment alias": ("destination", "public/./index.html"),
+            "destination duplicate separator": ("destination", "public//index.html"),
+            "destination trailing separator": ("destination", "public/"),
+        }
+        for label, (field, value) in cases.items():
+            with self.subTest(label=label):
+                manifest = self._manifest()
+                manifest["files"][0][field] = value
+                self._commit_config(manifest)
+                result = self._build(Path(self.tempdir.name) / f"{label}.tar.gz")
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                run_git(self.repo, "reset", "--hard", "HEAD~1")
+
+        manifest = self._manifest()
+        manifest["files"][1]["destination"] = "public/./index.html"
+        self._commit_config(manifest)
+        result = self._build(Path(self.tempdir.name) / "alias-duplicate.tar.gz")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+
     def test_rejects_symlink_or_nonregular_allowlisted_source(self) -> None:
         """Checking only path existence lets symlinks and directories enter a release."""
         source = self.repo / FILE_PAIRS[0][0]

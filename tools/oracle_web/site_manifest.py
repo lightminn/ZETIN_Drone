@@ -69,9 +69,15 @@ def _validate_relative_path(value: Any, label: str) -> str:
     if "\\" in path or any(character in path for character in _GLOB_CHARS):
         raise ManifestError(f"{label} must not contain backslashes or glob syntax")
     parsed = PurePosixPath(path)
-    if parsed.is_absolute() or any(part in ("", ".", "..") for part in parsed.parts):
-        raise ManifestError(f"{label} must be a non-traversing relative POSIX path")
-    return path
+    canonical = parsed.as_posix()
+    if (
+        parsed.is_absolute()
+        or canonical == "."
+        or path != canonical
+        or any(part in ("", ".", "..") for part in parsed.parts)
+    ):
+        raise ManifestError(f"{label} must be a canonical non-traversing relative POSIX path")
+    return canonical
 
 
 def _validate_url_path(value: Any, label: str) -> str:
@@ -134,7 +140,7 @@ def load_site_manifest(path: Path) -> SiteManifest:
     if not isinstance(files_value, list) or not files_value:
         raise ManifestError("files must be a non-empty array")
     files: list[ManifestFile] = []
-    destinations: set[str] = set()
+    destinations: set[str] = {"release.json"}
     for index, item in enumerate(files_value):
         if not isinstance(item, dict):
             raise ManifestError(f"files[{index}] must be an object")
