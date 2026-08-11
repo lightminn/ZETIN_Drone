@@ -1040,7 +1040,70 @@
     </x-import>
   </section>
 
-  <section data-label="부호 반전 주입 결과" data-screen-label="40" data-speaker-notes="SIL_INJECT_SIGN_FAULT 조건에서 최대 롤 각도 1,292° 발산을 검출했다. 확인한 범위는 이 부호 반전 오류 유형이다." style="background:#fff">
+  <section data-label="SIL 1ms 폐루프" data-screen-label="40" data-speaker-notes="실제 하니스는 비행 펌웨어 파일을 테스트에 직접 포함한다. 실제 pid_task가 vTaskDelayUntil에 도달할 때마다 훅이 직전 모터 출력으로 물리를 적분하고 듀얼 IMU 원시값을 만든다. 정상 S1은 초기 롤 8도와 피치 마이너스 6도에서 수렴했고, 롤 배분 부호를 뒤집은 빌드는 같은 판정에서 실패했다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 SIL은 펌웨어와 물리 모델을 1ms마다 연결한다">
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:18px">
+        <div style="display:grid;grid-template-columns:1fr 44px 1fr;align-items:stretch">
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:18px 22px;display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:17px;font-weight:700;opacity:.82">test_sil_attitude.cpp</div>
+            <div style="font-family:ui-monospace,monospace;font-size:21px;line-height:1.4">#include "dual_imu_cascade_pwm.ino"</div>
+            <div style="font-size:17px;line-height:1.45;opacity:.88">실기와 같은 pid_task()를 그대로 컴파일</div>
+          </div>
+          <div style="font-size:26px;color:var(--uos-ink-muted);display:grid;place-items:center">＋</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:18px 22px;display:flex;flex-direction:column;gap:8px;border-top:5px solid var(--uos-blue)">
+            <div style="font-size:17px;font-weight:700;color:var(--uos-blue)">Arduino.h shim</div>
+            <div style="font-family:ui-monospace,monospace;font-size:21px;line-height:1.4">vTaskDelayUntil()<br>→ pre_tick_hook(tick_index)</div>
+            <div style="font-size:17px;line-height:1.45;color:var(--uos-ink-muted)">실제 1kHz 태스크의 대기 지점에서 물리 계산 실행</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 28px 1.08fr 28px 1.12fr 28px 1fr;align-items:stretch;flex:1;min-height:0">
+          <div style="border-top:5px solid var(--uos-blue);padding:17px 10px 0 0;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:17px;font-weight:700;color:var(--uos-blue)">직전 제어 결과</div>
+            <div style="font-family:ui-monospace,monospace;font-size:21px;font-weight:700">motorOut[4]</div>
+            <div style="font-size:18px;line-height:1.45;color:var(--uos-ink-muted)">네 모터 PWM</div>
+          </div>
+          <div style="font-size:24px;color:var(--uos-ink-muted);display:grid;place-items:center">→</div>
+          <div style="border-top:5px solid var(--uos-blue);padding:17px 8px 0;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:17px;font-weight:700;color:var(--uos-blue)">독립 물리 모델</div>
+            <div style="font-family:ui-monospace,monospace;font-size:20px;font-weight:700">integratePlant()</div>
+            <div style="font-size:18px;line-height:1.45;color:var(--uos-ink-muted)">추력 → 토크 → 각속도·자세</div>
+          </div>
+          <div style="font-size:24px;color:var(--uos-ink-muted);display:grid;place-items:center">→</div>
+          <div style="border-top:5px solid var(--uos-blue);padding:17px 8px 0;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:17px;font-weight:700;color:var(--uos-blue)">센서 합성</div>
+            <div style="font-family:ui-monospace,monospace;font-size:19px;font-weight:700">injectImuFromPlant()</div>
+            <div style="font-size:18px;line-height:1.45;color:var(--uos-ink-muted)">기체 상태 → 듀얼 IMU 원시값</div>
+          </div>
+          <div style="font-size:24px;color:var(--uos-ink-muted);display:grid;place-items:center">→</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:17px 18px;display:flex;flex-direction:column;gap:9px">
+            <div style="font-size:17px;font-weight:700;opacity:.82">실제 제어 태스크</div>
+            <div style="font-family:ui-monospace,monospace;font-size:21px;font-weight:700">pid_task()</div>
+            <div style="font-size:18px;line-height:1.45;opacity:.9">IMU 읽기 → 자세 추정 → PID → 새 motorOut</div>
+          </div>
+        </div>
+
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:12px 20px;display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center;font-size:18px;line-height:1.4">
+          <div>pid_task()가 다음 vTaskDelayUntil()에 도달</div>
+          <div style="font-family:ui-monospace,monospace;font-size:21px;font-weight:700">1 tick = 1ms</div>
+          <div style="text-align:right">새 motorOut으로 다음 물리 계산</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div style="border-top:1px solid var(--uos-rule);padding-top:13px;display:grid;grid-template-columns:150px 1fr;gap:16px;font-size:17px;line-height:1.45">
+            <div style="font-weight:700;color:var(--uos-blue)">정상 S1 · PASS</div>
+            <div>초기 Roll 8° · Pitch −6° → 3,000 tick<br>마지막 500 tick 평균 <strong>0.0513° · 0.1179°</strong></div>
+          </div>
+          <div style="border-top:1px solid var(--uos-rule);padding-top:13px;display:grid;grid-template-columns:150px 1fr;gap:16px;font-size:17px;line-height:1.45">
+            <div style="font-weight:700;color:var(--uos-blue)">부호 반전 · FAIL</div>
+            <div>롤 배분 R → −R 주입<br>최대 |Roll| <strong>1,291.8°</strong>에서 S1 실패</div>
+          </div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="부호 반전 주입 결과" data-screen-label="41" data-speaker-notes="SIL_INJECT_SIGN_FAULT 조건에서 최대 롤 각도 1,292° 발산을 검출했다. 확인한 범위는 이 부호 반전 오류 유형이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="부호 반전 주입 테스트 결과">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1076,7 +1139,7 @@
     </x-import>
   </section>
 
-  <section data-label="P항의 한계" data-screen-label="41" data-speaker-notes="일정한 외란이 계속되고 적분항이 없으면 P 제어만으로 정상상태 오차가 남는다." style="background:#fff">
+  <section data-label="P항의 한계" data-screen-label="42" data-speaker-notes="일정한 외란이 계속되고 적분항이 없으면 P 제어만으로 정상상태 오차가 남는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="P 항이 남기는 오차">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1096,7 +1159,7 @@
     </x-import>
   </section>
 
-  <section data-label="I항의 역할" data-screen-label="42" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해준다." style="background:#fff">
+  <section data-label="I항의 역할" data-screen-label="43" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해준다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="I 항의 역할 — 남은 오차를 기억한다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.14fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1121,7 +1184,7 @@
     </x-import>
   </section>
 
-  <section data-label="Ki 튜닝" data-screen-label="43" data-speaker-notes="측정해보니 I항이 클램프의 1.4%만 쓰고 있었다. 사실상 꺼져 있던 셈이다." style="background:#fff">
+  <section data-label="Ki 튜닝" data-screen-label="44" data-speaker-notes="측정해보니 I항이 클램프의 1.4%만 쓰고 있었다. 사실상 꺼져 있던 셈이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="Ki 게인 튜닝 — 측정하고 나서 올렸다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 42px 1fr 42px 1fr;align-items:stretch;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:22px 0">
@@ -1154,7 +1217,7 @@
     </x-import>
   </section>
 
-  <section data-label="캐스케이드 구조" data-screen-label="44" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있다." style="background:#fff">
+  <section data-label="캐스케이드 구조" data-screen-label="45" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="각도·각속도 캐스케이드 제어">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.16fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1176,7 +1239,7 @@
     </x-import>
   </section>
 
-  <section data-label="게인 설정값" data-screen-label="45" data-speaker-notes="현재 펌웨어에 들어 있는 값이다. 지상국에서 gains 명령으로 읽어 확인한다." style="background:#fff">
+  <section data-label="게인 설정값" data-screen-label="46" data-speaker-notes="현재 펌웨어에 들어 있는 값이다. 지상국에서 gains 명령으로 읽어 확인한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 게인 설정값">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:20px">
@@ -1232,7 +1295,7 @@
     </x-import>
   </section>
 
-  <section data-label="Yaw 기준점" data-screen-label="46" data-speaker-notes="롤과 피치는 선형 가속이 크지 않은 구간에서 중력을 장기 기준으로 쓸 수 있지만, Yaw는 중력만으로 알 수 없다." style="background:#fff">
+  <section data-label="Yaw 기준점" data-screen-label="47" data-speaker-notes="롤과 피치는 선형 가속이 크지 않은 구간에서 중력을 장기 기준으로 쓸 수 있지만, Yaw는 중력만으로 알 수 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="좌우 회전(Yaw)은 중력으로 기준을 잡을 수 없다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
@@ -1264,7 +1327,7 @@
     </x-import>
   </section>
 
-  <section data-label="헤딩 고정" data-screen-label="47" data-speaker-notes="지자기센서는 나침반이다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞는다." style="background:#fff">
+  <section data-label="헤딩 고정" data-screen-label="48" data-speaker-notes="지자기센서는 나침반이다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지자기센서로 헤딩 고정">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.12fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1288,7 +1351,7 @@
     </x-import>
   </section>
 
-  <section data-label="방위 융합 속도" data-screen-label="48" data-speaker-notes="앞 장에서 지자기 기준을 천천히 섞는다고 했다. 실제 코드는 1kHz 상보필터 α를 재사용하지 않고, 250Hz에서 방위 오차의 0.1%를 더해 약 4초의 시간상수를 만든다." style="background:#fff">
+  <section data-label="방위 융합 속도" data-screen-label="49" data-speaker-notes="앞 장에서 지자기 기준을 천천히 섞는다고 했다. 실제 코드는 1kHz 상보필터 α를 재사용하지 않고, 250Hz에서 방위 오차의 0.1%를 더해 약 4초의 시간상수를 만든다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="방위 융합의 실제 보정 속도">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:24px">
@@ -1332,7 +1395,7 @@
     </x-import>
   </section>
 
-  <section data-label="전류 간섭" data-screen-label="49" data-speaker-notes="새 센서를 달자 새 문제가 생겼다. 스로틀을 올리면 헤딩이 틀어졌다." style="background:#fff">
+  <section data-label="전류 간섭" data-screen-label="50" data-speaker-notes="새 센서를 달자 새 문제가 생겼다. 스로틀을 올리면 헤딩이 틀어졌다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 전류가 자기장을 오염시킨다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">전류가 흐르는 전선 주변에는 자기장이 생긴다. 나침반 옆에서 큰 전류를 흘린 것과 같다.</div>
@@ -1362,7 +1425,7 @@
     </x-import>
   </section>
 
-  <section data-label="보정 결과" data-screen-label="50" data-speaker-notes="가로축이 스로틀, 세로축이 헤딩 오차이다. 파란 기울기가 보정 전, 회색이 보정 후이다." style="background:#fff">
+  <section data-label="보정 결과" data-screen-label="51" data-speaker-notes="가로축이 스로틀, 세로축이 헤딩 오차이다. 파란 기울기가 보정 전, 회색이 보정 후이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="전류 간섭 보정 결과 — 벤치 실측">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.5fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -1392,7 +1455,7 @@
     </x-import>
   </section>
 
-  <section data-label="운용 기본값 ON" data-screen-label="51" data-speaker-notes="펌웨어 변수는 안전하게 OFF로 시작하지만, 현재 지상국은 시동 전에 검증된 기본 선택인 ON을 보낸다. 끄는 선택도 조종자에게 남겨둔다." style="background:#fff">
+  <section data-label="운용 기본값 ON" data-screen-label="52" data-speaker-notes="펌웨어 변수는 안전하게 OFF로 시작하지만, 현재 지상국은 시동 전에 검증된 기본 선택인 ON을 보낸다. 끄는 선택도 조종자에게 남겨둔다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 운용 기본값은 ON">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1408,7 +1471,7 @@
     </x-import>
   </section>
 
-  <section data-label="태스크 워치독" data-screen-label="52" data-speaker-notes="제어 코드가 멈추면 모터는 마지막 출력으로 계속 돈다. 그것을 막는 장치이다." style="background:#fff">
+  <section data-label="태스크 워치독" data-screen-label="53" data-speaker-notes="제어 코드가 멈추면 모터는 마지막 출력으로 계속 돈다. 그것을 막는 장치이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="제어 태스크가 멈췄을 때 — 태스크 워치독">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:34px">
@@ -1431,7 +1494,7 @@
     </x-import>
   </section>
 
-  <section data-label="RC 워치독 오탐" data-screen-label="53" data-speaker-notes="조종 신호가 정상인데도 끊긴 것으로 오판한 사례이다. 원인은 뺄셈 한 줄." style="background:#fff">
+  <section data-label="RC 워치독 오탐" data-screen-label="54" data-speaker-notes="조종 신호가 정상인데도 끊긴 것으로 오판한 사례이다. 원인은 뺄셈 한 줄." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="조종 신호가 멀쩡한데 끊긴 것으로 판단한 사고">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1456,7 +1519,7 @@
     </x-import>
   </section>
 
-  <section data-label="RC 시퀀스 거부" data-screen-label="54" data-speaker-notes="조종 패킷 번호를 검사하는 부분이다. 하드웨어 없이 노트북에서 테스트로 찾았다." style="background:#fff">
+  <section data-label="RC 시퀀스 거부" data-screen-label="55" data-speaker-notes="조종 패킷 번호를 검사하는 부분이다. 하드웨어 없이 노트북에서 테스트로 찾았다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비정상 조종 패킷을 거부하기">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:20px;line-height:1.55;max-width:1020px">조종 명령에는 순번(시퀀스)이 붙는다. 늦게 도착한 패킷이나 중복 패킷을 걸러내기 위한 장치이다. 여기에 두 가지 결함이 있었다.</div>
@@ -1477,7 +1540,7 @@
     </x-import>
   </section>
 
-  <section data-label="Failsafe 전환" data-screen-label="55" data-speaker-notes="RC 신호 두절만 시간 기반 하강으로 넘긴다. 현재 종료 조건은 착지 감지가 아니라 3초 백스톱이다." style="background:#fff">
+  <section data-label="Failsafe 전환" data-screen-label="56" data-speaker-notes="RC 신호 두절만 시간 기반 하강으로 넘긴다. 현재 종료 조건은 착지 감지가 아니라 3초 백스톱이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="조종 신호가 끊기면 무엇을 해야 하는가">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
@@ -1510,7 +1573,7 @@
     </x-import>
   </section>
 
-  <section data-label="착지 판정 한계" data-screen-label="56" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류 센서는 연결됐지만 아직 판정에 쓰지 않는다." style="background:#fff">
+  <section data-label="착지 판정 한계" data-screen-label="57" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류 센서는 연결됐지만 아직 판정에 쓰지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="땅에 닿았는지를 어떻게 아는가">
           <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
             <div style="display:flex;flex-direction:column;gap:24px">
@@ -1529,7 +1592,7 @@
     </x-import>
   </section>
 
-  <section data-label="IMU 판정 재검토" data-screen-label="57" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확하다. 능동 프로브도 아직 착지 판정기로 검증되지 않았다." style="background:#fff">
+  <section data-label="IMU 판정 재검토" data-screen-label="58" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확하다. 능동 프로브도 아직 착지 판정기로 검증되지 않았다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="IMU만으로 시도한 착지 판정">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
@@ -1551,7 +1614,7 @@
     </x-import>
   </section>
 
-  <section data-label="프로브 가설과 반증" data-screen-label="58" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
+  <section data-label="프로브 가설과 반증" data-screen-label="59" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="능동 프로브 — 가설과 실제 관측">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.13fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1568,7 +1631,7 @@
     </x-import>
   </section>
 
-  <section data-label="현재 자동착륙 상태" data-screen-label="59" data-speaker-notes="현재 착지 감지 결과는 모터 정지에 쓰지 않는다. 하강은 3초 타이머로 종료하며, 실내 저고도 자동착륙은 운용 범위에서 제외한다." style="background:#fff">
+  <section data-label="현재 자동착륙 상태" data-screen-label="60" data-speaker-notes="현재 착지 감지 결과는 모터 정지에 쓰지 않는다. 하강은 3초 타이머로 종료하며, 실내 저고도 자동착륙은 운용 범위에서 제외한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 구현 — 시간 기반 하강">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 42px 1fr 42px 1fr;align-items:stretch;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:22px 0">
@@ -1601,7 +1664,7 @@
     </x-import>
   </section>
 
-  <section data-label="반쪽 락" data-screen-label="60" data-speaker-notes="두 코어가 같은 값을 다루는데, 한쪽만 락을 걸고 있었다. 그건 상호배타가 아니다." style="background:#fff">
+  <section data-label="반쪽 락" data-screen-label="61" data-speaker-notes="두 코어가 같은 값을 다루는데, 한쪽만 락을 걸고 있었다. 그건 상호배타가 아니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 코어가 같은 값을 만질 때">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1623,7 +1686,7 @@
     </x-import>
   </section>
 
-  <section data-label="락 통합" data-screen-label="61" data-speaker-notes="규칙을 하나로 정리했다. 요청은 코어0, 실행은 제어 태스크." style="background:#fff">
+  <section data-label="락 통합" data-screen-label="62" data-speaker-notes="규칙을 하나로 정리했다. 요청은 코어0, 실행은 제어 태스크." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="하나의 락, 하나의 소유자">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 86px 1fr 86px 1fr;align-items:center;flex:1">
@@ -1648,7 +1711,7 @@
     </x-import>
   </section>
 
-  <section data-label="4겹 검증" data-screen-label="62" data-speaker-notes="세션 3의 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
+  <section data-label="4겹 검증" data-screen-label="63" data-speaker-notes="세션 3의 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="서로 다른 오류를 잡는 4단계 검증">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="display:flex;flex-direction:column;flex:1;border-top:6px solid var(--uos-blue)">
@@ -1678,12 +1741,12 @@
     </x-import>
   </section>
 
-  <section data-label="04 시연·체험" data-screen-label="63" data-speaker-notes="이제 진행자 기체 시연과 스마트폰 체험으로 넘어간다. 실제 기체 조종은 진행자가 맡는다." style="background:#fff">
+  <section data-label="04 시연·체험" data-screen-label="64" data-speaker-notes="이제 진행자 기체 시연과 스마트폰 체험으로 넘어간다. 실제 기체 조종은 진행자가 맡는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" chapter-no="04" title="시연과 체험
 직접 보고, 스마트폰으로 원리 체험하기"></x-import>
   </section>
 
-  <section data-label="시연 안전 규칙" data-screen-label="64" data-speaker-notes="시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
+  <section data-label="시연 안전 규칙" data-screen-label="65" data-speaker-notes="시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 기체 시연 안전 규칙">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1711,7 +1774,7 @@
     </x-import>
   </section>
 
-  <section data-label="진행자 시연 1 호버링" data-screen-label="65" data-speaker-notes="현장 시연이 어려우면 이 영상으로 대체한다. 테더를 건 상태에서 촬영했다." style="background:#fff">
+  <section data-label="진행자 시연 1 호버링" data-screen-label="66" data-speaker-notes="현장 시연이 어려우면 이 영상으로 대체한다. 테더를 건 상태에서 촬영했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 시연 1 — 제자리 호버링">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.4fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -1733,7 +1796,7 @@
     </x-import>
   </section>
 
-  <section data-label="자세 유지 성능" data-screen-label="66" data-speaker-notes="테더 시험에서 잘라낸 106.4초 구간이다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아니다." style="background:#fff">
+  <section data-label="자세 유지 성능" data-screen-label="67" data-speaker-notes="테더 시험에서 잘라낸 106.4초 구간이다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="테더 구간의 자세 기록 — 106.4초">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">
@@ -1761,7 +1824,7 @@
     </x-import>
   </section>
 
-  <section data-label="모터 차동" data-screen-label="67" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없다." style="background:#fff">
+  <section data-label="모터 차동" data-screen-label="68" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 출력에 남아 있는 상시 차동">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.5fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -1781,7 +1844,7 @@
     </x-import>
   </section>
 
-  <section data-label="진행자 시연 2 이동" data-screen-label="68" data-speaker-notes="좁은 범위 이동 시연이다. 진행자가 스틱을 살짝 기울이면 기체가 그 방향으로 이동한다." style="background:#fff">
+  <section data-label="진행자 시연 2 이동" data-screen-label="69" data-speaker-notes="좁은 범위 이동 시연이다. 진행자가 스틱을 살짝 기울이면 기체가 그 방향으로 이동한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 시연 2 — 좁은 범위 이동">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">스틱을 앞으로 살짝 기울이면, 기체는 <strong>앞으로 기울어진 상태를 목표로 삼고</strong> 그 방향으로 미끄러져 간다.</div>
@@ -1804,7 +1867,7 @@
     </x-import>
   </section>
 
-  <section data-label="모바일 균형잡기 체험" data-screen-label="69" data-speaker-notes="청중은 QR로 동시에 접속한다. 스마트폰을 세로로 들고 기울임 센서를 사용하며, 권한이나 센서가 없으면 터치 조이스틱으로 같은 체험을 진행한다. 실제 시연 기체는 진행자만 조종한다." style="background:#fff">
+  <section data-label="모바일 균형잡기 체험" data-screen-label="70" data-speaker-notes="청중은 QR로 동시에 접속한다. 스마트폰을 세로로 들고 기울임 센서를 사용하며, 권한이나 센서가 없으면 터치 조이스틱으로 같은 체험을 진행한다. 실제 시연 기체는 진행자만 조종한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="[체험] 스마트폰으로 가상 드론 균형잡기">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:350px 1fr;grid-template-rows:1fr auto;gap:20px 34px">
         <div style="grid-row:1 / 3;background:var(--uos-surface);border-radius:4px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
@@ -1832,7 +1895,7 @@
     </x-import>
   </section>
 
-  <section data-label="로그 해석" data-screen-label="70" data-speaker-notes="실제 로그 한 줄에서 M3 출력이 더 높고 제어기가 비대칭을 보정한다는 사실을 읽을 수 있다. 한 줄만으로 그 원인을 무게중심이라고 확정할 수는 없다." style="background:#fff">
+  <section data-label="로그 해석" data-screen-label="71" data-speaker-notes="실제 로그 한 줄에서 M3 출력이 더 높고 제어기가 비대칭을 보정한다는 사실을 읽을 수 있다. 한 줄만으로 그 원인을 무게중심이라고 확정할 수는 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 로그 한 줄에서 읽을 수 있는 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -1903,7 +1966,7 @@
     </x-import>
   </section>
 
-  <section data-label="검증 현황" data-screen-label="71" data-speaker-notes="첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않는다." style="background:#fff">
+  <section data-label="검증 현황" data-screen-label="72" data-speaker-notes="첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지금까지 검증된 것과 아직 아닌 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -1942,7 +2005,7 @@
     </x-import>
   </section>
 
-  <section data-label="다음 단계" data-screen-label="72" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
+  <section data-label="다음 단계" data-screen-label="73" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="다음 단계">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
@@ -1970,7 +2033,7 @@
     </x-import>
   </section>
 
-  <section data-label="마무리" data-screen-label="73" data-speaker-notes="비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣는다. 체험 자료와 로그는 요청이 있으면 공유한다." style="background:#fff">
+  <section data-label="마무리" data-screen-label="74" data-speaker-notes="비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣는다. 체험 자료와 로그는 요청이 있으면 공유한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="Q &amp; A" subtitle="ZETIN Drone · 비행제어 기술 · 모바일 균형잡기 체험" title="질문과 답변"></x-import>
   </section>
 
