@@ -203,11 +203,11 @@ class PresentationVideoBrowserTests(unittest.TestCase):
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._call(
             "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#29"},
+            {"url": f"http://127.0.0.1:{self.http_port}/#28"},
         )
         self._wait_for_playback("accelerometer.mp4")
 
-        self._evaluate("document.querySelector('deck-stage').goTo(29)")
+        self._evaluate("document.querySelector('deck-stage').goTo(28)")
         self._wait_for_playback("gyro.mp4")
         previous = self._video_state("accelerometer.mp4")
 
@@ -218,7 +218,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
     def test_active_video_restores_runtime_playback_properties(self) -> None:
         self._call(
             "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#29"},
+            {"url": f"http://127.0.0.1:{self.http_port}/#28"},
         )
         deadline = time.monotonic() + 4.0
         state = None
