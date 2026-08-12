@@ -40,13 +40,13 @@ class PresentationPptxExportTests(unittest.TestCase):
         self.assertTrue(PPTX_PATH.is_file(), f"missing generated PPTX: {PPTX_PATH}")
 
         presentation = Presentation(str(PPTX_PATH))
-        self.assertEqual(len(presentation.slides), 77)
+        self.assertEqual(len(presentation.slides), 74)
 
         with zipfile.ZipFile(PPTX_PATH) as archive:
             self.assertIsNone(archive.testzip())
             names = archive.namelist()
-            self.assertEqual(sum(bool(SLIDE_NAME.fullmatch(name)) for name in names), 77)
-            self.assertEqual(sum(bool(NOTE_NAME.fullmatch(name)) for name in names), 77)
+            self.assertEqual(sum(bool(SLIDE_NAME.fullmatch(name)) for name in names), 74)
+            self.assertEqual(sum(bool(NOTE_NAME.fullmatch(name)) for name in names), 74)
 
             root = ElementTree.fromstring(archive.read("ppt/presentation.xml"))
             slide_size = root.find("p:sldSz", PRESENTATION_NS)
