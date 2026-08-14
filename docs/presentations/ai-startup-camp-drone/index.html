@@ -1592,7 +1592,7 @@
     </x-import>
   </section>
 
-  <section data-label="3901-L0X 원리" data-screen-label="58" data-speaker-notes="3901-L0X는 광류와 거리계를 한 보드에 묶은 센서이다. PMW3901은 연속된 바닥 영상의 이동을 읽지만 그 값만으로는 실제 이동 속도의 크기를 정하기 어렵다. VL53L0X가 바닥까지의 높이를 함께 재면 광류에 거리 척도를 붙일 수 있다." style="background:#fff">
+  <section data-label="3901-L0X 원리" data-screen-label="58" data-speaker-notes="학생들이 알고 있는 선속도 v = 반지름 r × 각속도 ω와 연결해 설명한다. PMW3901의 광류 ω는 카메라 시야에서 바닥 무늬가 움직이는 각속도이다. VL53L0X가 잰 높이 h를 곱하면 평평한 바닥과 작은 각도 조건에서 바닥 기준 선속도 v ≈ h × ω를 얻을 수 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="바닥의 이동과 높이를 한 장에서 함께 읽는다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:34px;align-items:stretch">
         <figure style="margin:0;background:#06152f;border-radius:4px;padding:20px 24px 16px;display:flex;flex-direction:column;min-height:0">
@@ -1623,7 +1623,7 @@
             <path d="M120 317 C168 286 218 338 270 302" fill="none" stroke="#7fc5ff" stroke-width="4" stroke-dasharray="8 8"/>
             <path d="M390 210 V329" fill="none" stroke="#ffcf5a" stroke-width="4"/>
             <path d="M382 319 l8 14 8 -14" fill="#ffcf5a"/>
-            <text x="163" y="276" fill="#bfe3ff" text-anchor="middle" font-size="18">바닥 무늬의 이동</text>
+            <text x="163" y="276" fill="#bfe3ff" text-anchor="middle" font-size="18">바닥 무늬의 각속도 ω</text>
             <text x="432" y="276" fill="#fff0b5" text-anchor="middle" font-size="18">바닥까지 거리 h</text>
             <text x="290" y="402" fill="#c4d0de" text-anchor="middle" font-size="16">두 센서는 같은 바닥을 동시에 관측</text>
           </svg>
@@ -1632,15 +1632,18 @@
         <div style="display:flex;flex-direction:column;justify-content:center;gap:0">
           <div style="border-top:6px solid var(--uos-blue);padding:22px 0 20px">
             <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:10px">PMW3901 · 광류</div>
-            <div style="font-size:20px;line-height:1.55">연속된 바닥 영상을 비교해 화면 안에서 무늬가 이동한 방향과 크기를 구하는 방식이다.</div>
+            <div style="font-size:20px;line-height:1.55">연속된 바닥 영상을 비교해 카메라 시야에서 무늬가 움직이는 <strong>각속도 ω</strong>를 구하는 방식이다.</div>
           </div>
           <div style="border-top:1px solid var(--uos-rule);padding:20px 0">
             <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:10px">VL53L0X · ToF 거리</div>
             <div style="font-size:20px;line-height:1.55">940nm 적외선이 바닥에 반사되어 돌아오는 시간을 이용해 절대 거리를 재는 방식이다.</div>
           </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;margin-top:8px">
-            <div style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace;margin-bottom:10px">바닥 속도 v ≈ 높이 h × 광류 ω</div>
-            <div style="font-size:18.667px;line-height:1.5">광류만으로 부족한 실제 거리 척도를 ToF 높이로 보완하는 구조이다.</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:22px 24px;margin-top:8px">
+            <div style="font-size:17.333px;font-weight:700;opacity:.76;margin-bottom:5px">익숙한 관계</div>
+            <div style="font-size:23px;font-weight:700;font-family:ui-monospace,monospace">선속도 v = 반지름 r × 각속도 ω</div>
+            <div style="border-top:1px solid rgba(255,255,255,.34);margin:14px 0 12px"></div>
+            <div style="font-size:17.333px;font-weight:700;opacity:.76;margin-bottom:5px">드론에 대입</div>
+            <div style="font-size:23px;font-weight:700;font-family:ui-monospace,monospace">바닥 속도 v ≈ 높이 h × 광류 각속도 ω</div>
           </div>
         </div>
       </div>
@@ -1725,7 +1728,7 @@
             <div style="text-align:center;font-size:24px;color:var(--uos-ink-muted)">→</div>
             <div>
               <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">좌표와 척도</div>
-              <div style="font-size:18.667px;line-height:1.45">축·부호·장착 오프셋 확인, 높이로 광류 환산</div>
+              <div style="font-size:18.667px;line-height:1.45">축·부호·장착 오프셋 확인, h × ω로 수평 속도 환산</div>
             </div>
             <div style="text-align:center;font-size:24px;color:var(--uos-ink-muted)">→</div>
             <div>
