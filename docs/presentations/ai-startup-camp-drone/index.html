@@ -1573,12 +1573,12 @@
     </x-import>
   </section>
 
-  <section data-label="착지 판정 한계" data-screen-label="57" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류 센서는 연결됐지만 아직 판정에 쓰지 않는다." style="background:#fff">
+  <section data-label="착지 판정 한계" data-screen-label="57" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류의 수신·기록 경로는 구현됐지만 실물 장착과 판정 연결은 아직 남아 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="땅에 닿았는지를 어떻게 아는가">
           <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
             <div style="display:flex;flex-direction:column;gap:24px">
               <div style="font-size:32px;font-weight:700;line-height:1.3">착지를 잘못 판단해 공중에서 모터를 끄는 것보다, <strong>판정을 보류하는 쪽</strong>이 안전하다.</div>
-              <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55"><strong>Matek 3901-L0X</strong>의 거리·광류 데이터는 들어온다. 다만 현재는 텔레메트리 필드 60~64로 기록할 뿐, 착지 결정이나 제어에는 아직 사용하지 않는다.</div>
+              <div style="background:var(--uos-surface);border-radius:4px;padding:26px;font-size:20px;line-height:1.55"><strong>Matek 3901-L0X</strong>의 거리·광류를 받는 코드 경로는 구현됐다. 실물 장착 뒤에도 먼저 필드 60~64에 기록하며, 검증 전에는 착지 결정이나 제어에 사용하지 않는다.</div>
             </div>
         <div style="display:flex;flex-direction:column;gap:20px">
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
@@ -1592,7 +1592,168 @@
     </x-import>
   </section>
 
-  <section data-label="IMU 판정 재검토" data-screen-label="58" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확하다. 능동 프로브도 아직 착지 판정기로 검증되지 않았다." style="background:#fff">
+  <section data-label="3901-L0X 원리" data-screen-label="58" data-speaker-notes="3901-L0X는 광류와 거리계를 한 보드에 묶은 센서이다. PMW3901은 연속된 바닥 영상의 이동을 읽지만 그 값만으로는 실제 이동 속도의 크기를 정하기 어렵다. VL53L0X가 바닥까지의 높이를 함께 재면 광류에 거리 척도를 붙일 수 있다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="바닥의 이동과 높이를 한 장에서 함께 읽는다">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:34px;align-items:stretch">
+        <figure style="margin:0;background:#06152f;border-radius:4px;padding:20px 24px 16px;display:flex;flex-direction:column;min-height:0">
+          <svg viewBox="0 0 580 410" role="img" aria-label="3901-L0X의 광류 센서와 ToF 거리계가 바닥을 함께 관측하는 원리" style="width:100%;height:100%;min-height:0">
+            <defs>
+              <linearGradient id="flowCone" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#5eb8ff" stop-opacity=".48"/>
+                <stop offset="1" stop-color="#5eb8ff" stop-opacity=".08"/>
+              </linearGradient>
+              <linearGradient id="tofCone" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#ffcf5a" stop-opacity=".58"/>
+                <stop offset="1" stop-color="#ffcf5a" stop-opacity=".10"/>
+              </linearGradient>
+            </defs>
+            <text x="290" y="28" fill="#ffffff" text-anchor="middle" font-size="20" font-weight="700">Matek 3901-L0X</text>
+            <rect x="78" y="54" width="424" height="128" rx="14" fill="#0b3a70" stroke="#7fc5ff" stroke-width="2"/>
+            <circle cx="202" cy="118" r="41" fill="#07111f" stroke="#7fc5ff" stroke-width="4"/>
+            <circle cx="202" cy="118" r="19" fill="#2b7bbb"/>
+            <circle cx="382" cy="118" r="31" fill="#07111f" stroke="#ffcf5a" stroke-width="4"/>
+            <circle cx="382" cy="118" r="12" fill="#ffc52e"/>
+            <rect x="275" y="86" width="36" height="62" rx="4" fill="#dce9f7" opacity=".78"/>
+            <text x="202" y="171" fill="#d8ecff" text-anchor="middle" font-size="17" font-weight="700">PMW3901</text>
+            <text x="382" y="171" fill="#fff0b5" text-anchor="middle" font-size="17" font-weight="700">VL53L0X</text>
+            <path d="M161 184 L72 352 L332 352 L243 184 Z" fill="url(#flowCone)"/>
+            <path d="M362 184 L318 352 L446 352 L402 184 Z" fill="url(#tofCone)"/>
+            <path d="M62 352 H518" stroke="#ffffff" stroke-width="4"/>
+            <path d="M92 372 l34 -12 38 13 42 -14 40 13 43 -12 46 14 42 -15 46 13 40 -12 45 12" fill="none" stroke="#7b8da3" stroke-width="3"/>
+            <path d="M120 317 C168 286 218 338 270 302" fill="none" stroke="#7fc5ff" stroke-width="4" stroke-dasharray="8 8"/>
+            <path d="M390 210 V329" fill="none" stroke="#ffcf5a" stroke-width="4"/>
+            <path d="M382 319 l8 14 8 -14" fill="#ffcf5a"/>
+            <text x="163" y="276" fill="#bfe3ff" text-anchor="middle" font-size="18">바닥 무늬의 이동</text>
+            <text x="432" y="276" fill="#fff0b5" text-anchor="middle" font-size="18">바닥까지 거리 h</text>
+            <text x="290" y="402" fill="#c4d0de" text-anchor="middle" font-size="16">두 센서는 같은 바닥을 동시에 관측</text>
+          </svg>
+          <figcaption style="font-size:18.667px;color:#c8d5e4;text-align:center;line-height:1.4">광류의 넓은 시야와 ToF 거리의 척도를 결합</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:0">
+          <div style="border-top:6px solid var(--uos-blue);padding:22px 0 20px">
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:10px">PMW3901 · 광류</div>
+            <div style="font-size:20px;line-height:1.55">연속된 바닥 영상을 비교해 화면 안에서 무늬가 이동한 방향과 크기를 구하는 방식이다.</div>
+          </div>
+          <div style="border-top:1px solid var(--uos-rule);padding:20px 0">
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:10px">VL53L0X · ToF 거리</div>
+            <div style="font-size:20px;line-height:1.55">940nm 적외선이 바닥에 반사되어 돌아오는 시간을 이용해 절대 거리를 재는 방식이다.</div>
+          </div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;margin-top:8px">
+            <div style="font-size:26px;font-weight:700;font-family:ui-monospace,monospace;margin-bottom:10px">바닥 속도 v ≈ 높이 h × 광류 ω</div>
+            <div style="font-size:18.667px;line-height:1.5">광류만으로 부족한 실제 거리 척도를 ToF 높이로 보완하는 구조이다.</div>
+          </div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="3901-L0X HW 장착" data-screen-label="59" data-speaker-notes="장착 계획은 기체 하부 중앙에서 두 렌즈가 수직으로 바닥을 보게 하는 것이다. 보드의 방향 화살표는 기체 전방과 맞춘다. 전원은 5V와 GND, 데이터는 모듈 TX에서 ESP32-S3 GPIO16으로만 받으며 모듈 RX는 연결하지 않는다. 최종 장착 뒤 중심으로부터의 오프셋을 측정해 소프트웨어 보정값으로 남긴다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기체 하부 중앙에서 두 렌즈가 바닥을 보게 한다">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:.96fr 1.04fr;gap:36px;align-items:stretch">
+        <figure style="margin:0;background:var(--uos-surface);border-radius:4px;padding:18px 22px 14px;display:flex;flex-direction:column;min-height:0">
+          <svg viewBox="0 0 540 420" role="img" aria-label="드론 하부 중앙에 3901-L0X를 장착하고 렌즈를 아래로 향하게 하는 단면도" style="width:100%;height:100%;min-height:0">
+            <text x="270" y="28" fill="#004094" text-anchor="middle" font-size="20" font-weight="700">기체 단면</text>
+            <path d="M65 94 H475" stroke="#182b43" stroke-width="20" stroke-linecap="round"/>
+            <rect x="214" y="70" width="112" height="48" rx="8" fill="#004094"/>
+            <path d="M238 116 V164 M302 116 V164" stroke="#41556c" stroke-width="8"/>
+            <rect x="202" y="160" width="136" height="60" rx="8" fill="#0b3a70" stroke="#004094" stroke-width="3"/>
+            <circle cx="242" cy="208" r="18" fill="#2b7bbb" stroke="#ffffff" stroke-width="3"/>
+            <circle cx="300" cy="208" r="13" fill="#ffc52e" stroke="#ffffff" stroke-width="3"/>
+            <path d="M224 226 L117 360 H356 L260 226 Z" fill="#5eb8ff" opacity=".16"/>
+            <path d="M288 226 L254 360 H346 L312 226 Z" fill="#ffc52e" opacity=".22"/>
+            <path d="M58 360 H482" stroke="#6e7e91" stroke-width="4"/>
+            <path d="M72 379 l38 -12 42 13 45 -15 44 14 47 -12 45 14 44 -16 45 14 45 -12" fill="none" stroke="#9ca8b5" stroke-width="3"/>
+            <path d="M357 187 H458" stroke="#004094" stroke-width="3"/>
+            <path d="M446 178 l16 9 -16 9" fill="#004094"/>
+            <text x="407" y="171" fill="#004094" text-anchor="middle" font-size="17" font-weight="700">기체 전방</text>
+            <path d="M176 188 H88" stroke="#41556c" stroke-width="2"/>
+            <text x="82" y="182" fill="#41556c" text-anchor="start" font-size="16">하부 중앙</text>
+            <text x="82" y="202" fill="#41556c" text-anchor="start" font-size="16">강체 고정</text>
+            <text x="270" y="405" fill="#41556c" text-anchor="middle" font-size="17">렌즈 아래의 시야를 프레임·배선이 가리지 않는 구조</text>
+          </svg>
+          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center;line-height:1.4">보드 화살표와 기체 전방을 일치시키고 장착 오프셋을 기록</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;justify-content:center;border-top:6px solid var(--uos-blue)">
+          <div style="display:grid;grid-template-columns:122px 1fr;gap:20px;padding:22px 0;border-bottom:1px solid var(--uos-rule)">
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">배치</div>
+            <div style="font-size:20px;line-height:1.5">기체 하부에서 렌즈가 수직으로 바닥을 향하고, 방향 화살표가 기체 전방을 향하는 배치이다. 회전 중심 가까이에 두어 보정해야 할 지렛팔 효과를 줄인다.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:122px 1fr;gap:20px;padding:22px 0;border-bottom:1px solid var(--uos-rule)">
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">배선</div>
+            <div style="font-size:20px;line-height:1.5"><strong>5V · GND · TX</strong> 세 선을 사용한다. 모듈 TX를 ESP32-S3의 <strong>GPIO16</strong>에 연결하고, 수신 전용이므로 모듈 RX는 연결하지 않는다.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:122px 1fr;gap:20px;padding:22px 0;border-bottom:1px solid var(--uos-rule)">
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">광학 조건</div>
+            <div style="font-size:20px;line-height:1.5">부팅 시 렌즈와 바닥 사이를 2cm보다 크게 두고, 바닥 무늬와 60lux 이상의 조도를 확보한다. 작동 범위는 약 8cm~2m이다.</div>
+          </div>
+          <div style="font-size:18.667px;line-height:1.5;color:var(--uos-ink-muted);padding-top:18px">펌웨어 배선 정의는 완료된 상태이다. 최종 브래킷·배선 고정과 장착 오프셋 실측은 HW 장착 후 확인 대상이다.</div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="3901-L0X SW 계획" data-screen-label="60" data-speaker-notes="소프트웨어는 두 구간으로 나뉜다. 현재는 UART 115200bps로 들어오는 MSPv2 프레임을 논블로킹으로 읽어 거리와 광류, 각 품질값을 필드 60부터 64에 기록한다. 다음 단계에서는 품질과 신선도, 축과 스케일, 자세 회전 영향을 검증한 뒤 거리계는 저고도 고도 제한과 착륙에, 광류는 수평 속도와 위치 드리프트 보정에 연결한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="받는 코드에서 고도·위치 제어로 단계적으로 연결한다">
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:22px">
+        <div style="display:grid;grid-template-columns:138px 1fr;gap:24px;align-items:center">
+          <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">현재 구현</div>
+          <div style="display:grid;grid-template-columns:1fr 34px 1fr 34px 1.25fr;align-items:stretch">
+            <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:18px 20px">
+              <div style="font-size:20px;font-weight:700;margin-bottom:8px">UART 115200bps</div>
+              <div style="font-size:18.667px;line-height:1.4">TX → GPIO16 수신</div>
+            </div>
+            <div style="display:grid;place-items:center;font-size:24px;color:var(--uos-blue)">→</div>
+            <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:18px 20px">
+              <div style="font-size:20px;font-weight:700;margin-bottom:8px">MSPv2 파서</div>
+              <div style="font-size:18.667px;line-height:1.4">CRC · 거리 · 광류 해석</div>
+            </div>
+            <div style="display:grid;place-items:center;font-size:24px;color:var(--uos-blue)">→</div>
+            <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:18px 20px">
+              <div style="font-size:20px;font-weight:700;margin-bottom:8px">텔레메트리 필드 60~64</div>
+              <div style="font-size:18.667px;line-height:1.4">거리·품질·Flow X/Y·품질 기록</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:138px 1fr;gap:24px;align-items:center">
+          <div style="font-size:20px;font-weight:700;color:var(--uos-ink-muted)">제어 연결 전</div>
+          <div style="border:2px dashed #8c9aae;border-radius:4px;padding:18px 22px;display:grid;grid-template-columns:1fr 42px 1fr 42px 1fr;align-items:center">
+            <div>
+              <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">신뢰도 문턱</div>
+              <div style="font-size:18.667px;line-height:1.45">품질값·8cm~2m 범위·500ms 신선도 확인</div>
+            </div>
+            <div style="text-align:center;font-size:24px;color:var(--uos-ink-muted)">→</div>
+            <div>
+              <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">좌표와 척도</div>
+              <div style="font-size:18.667px;line-height:1.45">축·부호·장착 오프셋 확인, 높이로 광류 환산</div>
+            </div>
+            <div style="text-align:center;font-size:24px;color:var(--uos-ink-muted)">→</div>
+            <div>
+              <div style="font-size:20px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">비행 검증</div>
+              <div style="font-size:18.667px;line-height:1.45">기록 → 저고도 테더 → 폐루프 순서</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
+          <div style="border-top:6px solid #e3a500;padding-top:18px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:20px;font-weight:700;color:#8a6100">VL53L0X 거리의 예상 효과</div>
+            <div style="font-size:24px;font-weight:700;line-height:1.35">저고도 고도 제한과 착륙 접근 판단</div>
+            <div style="font-size:18.667px;line-height:1.5;color:var(--uos-ink-muted)">IMU의 1g만으로 구분하지 못했던 지면 접근을 직접 거리로 관측한다. 충분히 검증되면 3초 타이머만 쓰는 하강을 고도 기반 단계로 보완할 수 있다.</div>
+          </div>
+          <div style="border-top:6px solid var(--uos-blue);padding-top:18px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">PMW3901 광류의 예상 효과</div>
+            <div style="font-size:24px;font-weight:700;line-height:1.35">GPS가 없는 실내의 수평 드리프트 억제</div>
+            <div style="font-size:18.667px;line-height:1.5;color:var(--uos-ink-muted)">바닥 기준 수평 속도를 추정해 Roll·Pitch 목표에 보정값을 더하는 방식이다. 고도·자세 보정과 바닥 무늬·조도 조건을 함께 만족해야 한다.</div>
+          </div>
+        </div>
+
+        <div style="background:var(--uos-surface);border-left:6px solid var(--uos-blue);padding:16px 20px;font-size:18.667px;line-height:1.45"><strong>현재 경계</strong> — 수신·파싱·기록은 구현됐지만 두 측정값은 아직 모터 출력에 영향을 주지 않는다. 품질이 낮거나 데이터가 오래되면 기존 자세 제어와 시간 기반 안전 경로를 유지한다.</div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="IMU 판정 재검토" data-screen-label="61" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확하다. 능동 프로브도 아직 착지 판정기로 검증되지 않았다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="IMU만으로 시도한 착지 판정">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
@@ -1614,7 +1775,7 @@
     </x-import>
   </section>
 
-  <section data-label="프로브 가설과 반증" data-screen-label="59" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
+  <section data-label="프로브 가설과 반증" data-screen-label="62" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="능동 프로브 — 가설과 실제 관측">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.13fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1631,7 +1792,7 @@
     </x-import>
   </section>
 
-  <section data-label="현재 자동착륙 상태" data-screen-label="60" data-speaker-notes="현재 착지 감지 결과는 모터 정지에 쓰지 않는다. 하강은 3초 타이머로 종료하며, 실내 저고도 자동착륙은 운용 범위에서 제외한다." style="background:#fff">
+  <section data-label="현재 자동착륙 상태" data-screen-label="63" data-speaker-notes="현재 착지 감지 결과는 모터 정지에 쓰지 않는다. 하강은 3초 타이머로 종료하며, 실내 저고도 자동착륙은 운용 범위에서 제외한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 구현 — 시간 기반 하강">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 42px 1fr 42px 1fr;align-items:stretch;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:22px 0">
@@ -1652,8 +1813,8 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
-              <div style="font-size:20px;font-weight:700">연결된 센서의 현재 경계</div>
-              <div style="font-size:20px;line-height:1.55"><strong>3901-L0X</strong> 거리·광류 5개 값은 필드 60~64에 기록된다. 착지 결정과 비행 제어에는 아직 사용하지 않는다.</div>
+              <div style="font-size:20px;font-weight:700">센서 경로의 현재 경계</div>
+              <div style="font-size:20px;line-height:1.55"><strong>3901-L0X</strong> 거리·광류 5개 값을 필드 60~64에 기록하는 경로까지 구현했다. 착지 결정과 비행 제어에는 아직 사용하지 않는다.</div>
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
               <div style="font-size:20px;font-weight:700">현장 운용 범위</div>
@@ -1664,7 +1825,7 @@
     </x-import>
   </section>
 
-  <section data-label="반쪽 락" data-screen-label="61" data-speaker-notes="두 코어가 같은 값을 다루는데, 한쪽만 락을 걸고 있었다. 그건 상호배타가 아니다." style="background:#fff">
+  <section data-label="반쪽 락" data-screen-label="64" data-speaker-notes="두 코어가 같은 값을 다루는데, 한쪽만 락을 걸고 있었다. 그건 상호배타가 아니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 코어가 같은 값을 만질 때">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1686,7 +1847,7 @@
     </x-import>
   </section>
 
-  <section data-label="락 통합" data-screen-label="62" data-speaker-notes="규칙을 하나로 정리했다. 요청은 코어0, 실행은 제어 태스크." style="background:#fff">
+  <section data-label="락 통합" data-screen-label="65" data-speaker-notes="규칙을 하나로 정리했다. 요청은 코어0, 실행은 제어 태스크." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="하나의 락, 하나의 소유자">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 86px 1fr 86px 1fr;align-items:center;flex:1">
@@ -1711,7 +1872,7 @@
     </x-import>
   </section>
 
-  <section data-label="4겹 검증" data-screen-label="63" data-speaker-notes="세션 3의 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
+  <section data-label="4겹 검증" data-screen-label="66" data-speaker-notes="세션 3의 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="서로 다른 오류를 잡는 4단계 검증">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="display:flex;flex-direction:column;flex:1;border-top:6px solid var(--uos-blue)">
@@ -1741,12 +1902,12 @@
     </x-import>
   </section>
 
-  <section data-label="04 시연·체험" data-screen-label="64" data-speaker-notes="이제 진행자 기체 시연과 스마트폰 체험으로 넘어간다. 실제 기체 조종은 진행자가 맡는다." style="background:#fff">
+  <section data-label="04 시연·체험" data-screen-label="67" data-speaker-notes="이제 진행자 기체 시연과 스마트폰 체험으로 넘어간다. 실제 기체 조종은 진행자가 맡는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" chapter-no="04" title="시연과 체험
 직접 보고, 스마트폰으로 원리 체험하기"></x-import>
   </section>
 
-  <section data-label="시연 안전 규칙" data-screen-label="65" data-speaker-notes="시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
+  <section data-label="시연 안전 규칙" data-screen-label="68" data-speaker-notes="시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 기체 시연 안전 규칙">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1774,7 +1935,7 @@
     </x-import>
   </section>
 
-  <section data-label="진행자 시연 1 호버링" data-screen-label="66" data-speaker-notes="현장 시연이 어려우면 이 영상으로 대체한다. 테더를 건 상태에서 촬영했다." style="background:#fff">
+  <section data-label="진행자 시연 1 호버링" data-screen-label="69" data-speaker-notes="현장 시연이 어려우면 이 영상으로 대체한다. 테더를 건 상태에서 촬영했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 시연 1 — 제자리 호버링">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.4fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -1796,7 +1957,7 @@
     </x-import>
   </section>
 
-  <section data-label="자세 유지 성능" data-screen-label="67" data-speaker-notes="테더 시험에서 잘라낸 106.4초 구간이다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아니다." style="background:#fff">
+  <section data-label="자세 유지 성능" data-screen-label="70" data-speaker-notes="테더 시험에서 잘라낸 106.4초 구간이다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="테더 구간의 자세 기록 — 106.4초">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">
@@ -1824,7 +1985,7 @@
     </x-import>
   </section>
 
-  <section data-label="모터 차동" data-screen-label="68" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없다." style="background:#fff">
+  <section data-label="모터 차동" data-screen-label="71" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 출력에 남아 있는 상시 차동">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.5fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -1844,7 +2005,7 @@
     </x-import>
   </section>
 
-  <section data-label="진행자 시연 2 이동" data-screen-label="69" data-speaker-notes="좁은 범위 이동 시연이다. 진행자가 스틱을 살짝 기울이면 기체가 그 방향으로 이동한다." style="background:#fff">
+  <section data-label="진행자 시연 2 이동" data-screen-label="72" data-speaker-notes="좁은 범위 이동 시연이다. 진행자가 스틱을 살짝 기울이면 기체가 그 방향으로 이동한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 시연 2 — 좁은 범위 이동">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:32px;font-weight:700;line-height:1.35;max-width:1020px">스틱을 앞으로 살짝 기울이면, 기체는 <strong>앞으로 기울어진 상태를 목표로 삼고</strong> 그 방향으로 미끄러져 간다.</div>
@@ -1867,7 +2028,7 @@
     </x-import>
   </section>
 
-  <section data-label="모바일 균형잡기 체험" data-screen-label="70" data-speaker-notes="청중은 QR로 동시에 접속한다. 스마트폰을 세로로 들고 기울임 센서를 사용하며, 권한이나 센서가 없으면 터치 조이스틱으로 같은 체험을 진행한다. 실제 시연 기체는 진행자만 조종한다." style="background:#fff">
+  <section data-label="모바일 균형잡기 체험" data-screen-label="73" data-speaker-notes="청중은 QR로 동시에 접속한다. 스마트폰을 세로로 들고 기울임 센서를 사용하며, 권한이나 센서가 없으면 터치 조이스틱으로 같은 체험을 진행한다. 실제 시연 기체는 진행자만 조종한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="[체험] 스마트폰으로 가상 드론 균형잡기">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:350px 1fr;grid-template-rows:1fr auto;gap:20px 34px">
         <div style="grid-row:1 / 3;background:var(--uos-surface);border-radius:4px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
@@ -1895,7 +2056,7 @@
     </x-import>
   </section>
 
-  <section data-label="로그 해석" data-screen-label="71" data-speaker-notes="실제 로그 한 줄에서 M3 출력이 더 높고 제어기가 비대칭을 보정한다는 사실을 읽을 수 있다. 한 줄만으로 그 원인을 무게중심이라고 확정할 수는 없다." style="background:#fff">
+  <section data-label="로그 해석" data-screen-label="74" data-speaker-notes="실제 로그 한 줄에서 M3 출력이 더 높고 제어기가 비대칭을 보정한다는 사실을 읽을 수 있다. 한 줄만으로 그 원인을 무게중심이라고 확정할 수는 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 로그 한 줄에서 읽을 수 있는 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -1966,7 +2127,7 @@
     </x-import>
   </section>
 
-  <section data-label="검증 현황" data-screen-label="72" data-speaker-notes="첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않는다." style="background:#fff">
+  <section data-label="검증 현황" data-screen-label="75" data-speaker-notes="첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지금까지 검증된 것과 아직 아닌 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -1987,7 +2148,7 @@
             <li>안정적인 정지 호버 재현</li>
             <li>시간 기반 자동착륙 비행 검증</li>
             <li>Ki와 기체 비대칭의 실기 재조정</li>
-            <li>3901-L0X 거리·광류의 제어 연결</li>
+            <li>3901-L0X 장착과 거리·광류 제어 연결</li>
           </ul>
         </div>
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -2005,7 +2166,7 @@
     </x-import>
   </section>
 
-  <section data-label="다음 단계" data-screen-label="73" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
+  <section data-label="다음 단계" data-screen-label="76" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="다음 단계">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
@@ -2018,7 +2179,7 @@
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:18.667px;font-weight:700;color:var(--uos-blue)">STEP 2</div>
             <div style="font-size:24px;font-weight:700;line-height:1.3">거리·광류를 제어에 쓰기</div>
-            <div style="font-size:20px;line-height:1.55">이미 연결된 <strong>3901-L0X</strong>의 거리와 광류를 폐루프 제어에 연결해 고도·위치를 잡는다.</div>
+            <div style="font-size:20px;line-height:1.55">수신 경로를 구현한 <strong>3901-L0X</strong>를 기체에 장착하고, 거리와 광류를 폐루프 제어에 연결해 고도·위치를 잡는다.</div>
             <div style="font-size:18.667px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 — 센서 이상 시 안전 전환 · 무입력 위치 유지</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
@@ -2033,7 +2194,7 @@
     </x-import>
   </section>
 
-  <section data-label="마무리" data-screen-label="74" data-speaker-notes="비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣는다. 체험 자료와 로그는 요청이 있으면 공유한다." style="background:#fff">
+  <section data-label="마무리" data-screen-label="77" data-speaker-notes="비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣는다. 체험 자료와 로그는 요청이 있으면 공유한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" date="Q &amp; A" subtitle="ZETIN Drone · 비행제어 기술 · 모바일 균형잡기 체험" title="질문과 답변"></x-import>
   </section>
 
