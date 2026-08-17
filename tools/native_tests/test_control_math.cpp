@@ -203,6 +203,54 @@ void setFakeAccelMagnitude(float accel_g, uint32_t tick) {
   IMU2.next_event = eventWith(0, 0, 0, 0, 0, -raw);
 }
 
+void setFakeYawRateAndAccel(float body_yaw_dps, float accel_g,
+                            uint32_t tick) {
+  const int dither = (tick & 1U) ? 1 : -1;
+  const int16_t accel_raw =
+      static_cast<int16_t>(std::lround(accel_g / ACCEL_SCALE) + dither);
+  const int16_t imu1_yaw_raw =
+      static_cast<int16_t>(std::lround(-body_yaw_dps / GYRO_SCALE));
+  IMU1.next_event = eventWith(0, 0, imu1_yaw_raw, 0, 0, accel_raw);
+  IMU2.next_event = eventWith(0, 0, -imu1_yaw_raw, 0, 0, -accel_raw);
+}
+
+void prepareYawAuthorityFlight() {
+  arduino_fake::reset();
+  fault_rc = fault_imu1 = fault_imu2 = fault_disagree = fault_attitude = false;
+  imu1_frozen_now = imu2_frozen_now = imu_disagree_now = false;
+  calibration_ok = true;
+  mag_calibrating = false;
+  mag_enabled = false;
+  safety_lock = true;
+  safety_arm_requested = false;
+  safety_disarm_requested = false;
+  fs_phase = FS_NONE;
+  angleX = angleY = angleZ = 0.0f;
+  gyro_bias1[0] = gyro_bias1[1] = gyro_bias1[2] = 0.0f;
+  gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
+  setFakeYawRateAndAccel(20.0f, 1.0f, 0U);
+
+  sendUdpCommandOnce("start");
+  CHECK(safety_arm_requested);
+  base_throttle = 1200;
+  min_throttle = 1100;
+  max_throttle = 1300;
+  lastRcMs = millis();
+  Kp_Angle_Roll = Kp_Angle_Pitch = Kp_Angle_Yaw = 0.0f;
+  Kp_Rate_Roll = Kp_Rate_Pitch = 0.0f;
+  Ki_Rate_Roll = Ki_Rate_Pitch = Ki_Rate_Yaw = 0.0f;
+  Kd_Rate_Roll = Kd_Rate_Pitch = Kd_Rate_Yaw = 0.0f;
+  Kp_Rate_Yaw = 100.0f;
+  targetAngleX = targetAngleY = targetAngleZ = 0.0f;
+  targetYawRate = 0.0f;
+  yaw_hold_now = false;
+  yaw_hold_override = false;
+  yaw_authority_state = YAW_AUTH_NORMAL;
+  iTermRoll = iTermPitch = iTermYaw = 0.0f;
+  mixer_scaled = false;
+  mixer_yaw_scale = 1.0f;
+}
+
 void primeHoverEstimate(float hover_us) {
   hoverTracker = {};
   hoverTracker.estimate_us = hover_us;
@@ -2417,6 +2465,87 @@ int main() {
     CHECK(iTermRoll > 0.0f);
     CHECK(iTermPitch > 0.0f);
     CHECK_NEAR(iTermYaw, 0.0f, 1e-7f);
+  });
+
+  runCase("pid task consumes prior yaw scale for the 150ms authority gate", [] {
+    prepareYawAuthorityFlight();
+    bool saw_limited_allocation = false;
+    bool saw_limited_state = false;
+    uint32_t first_limited_allocation_ms = 0U;
+    uint32_t limited_state_elapsed_ms = 0U;
+    float limited_target_angle = 0.0f;
+    float limited_current_angle = 0.0f;
+    float limited_target_rate = 0.0f;
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      setFakeYawRateAndAccel(20.0f, 1.0f, tick);
+      if (!saw_limited_allocation && mixer_scaled) {
+        saw_limited_allocation = true;
+        first_limited_allocation_ms = millis();
+      }
+      if (saw_limited_allocation &&
+          (uint32_t)(millis() - first_limited_allocation_ms) <= 150U) {
+        CHECK_EQ(yaw_authority_state, (int)YAW_AUTH_NORMAL);
+      }
+      if (yaw_authority_state == YAW_AUTH_LIMITED) {
+        saw_limited_state = true;
+        limited_state_elapsed_ms =
+            (uint32_t)(millis() - first_limited_allocation_ms);
+        limited_target_angle = targetAngleZ;
+        limited_current_angle = angleZ;
+        limited_target_rate = tgtRate[2];
+        throw arduino_fake::TaskDelayExit{};
+      }
+    };
+
+    runPidTicks(400U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK(saw_limited_allocation);
+    CHECK(saw_limited_state);
+    CHECK_EQ(limited_state_elapsed_ms, 151U);
+    CHECK_NEAR(limited_target_angle, limited_current_angle, 1e-5f);
+    CHECK_NEAR(limited_target_rate, 0.0f, 1e-6f);
+  });
+
+  runCase("dual IMU loss immediately resets limited yaw authority state", [] {
+    prepareYawAuthorityFlight();
+    bool injected_dual_loss = false;
+    bool observed_immediate_lock = false;
+    bool authority_was_limited = false;
+    bool allocation_was_limited = false;
+    int state_at_immediate_lock = -1;
+    float scale_before_dual_loss = 1.0f;
+    float scale_at_immediate_lock = -1.0f;
+    arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+      setFakeYawRateAndAccel(20.0f, 1.0f, tick);
+      if (!injected_dual_loss && yaw_authority_state == YAW_AUTH_LIMITED) {
+        authority_was_limited = true;
+        allocation_was_limited = mixer_scaled;
+        scale_before_dual_loss = mixer_yaw_scale;
+        fault_imu1 = true;
+        fault_imu2 = true;
+        injected_dual_loss = true;
+      } else if (injected_dual_loss && safety_lock) {
+        observed_immediate_lock = true;
+        state_at_immediate_lock = yaw_authority_state;
+        scale_at_immediate_lock = mixer_yaw_scale;
+        throw arduino_fake::TaskDelayExit{};
+      }
+    };
+
+    runPidTicks(400U);
+    arduino_fake::pre_tick_hook = nullptr;
+
+    CHECK(authority_was_limited);
+    CHECK(allocation_was_limited);
+    CHECK(scale_before_dual_loss < 1.0f);
+    CHECK(injected_dual_loss);
+    CHECK(observed_immediate_lock);
+    CHECK(safety_lock);
+    CHECK_EQ(active_imus, 0);
+    for (int motor : motorOut) CHECK_EQ(motor, 1000);
+    CHECK_EQ(state_at_immediate_lock, (int)YAW_AUTH_NORMAL);
+    CHECK_NEAR(scale_at_immediate_lock, 1.0f, 1e-6f);
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count

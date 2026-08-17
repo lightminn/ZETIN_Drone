@@ -699,6 +699,7 @@ volatile bool     fault_disagree  = false;   // 두 IMU 불일치 (중재 불가
 volatile bool     fault_attitude  = false;   // 과도 기울기
 volatile int      active_imus     = 2;       // 현재 사용 중인 IMU 수 (telemetry)
 volatile bool     mixer_scaled    = false;   // 자세 mixer가 축소됐는지
+volatile float    mixer_yaw_scale = 1.0f;    // 다음 tick yaw authority 입력
 volatile bool     calibration_ok  = false;
 
 // 재시동 판단용 현재 센서 상태. fault_imu* / fault_disagree는 비행 중 latch된다.
@@ -1174,7 +1175,6 @@ void pid_task(void *pv) {
   float fs_hold_yaw = 0.0f;
   bool fs_probe_blocked_logged = false;
   YawAuthorityTracker yawAuthority = {};
-  float previousYawScale = 1.0f;
 
   inv_imu_sensor_event_t e1 = {}, e2 = {};
 
@@ -1309,6 +1309,9 @@ void pid_task(void *pv) {
       mixer_scaled = false;
       iTermRoll = iTermPitch = iTermYaw = 0.0f;
       targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
+      resetYawAuthority(yawAuthority);
+      yaw_authority_state = YAW_AUTH_NORMAL;
+      mixer_yaw_scale = 1.0f;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       enterLockedState(wasLocked);
       motorOut[0] = 1000; motorOut[1] = 1000; motorOut[2] = 1000; motorOut[3] = 1000;
@@ -1406,7 +1409,7 @@ void pid_task(void *pv) {
       fs_first_enter_valid = false;
       resetYawAuthority(yawAuthority);
       yaw_authority_state = YAW_AUTH_NORMAL;
-      previousYawScale = 1.0f;
+      mixer_yaw_scale = 1.0f;
       wasLocked = false;
     }
 
@@ -1543,7 +1546,7 @@ void pid_task(void *pv) {
       yaw_hold_now = false;
       resetYawAuthority(yawAuthority);
       yaw_authority_state = YAW_AUTH_NORMAL;
-      previousYawScale = 1.0f;
+      mixer_yaw_scale = 1.0f;
       prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       outerCnt = 0;
@@ -1558,7 +1561,7 @@ void pid_task(void *pv) {
     // yaw는 각속도 명령 + 자동 heading 잠금. hold가 아닌 동안 setpoint를
     // 매 tick 현재 heading으로 슬레이빙해 stale setpoint를 원천 차단한다.
     updateYawAuthority(
-        yawAuthority, previousYawScale, targetYawRate, bodyGz,
+        yawAuthority, mixer_yaw_scale, targetYawRate, bodyGz,
         true, fs_phase != FS_NONE, false, nowMs,
         YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
     yaw_authority_state = static_cast<int>(yawAuthority.state);
@@ -1609,7 +1612,7 @@ void pid_task(void *pv) {
     MotorMix mix = mixAndDesaturate(pidRoll, pidPitch, pidYaw,
                                     throttle, min_throttle, max_throttle);
     mixer_scaled = mix.scaled;
-    previousYawScale = mix.yaw_scale;
+    mixer_yaw_scale = mix.yaw_scale;
     if (checkProbeDelivery) {
       const float deliveredUs =
           (float)probeReferenceThrottle - mix.collective_us;
