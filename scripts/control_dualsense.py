@@ -591,6 +591,18 @@ def _format_binary_flag(value):
     return str(flag) if flag in (0, 1) else "-"
 
 
+def _format_yaw_authority(value):
+    state = phase_number(value)
+    if state is None:
+        return "-"
+    name = {
+        0: "NORMAL",
+        1: "LIMITED",
+        2: "RECOVERING",
+    }.get(state, "UNKNOWN")
+    return f"{name}({state})"
+
+
 def format_autoland_telemetry(sample):
     """Return the non-decimated Stage E status line, or None outside failsafe."""
     phase = phase_number(sample.get("Failsafe_Phase"))
@@ -852,6 +864,9 @@ def telemetry_thread():
                       f"Trim={_format_drone_trim(sample)} "
                       f"AGL={_format_agl(sample)} "
                       f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
+                      f"RP_Scale={_format_optional_float(sample.get('Mixer_RP_Scale'), 2)} "
+                      f"Yaw_Scale={_format_optional_float(sample.get('Mixer_Yaw_Scale'), 2)} "
+                      f"Yaw_Authority={_format_yaw_authority(sample.get('Yaw_Authority_State'))} "
                       f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
                       f"th={sample['Throttle']} "
                       f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "

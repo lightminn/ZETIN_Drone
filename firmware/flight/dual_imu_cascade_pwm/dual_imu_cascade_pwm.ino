@@ -62,6 +62,21 @@ struct __attribute__((packed)) ImuCalDatagram {
   float imu2_sign[3];
 };
 
+// Arduino's generated function prototypes are inserted before later global
+// declarations, so snapshot return types must be declared in this top block.
+struct AllocationTelemetrySample {
+  float rp_scale;
+  float yaw_scale;
+  float collective_us;
+  float pid_roll_us;
+  float pid_pitch_us;
+  float pid_yaw_us;
+  float i_roll_us;
+  float i_pitch_us;
+  float i_yaw_us;
+  int yaw_authority_state;
+};
+
 static_assert(sizeof(ImuRawSample) == 27, "ZIMU v2 sample must be 27 bytes");
 static_assert(sizeof(ImuRawHeader) == 20, "ZIMU header must be 20 bytes");
 static_assert(sizeof(ImuRawDatagram) == 1370,
@@ -700,6 +715,10 @@ volatile bool     fault_attitude  = false;   // 과도 기울기
 volatile int      active_imus     = 2;       // 현재 사용 중인 IMU 수 (telemetry)
 volatile bool     mixer_scaled    = false;   // 자세 mixer가 축소됐는지
 volatile float    mixer_yaw_scale = 1.0f;    // 다음 tick yaw authority 입력
+AllocationTelemetrySample allocationTelemetry = {
+    1.0f, 1.0f, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    YAW_AUTH_NORMAL};
+portMUX_TYPE allocationTelemetryMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool     calibration_ok  = false;
 
 // 재시동 판단용 현재 센서 상태. fault_imu* / fault_disagree는 비행 중 latch된다.
@@ -1139,6 +1158,33 @@ static inline void enterLockedState(bool &wasLocked) {
   wasLocked = true;
 }
 
+static inline void resetAllocationTelemetry() {
+  mixer_yaw_scale = 1.0f;
+  portENTER_CRITICAL(&allocationTelemetryMux);
+  allocationTelemetry = {
+      1.0f, 1.0f, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+      YAW_AUTH_NORMAL};
+  portEXIT_CRITICAL(&allocationTelemetryMux);
+}
+
+static inline void publishAllocationTelemetry(
+    const MotorMix &mix, float pidRoll, float pidPitch, float pidYaw,
+    float iRoll, float iPitch, float iYaw, int yawAuthorityState) {
+  const AllocationTelemetrySample sample = {
+      mix.rp_scale, mix.yaw_scale, mix.collective_us,
+      pidRoll, pidPitch, pidYaw, iRoll, iPitch, iYaw, yawAuthorityState};
+  portENTER_CRITICAL(&allocationTelemetryMux);
+  allocationTelemetry = sample;
+  portEXIT_CRITICAL(&allocationTelemetryMux);
+}
+
+static inline AllocationTelemetrySample readAllocationTelemetrySnapshot() {
+  portENTER_CRITICAL(&allocationTelemetryMux);
+  const AllocationTelemetrySample sample = allocationTelemetry;
+  portEXIT_CRITICAL(&allocationTelemetryMux);
+  return sample;
+}
+
 // ==========================================================
 // 8. PID 태스크 (Core 1, 1kHz)
 // ==========================================================
@@ -1311,7 +1357,7 @@ void pid_task(void *pv) {
       targetRateRoll = targetRatePitch = targetRateYaw = 0.0f;
       resetYawAuthority(yawAuthority);
       yaw_authority_state = YAW_AUTH_NORMAL;
-      mixer_yaw_scale = 1.0f;
+      resetAllocationTelemetry();
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       enterLockedState(wasLocked);
       motorOut[0] = 1000; motorOut[1] = 1000; motorOut[2] = 1000; motorOut[3] = 1000;
@@ -1409,7 +1455,7 @@ void pid_task(void *pv) {
       fs_first_enter_valid = false;
       resetYawAuthority(yawAuthority);
       yaw_authority_state = YAW_AUTH_NORMAL;
-      mixer_yaw_scale = 1.0f;
+      resetAllocationTelemetry();
       wasLocked = false;
     }
 
@@ -1546,7 +1592,7 @@ void pid_task(void *pv) {
       yaw_hold_now = false;
       resetYawAuthority(yawAuthority);
       yaw_authority_state = YAW_AUTH_NORMAL;
-      mixer_yaw_scale = 1.0f;
+      resetAllocationTelemetry();
       prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       outerCnt = 0;
@@ -1601,11 +1647,14 @@ void pid_task(void *pv) {
     float dYaw   = lpfD_Yaw.update((bodyGz - prevGyroZ) / realDt);
     prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
 
-    float pidRoll  = Kp_Rate_Roll *eRoll  + iTermRoll  - Kd_Rate_Roll *dRoll;
-    float pidPitch = Kp_Rate_Pitch*ePitch + iTermPitch - Kd_Rate_Pitch*dPitch;
+    const float iRollUsed = iTermRoll;
+    const float iPitchUsed = iTermPitch;
+    const float iYawUsed = iTermYaw;
+    float pidRoll  = Kp_Rate_Roll *eRoll  + iRollUsed  - Kd_Rate_Roll *dRoll;
+    float pidPitch = Kp_Rate_Pitch*ePitch + iPitchUsed - Kd_Rate_Pitch*dPitch;
     // yaw 각도 유지가 꺼져 있어도 rate 감쇠(target 0)는 항상 동작한다.
     // 모터 토크 불균형과 롤·피치 보정의 반작용으로 생기는 자유 회전을 억제한다.
-    float pidYaw   = Kp_Rate_Yaw*eYaw + iTermYaw - Kd_Rate_Yaw*dYaw;
+    float pidYaw   = Kp_Rate_Yaw*eYaw + iYawUsed - Kd_Rate_Yaw*dYaw;
 
     // ---------- 모터 desaturation + 포화 기반 anti-windup ----------
     const int throttle = base_throttle;
@@ -1613,6 +1662,9 @@ void pid_task(void *pv) {
                                     throttle, min_throttle, max_throttle);
     mixer_scaled = mix.scaled;
     mixer_yaw_scale = mix.yaw_scale;
+    publishAllocationTelemetry(
+        mix, pidRoll, pidPitch, pidYaw,
+        iRollUsed, iPitchUsed, iYawUsed, yaw_authority_state);
     if (checkProbeDelivery) {
       const float deliveredUs =
           (float)probeReferenceThrottle - mix.collective_us;
@@ -1644,6 +1696,8 @@ void pid_task(void *pv) {
 
     // 모터 PWM의 단일 writer는 PID task로 유지한다.
     if (safety_lock) {
+      resetAllocationTelemetry();
+      yaw_authority_state = YAW_AUTH_NORMAL;
       motorOut[0] = 1000; motorOut[1] = 1000; motorOut[2] = 1000; motorOut[3] = 1000;
       tgtRate[0] = 0.0f; tgtRate[1] = 0.0f; tgtRate[2] = 0.0f;
       stopMotors();
@@ -1831,8 +1885,8 @@ static void handleGainCommand(const char *buf) {
 // Failsafe_Phase, Trim_Roll/Pitch, Hover_Est/Valid와 프로브 상태/연속
 // 무반응/최근 차분 반응, IMU1 gyro/accel XYZ, IMU2 gyro/accel XYZ를
 // 보낸 뒤 목표 roll/pitch/yaw 각도와 필드 59 Mag_Enabled, 3901-L0X 5개
-// 필드, 필드 65 Mag_Cal_Active를 append-only로 보낸다. IMU별 값은 융합값과
-// 같은 body frame이다.
+// 필드, 필드 65 Mag_Cal_Active, 필드 66~75 allocator/PID/I/yaw authority를
+// append-only로 보낸다. IMU별 값은 융합값과 같은 body frame이다.
 static void sendTelemetry() {
   if (!connectionEstablished) return;
   bool criticalFault = (active_imus == 0) || fault_attitude || !calibration_ok;
@@ -1841,6 +1895,8 @@ static void sendTelemetry() {
   const uint8_t probeStateSnapshot = fs_probe_state;
   const uint8_t probeNoResponseSnapshot = fs_probe_no_response;
   const float probeResponseSnapshot = fs_probe_response_g;
+  const AllocationTelemetrySample allocationSample =
+      readAllocationTelemetrySnapshot();
   const ImuTelemetrySample imuSample = readImuSampleSnapshot();
   float magTelemXSnapshot = 0.0f;
   float magTelemYSnapshot = 0.0f;
@@ -1850,7 +1906,7 @@ static void sendTelemetry() {
       magTelemXSnapshot, magTelemYSnapshot, magTelemZSnapshot,
       magTelemCalActiveSnapshot);
   udp.beginPacket(laptopIP, laptopPort);
-  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d,%ld,%d,%ld,%ld,%d,%d",
+  udp.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d,%lu,%lu,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d,%.2f,%.2f,%.2f,%d,%d,%d,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%d,%ld,%d,%ld,%ld,%d,%d,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d",
              angleX, angleY, angleZ,
              gyroX, gyroY, gyroZ,
              accX, accY, accZ,
@@ -1875,7 +1931,14 @@ static void sendTelemetry() {
              targetAngleX, targetAngleY, targetAngleZ, (int)mag_enabled,
              (long)msp_range_mm, msp_range_quality,
              (long)msp_flow_x, (long)msp_flow_y, msp_flow_quality,
-             (int)magTelemCalActiveSnapshot);
+             (int)magTelemCalActiveSnapshot,
+             allocationSample.rp_scale, allocationSample.yaw_scale,
+             allocationSample.collective_us,
+             allocationSample.pid_roll_us, allocationSample.pid_pitch_us,
+             allocationSample.pid_yaw_us,
+             allocationSample.i_roll_us, allocationSample.i_pitch_us,
+             allocationSample.i_yaw_us,
+             allocationSample.yaw_authority_state);
   udp.endPacket();
 }
 

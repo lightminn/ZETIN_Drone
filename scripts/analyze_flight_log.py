@@ -156,6 +156,92 @@ def timestamp_seconds(value):
     return parsed.total_seconds()
 
 
+def _valid_numeric(frame, column):
+    if column not in frame.columns:
+        return None
+    valid = frame[column].dropna()
+    return None if valid.empty else valid
+
+
+def _absolute_axis_maxima(frame, columns):
+    maxima = []
+    for column in columns:
+        valid = _valid_numeric(frame, column)
+        if valid is None:
+            return None
+        maxima.append(float(valid.abs().max()))
+    return maxima
+
+
+print("\n🎛️ Allocator and yaw authority")
+rp_scale = _valid_numeric(df, "Mixer_RP_Scale")
+yaw_scale = _valid_numeric(df, "Mixer_Yaw_Scale")
+if rp_scale is None or yaw_scale is None:
+    print("  Allocator scale: legacy/unknown")
+else:
+    print(
+        "  Allocator scale: "
+        f"RP min {rp_scale.min():.3f}, p05 {rp_scale.quantile(0.05):.3f}; "
+        f"Yaw min {yaw_scale.min():.3f}, p05 {yaw_scale.quantile(0.05):.3f}"
+    )
+
+authority = _valid_numeric(df, "Yaw_Authority_State")
+if authority is None:
+    print("  Yaw authority LIMITED: legacy/unknown")
+else:
+    entries = 0
+    cumulative_seconds = 0.0
+    previous_state = None
+    previous_seconds = None
+    day_offset = 0.0
+    for index, raw_state in authority.items():
+        state = int(raw_state)
+        seconds = (
+            timestamp_seconds(df.at[index, "Timestamp"])
+            if "Timestamp" in df.columns
+            else None
+        )
+        if seconds is not None:
+            seconds += day_offset
+            if previous_seconds is not None and seconds < previous_seconds - 43200.0:
+                day_offset += 86400.0
+                seconds += 86400.0
+        if previous_state == 1 and previous_seconds is not None and seconds is not None:
+            cumulative_seconds += max(0.0, seconds - previous_seconds)
+        if state == 1 and previous_state != 1:
+            entries += 1
+        previous_state = state
+        previous_seconds = seconds
+    print(
+        f"  Yaw authority LIMITED: {entries} entries, "
+        f"{cumulative_seconds:.3f} s cumulative"
+    )
+
+pid_maxima = _absolute_axis_maxima(
+    df, ("PID_Roll_US", "PID_Pitch_US", "PID_Yaw_US")
+)
+if pid_maxima is None:
+    print("  PID |max| (us): legacy/unknown")
+else:
+    print(
+        "  PID |max| (us): "
+        f"Roll {pid_maxima[0]:.3f}, Pitch {pid_maxima[1]:.3f}, "
+        f"Yaw {pid_maxima[2]:.3f}"
+    )
+
+i_maxima = _absolute_axis_maxima(
+    df, ("I_Roll_US", "I_Pitch_US", "I_Yaw_US")
+)
+if i_maxima is None:
+    print("  I-term |max| (us): legacy/unknown")
+else:
+    print(
+        "  I-term |max| (us): "
+        f"Roll {i_maxima[0]:.3f}, Pitch {i_maxima[1]:.3f}, "
+        f"Yaw {i_maxima[2]:.3f}"
+    )
+
+
 def collect_failsafe_analysis(frame):
     if "Failsafe_Phase" not in frame.columns:
         return [], [], [], False

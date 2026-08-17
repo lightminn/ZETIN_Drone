@@ -1111,6 +1111,38 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         self.assertIn("Hover_Est=1423.6", diag_lines[0])
         self.assertIn("Hover_Valid=1", diag_lines[0])
 
+    def test_armed_diag_line_reports_axis_scales_and_yaw_authority(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Failsafe_Phase=0,
+            Mixer_RP_Scale=0.75,
+            Mixer_Yaw_Scale=0.5,
+            Yaw_Authority_State=1,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("RP_Scale=0.75", diag)
+        self.assertIn("Yaw_Scale=0.50", diag)
+        self.assertIn("Yaw_Authority=LIMITED(1)", diag)
+
+    def test_armed_diag_line_renders_missing_allocation_values_as_dash(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Failsafe_Phase=0,
+            Mixer_RP_Scale=None,
+            Mixer_Yaw_Scale=None,
+            Yaw_Authority_State=None,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("RP_Scale=-", diag)
+        self.assertIn("Yaw_Scale=-", diag)
+        self.assertIn("Yaw_Authority=-", diag)
+
     def _trim_datagrams(self):
         return [
             data.decode() for data, _addr in self.module.sock.sent
