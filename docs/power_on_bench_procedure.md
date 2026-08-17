@@ -73,7 +73,9 @@ SIL은 믹서·제어법칙의 부호 자기일관성만 확인했다. 이 벤�
   ```
   확인할 필드: `Calibration_OK`, `Armed`, `angleX/Y/Z`,
   `Motor_M1..M4`, `PID_Loop_Hz`, `TgtRate_Roll/Pitch/Yaw`, `Yaw_Hold`,
-  `Mag_Enabled`, `Failsafe_Phase`, `Trim_Roll/Pitch`, `Fault_*`.
+  `Mag_Enabled`, `Failsafe_Phase`, `Trim_Roll/Pitch`, `Fault_*`,
+  `Mixer_RP_Scale`, `Mixer_Yaw_Scale`, `Mixer_Collective_US`,
+  `Yaw_Authority_State`.
 - 모터 물리 위치 라벨(펌웨어 핀 매핑):
 
   | 텔레메트리 | GPIO | 위치 | 프롭 방향(설계) |
@@ -92,6 +94,37 @@ SIL은 믹서·제어법칙의 부호 자기일관성만 확인했다. 이 벤�
   공유해 업링크를 수백 ms씩 막고, RC 타임아웃으로 자동착륙을 유발한다.
   절전(서스펜드)도 끄고, 무장 전 링크 체크리스트를 따른다 →
   [ground_station_link.md](ground_station_link.md)
+
+---
+
+## 2026-08-18 저스로틀 yaw 권한 변경의 실기 게이트
+
+이 절차는 호스트 SIL과 ESP32-S3 compile을 통과한 뒤, **별도 업로드 승인을
+받았을 때만** 아래 순서로 진행한다. 2026-08-18 문서 갱신 시점에는 아직 보드
+업로드·모터 구동·테더 비행을 하지 않았으므로 다음 네 단계는 모두 미확인이다.
+
+1. **프롭 제거:** 모터 4개의 범위·위치·roll/pitch/yaw 부호를 다시 확인하고,
+   `stop`·과도 기울기의 즉시 컷과 RC 500ms timeout 동작을 먼저 통과시킨다.
+2. **손 파지·저출력:** `1200→1270→1300µs` 순서로 올리며 수동 yaw 입력과 손으로
+   주는 강제 yaw 외란을 확인한다. yaw가 먼저 제한될 때
+   `Mixer_Yaw_Scale<1`, `Mixer_RP_Scale≈1`이어야 하고, 지속 제한이면
+   `Yaw_Authority_State`가 `NORMAL(0)→LIMITED(1)`로 들어가
+   `TgtRate_Yaw=0`을 명령해야 한다. RP scale이 먼저 떨어지거나 비틀림을
+   증폭하면 즉시 `stop`한다.
+3. **테더 호버:** 1300µs 부근에서 30초 기록한다. 같은 날 변경 전 기준 대비
+   roll·pitch RMSE 증가는 각각 20% 이내, 절대 roll RMSE≤5°,
+   pitch RMSE≤4°여야 한다.
+4. **지상 이륙→호버→착륙 3회:** 착륙 말단 roll·pitch가 각각 15° 미만,
+   전체 샘플의 99% 이상에서 `Mixer_RP_Scale≥0.95`, LIMITED 뒤
+   `|TgtRate_Yaw|=180dps`가 0.5초 이상 연속하지 않아야 한다.
+   `Fault_RC`, `Fault_IMU1/2`, `Fault_Disagree`, `Fault_Attitude`와 예기치 않은
+   failsafe도 0건이어야 한다.
+
+현행 비행 검증 구성에는 사용 가능한 **optical flow 기반 수평 위치 보정이
+없다.** 따라서 중립 스틱에서도 생기는 수평 표류는 조종자가 수동으로 상쇄해야
+한다. 이 수동 위치 보정 입력 자체는 위 통과 기준의 실패가 아니며, yaw heading
+오차도 RP 자세 보존보다 낮은 우선순위다. 다만 표류 때문에 테더·장애물에
+접근하면 즉시 중단한다.
 
 ---
 

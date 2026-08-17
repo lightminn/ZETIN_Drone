@@ -191,6 +191,10 @@ struct RunConfig {
   std::function<Disturbance(uint32_t)> disturbance_for_interval;
   std::function<int(uint32_t)> throttle_for_tick;
   std::function<void(uint32_t, PlantState &)> state_for_tick;
+  // Test-only negative-control policy. This never enters flight firmware: it
+  // replaces the motors seen by the SIL plant with an independently calculated
+  // legacy uniform-axis allocation.
+  bool uniform_allocator_oracle = false;
 };
 
 struct PlantStep {
@@ -209,9 +213,19 @@ struct Sample {
   double i_roll_us = 0.0;
   double i_pitch_us = 0.0;
   double i_yaw_us = 0.0;
+  double mixer_rp_scale = 1.0;
+  double mixer_yaw_scale = 1.0;
+  double target_yaw_rate_dps = 0.0;
+  int yaw_authority_state = YAW_AUTH_NORMAL;
+  int pid_loop_hz = 0;
   bool yaw_hold = false;
   bool mixer_scaled_now = false;
   bool safety_locked = false;
+  bool fault_rc_now = false;
+  bool fault_imu1_now = false;
+  bool fault_imu2_now = false;
+  bool fault_disagree_now = false;
+  bool fault_attitude_now = false;
   uint8_t failsafe_phase = FS_NONE;
   int base_throttle_us = 1000;
   uint8_t failsafe_probe_state = FS_PROBE_WAIT;
@@ -433,12 +447,62 @@ void resetFirmwareState(const PlantState &initial) {
   rcSeqValid = false;
   rcTotalPkts = 0;
   rcDroppedPkts = 0;
+  yaw_authority_state = YAW_AUTH_NORMAL;
+  resetAllocationTelemetry();
 
   IMU1.next_event = {};
   IMU2.next_event = {};
   IMU1.read_status = 0;
   IMU2.read_status = 0;
   (void)injectImuFromPlant(initial, 0);
+}
+
+struct UniformOracleAllocation {
+  std::array<int, 4> motors = {1000, 1000, 1000, 1000};
+  double scale = 1.0;
+  double collective_us = 1000.0;
+};
+
+UniformOracleAllocation uniformAllocationOracle(
+    const AllocationTelemetrySample &requested, int throttle,
+    int min_motor, int max_motor) {
+  // Independent legacy policy: compose all three axes first, then apply one
+  // span scale to every axis. Do not call or reproduce the production RP-first
+  // priority solver here.
+  min_motor = std::max(1000, std::min(2000, min_motor));
+  max_motor = std::max(min_motor, std::min(2000, max_motor));
+  const double roll = std::isfinite(requested.pid_roll_us)
+                          ? requested.pid_roll_us : 0.0;
+  const double pitch = std::isfinite(requested.pid_pitch_us)
+                           ? requested.pid_pitch_us : 0.0;
+  const double yaw = std::isfinite(requested.pid_yaw_us)
+                         ? requested.pid_yaw_us : 0.0;
+  std::array<double, 4> diff = {
+      -pitch + roll - yaw,
+      pitch - roll - yaw,
+      -pitch - roll + yaw,
+      pitch + roll + yaw,
+  };
+  const auto bounds = std::minmax_element(diff.begin(), diff.end());
+  const double available = static_cast<double>(max_motor - min_motor);
+  const double span = *bounds.second - *bounds.first;
+
+  UniformOracleAllocation out;
+  if (span > available && span > 0.0) out.scale = available / span;
+  for (double &value : diff) value *= out.scale;
+
+  const auto scaled_bounds = std::minmax_element(diff.begin(), diff.end());
+  const double collective_low = min_motor - *scaled_bounds.first;
+  const double collective_high = max_motor - *scaled_bounds.second;
+  out.collective_us = std::max(
+      collective_low,
+      std::min(collective_high, static_cast<double>(throttle)));
+  for (std::size_t index = 0; index < out.motors.size(); ++index) {
+    const int rounded = static_cast<int>(
+        std::lround(out.collective_us + diff[index]));
+    out.motors[index] = std::max(min_motor, std::min(max_motor, rounded));
+  }
+  return out;
 }
 
 Disturbance disturbanceAt(const RunConfig &config, uint32_t interval,
@@ -480,10 +544,16 @@ double deterministicAccelNoiseG(uint32_t tick, double target_sd_g) {
 
 PlantStep integratePlant(PlantState &state, const Disturbance &disturbance,
                          bool inject_roll_sign_fault, bool vertical_enabled,
-                         const PlantParameters &parameters) {
+                         const PlantParameters &parameters,
+                         const std::array<int, 4> *motor_override = nullptr) {
   std::array<double, 4> applied = {
       static_cast<double>(motorOut[0]), static_cast<double>(motorOut[1]),
       static_cast<double>(motorOut[2]), static_cast<double>(motorOut[3])};
+  if (motor_override != nullptr) {
+    for (std::size_t index = 0; index < applied.size(); ++index) {
+      applied[index] = static_cast<double>((*motor_override)[index]);
+    }
+  }
 
   if (inject_roll_sign_fault) {
     // 뮤테이션은 mixer roll 축의 부호 하나(roll allocation column 전체)를
@@ -572,9 +642,21 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state,
   sample.i_roll_us = iTermRoll;
   sample.i_pitch_us = iTermPitch;
   sample.i_yaw_us = iTermYaw;
+  const AllocationTelemetrySample allocation =
+      readAllocationTelemetrySnapshot();
+  sample.mixer_rp_scale = allocation.rp_scale;
+  sample.mixer_yaw_scale = allocation.yaw_scale;
+  sample.target_yaw_rate_dps = tgtRate[2];
+  sample.yaw_authority_state = allocation.yaw_authority_state;
+  sample.pid_loop_hz = pidLoopHz;
   sample.yaw_hold = yaw_hold_now;
   sample.mixer_scaled_now = mixer_scaled;
   sample.safety_locked = safety_lock;
+  sample.fault_rc_now = fault_rc;
+  sample.fault_imu1_now = fault_imu1;
+  sample.fault_imu2_now = fault_imu2;
+  sample.fault_disagree_now = fault_disagree;
+  sample.fault_attitude_now = fault_attitude;
   sample.failsafe_phase = fs_phase;
   sample.base_throttle_us = base_throttle;
   sample.failsafe_probe_state = fs_probe_state;
@@ -676,11 +758,19 @@ RunResult runSil(const RunConfig &config) {
   result.samples.reserve(static_cast<std::size_t>(config.ticks) + 1U);
   PlantStep plant_step;
   arduino_fake::pre_tick_hook = [&](uint32_t tick) {
+    UniformOracleAllocation uniform_oracle;
+    const std::array<int, 4> *motor_override = nullptr;
+    if (config.uniform_allocator_oracle && tick > 0) {
+      uniform_oracle = uniformAllocationOracle(
+          readAllocationTelemetrySnapshot(), base_throttle,
+          min_throttle, max_throttle);
+      motor_override = &uniform_oracle.motors;
+    }
     if (tick > 0) {
       plant_step = integratePlant(
           state, disturbanceAt(config, tick - 1U, state),
           config.inject_roll_sign_fault, config.vertical_enabled,
-          config.plant_parameters);
+          config.plant_parameters, motor_override);
     }
     if (config.state_for_tick) config.state_for_tick(tick, state);
     if (config.throttle_for_tick) {
@@ -688,6 +778,12 @@ RunResult runSil(const RunConfig &config) {
       base_throttle = scheduled_throttle;
       min_throttle = std::max(1050, scheduled_throttle - CTRL_MARGIN);
       max_throttle = std::min(1900, scheduled_throttle + CTRL_MARGIN);
+    }
+    if (config.uniform_allocator_oracle && tick > 0) {
+      // Feed the physical uniform delivery fraction into the next authority
+      // decision. Pitch anti-windup remains production code, which makes this
+      // a conservative physical oracle rather than a copy of the firmware.
+      mixer_yaw_scale = static_cast<float>(uniform_oracle.scale);
     }
     arduino_fake::millis_value += 1U;
     arduino_fake::micros_value += 1000U;
@@ -900,6 +996,38 @@ RunConfig constantYawDisturbance(float ki_yaw, double torque_nm,
     return Disturbance{0.0, 0.0, torque_nm};
   };
   return config;
+}
+
+constexpr uint32_t kLowThrottleTick = 1000U;
+constexpr uint32_t kLowThrottleDisturbanceTick = 1200U;
+constexpr uint32_t kLowThrottleRunTicks = 2500U;
+constexpr double kLowThrottleYawTorqueNm = 0.030;
+constexpr double kLowThrottlePitchTorqueNm = 0.025;
+
+RunConfig lowThrottleYawPitchConfig(bool uniform_allocator_oracle) {
+  RunConfig config;
+  config.ticks = kLowThrottleRunTicks;
+  config.base_throttle_us = 1300;
+  config.uniform_allocator_oracle = uniform_allocator_oracle;
+  config.throttle_for_tick = [](uint32_t tick) {
+    return tick < kLowThrottleTick ? 1300 : 1270;
+  };
+  config.disturbance_for_interval = [](uint32_t tick) {
+    if (tick < kLowThrottleDisturbanceTick) return Disturbance{};
+    return Disturbance{
+        0.0, kLowThrottlePitchTorqueNm, kLowThrottleYawTorqueNm};
+  };
+  return config;
+}
+
+double maxAbsPitchFromTick(const RunResult &result, uint32_t first_tick) {
+  double maximum = 0.0;
+  for (const Sample &sample : result.samples) {
+    if (sample.tick < first_tick) continue;
+    maximum = std::max(
+        maximum, std::fabs(sample.plant.theta * kRadToDeg));
+  }
+  return maximum;
 }
 
 double tailMeanAbsYawRateDps(const RunResult &result, std::size_t tail) {
@@ -1442,15 +1570,17 @@ int main() {
         ",1.25,-2.50,3.75,0.125,-0.250,0.500"
         ",-4.50,5.25,-6.00,-0.625,0.750,-0.875"
         ",4.25,-3.50,172.75,1"
-        ",0,-1,0,0,-1,0";
+        ",0,-1,0,0,-1,0"
+        ",1.000,1.000,1000.00,0.00,0.00,0.00"
+        ",0.00,0.00,0.00,0";
     detail << "actual field_count=" << field_count
            << ", packet_suffix="
            << packet.substr(
                   packet.size() > expected_suffix.size()
                       ? packet.size() - expected_suffix.size()
                       : 0U)
-           << "; expected field_count=65 and suffix " << expected_suffix;
-    CHECK_MSG(field_count == 65U, detail.str());
+           << "; expected field_count=75 and suffix " << expected_suffix;
+    CHECK_MSG(field_count == 75U, detail.str());
     CHECK_MSG(
         packet.size() >= expected_suffix.size() &&
             packet.compare(
@@ -1799,6 +1929,168 @@ int main() {
     CHECK_MSG(std::isfinite(pitch_settle), "pitch did not settle inside 3 s");
     CHECK_GE(ratio, 0.6);
     CHECK_LE(ratio, 1.6);
+  });
+
+  runCase("S2b: low-throttle yaw saturation preserves pitch authority", [] {
+    const double yaw_torque_per_us =
+        4.0 * kPlantParameters.yaw_moment_arm_m() *
+        kPlantParameters.thrust_per_us_n;
+    const double available_yaw_torque_nm =
+        0.5 * (1520.0 - 1050.0) * yaw_torque_per_us;
+    CHECK_MSG(kLowThrottleYawTorqueNm > available_yaw_torque_nm,
+              "fixture yaw torque does not exceed the 1270us motor authority");
+    CHECK_MSG(kLowThrottlePitchTorqueNm < kLowThrottleYawTorqueNm,
+              "fixture pitch torque must remain smaller than yaw torque");
+
+    const RunResult priority = runSil(lowThrottleYawPitchConfig(false));
+    const RunResult uniform = runSil(lowThrottleYawPitchConfig(true));
+
+    double min_rp_scale = 1.0;
+    double min_yaw_scale = 1.0;
+    uint32_t first_yaw_limited_tick =
+        std::numeric_limits<uint32_t>::max();
+    uint32_t first_rp_limited_tick =
+        std::numeric_limits<uint32_t>::max();
+    uint32_t limited_tick = std::numeric_limits<uint32_t>::max();
+    uint32_t saturated_target_run = 0;
+    uint32_t max_saturated_target_run = 0;
+    int min_pid_hz = std::numeric_limits<int>::max();
+    int max_pid_hz = 0;
+    bool motor_limits_valid = true;
+    bool faults_clear = true;
+    bool failsafe_clear = true;
+    bool uniform_faults_clear = true;
+    bool uniform_failsafe_clear = true;
+    double pre_disturbance_max_pitch_deg = 0.0;
+
+    for (const Sample &sample : priority.samples) {
+      if (sample.tick < kLowThrottleDisturbanceTick) {
+        pre_disturbance_max_pitch_deg = std::max(
+            pre_disturbance_max_pitch_deg,
+            std::fabs(sample.plant.theta * kRadToDeg));
+      } else {
+        min_rp_scale = std::min(min_rp_scale, sample.mixer_rp_scale);
+        min_yaw_scale = std::min(min_yaw_scale, sample.mixer_yaw_scale);
+        if (first_yaw_limited_tick ==
+                std::numeric_limits<uint32_t>::max() &&
+            sample.mixer_yaw_scale < 0.999) {
+          first_yaw_limited_tick = sample.tick;
+        }
+        if (first_rp_limited_tick ==
+                std::numeric_limits<uint32_t>::max() &&
+            sample.mixer_rp_scale < 0.999) {
+          first_rp_limited_tick = sample.tick;
+        }
+        if (limited_tick == std::numeric_limits<uint32_t>::max() &&
+            sample.yaw_authority_state == YAW_AUTH_LIMITED) {
+          limited_tick = sample.tick;
+        }
+      }
+
+      if (limited_tick != std::numeric_limits<uint32_t>::max() &&
+          sample.tick >= limited_tick) {
+        if (std::fabs(sample.target_yaw_rate_dps) >= 179.5) {
+          saturated_target_run++;
+          max_saturated_target_run = std::max(
+              max_saturated_target_run, saturated_target_run);
+        } else {
+          saturated_target_run = 0;
+        }
+      }
+      if (sample.tick >= 1500U && sample.pid_loop_hz > 0) {
+        min_pid_hz = std::min(min_pid_hz, sample.pid_loop_hz);
+        max_pid_hz = std::max(max_pid_hz, sample.pid_loop_hz);
+      }
+
+      if (sample.tick != kLowThrottleTick) {
+        const int expected_max =
+            sample.tick < kLowThrottleTick ? 1550 : 1520;
+        for (int motor : sample.motors) {
+          motor_limits_valid =
+              motor_limits_valid && motor >= 1050 && motor <= expected_max;
+        }
+      }
+      faults_clear =
+          faults_clear && !sample.fault_rc_now && !sample.fault_imu1_now &&
+          !sample.fault_imu2_now && !sample.fault_disagree_now &&
+          !sample.fault_attitude_now;
+      failsafe_clear = failsafe_clear && sample.failsafe_phase == FS_NONE;
+    }
+    for (const Sample &sample : uniform.samples) {
+      uniform_faults_clear =
+          uniform_faults_clear && !sample.fault_rc_now &&
+          !sample.fault_imu1_now && !sample.fault_imu2_now &&
+          !sample.fault_disagree_now && !sample.fault_attitude_now;
+      uniform_failsafe_clear =
+          uniform_failsafe_clear && sample.failsafe_phase == FS_NONE;
+    }
+
+    const double priority_pitch_deg =
+        maxAbsPitchFromTick(priority, kLowThrottleDisturbanceTick);
+    const double uniform_pitch_deg =
+        maxAbsPitchFromTick(uniform, kLowThrottleDisturbanceTick);
+    std::cout << "[SIL] S2b throttle=1300->1270us yaw_torque="
+              << kLowThrottleYawTorqueNm << "Nm authority="
+              << available_yaw_torque_nm << "Nm pitch_torque="
+              << kLowThrottlePitchTorqueNm << "Nm min_rp_scale="
+              << min_rp_scale << " min_yaw_scale=" << min_yaw_scale
+              << " first_yaw_limited="
+              << (first_yaw_limited_tick ==
+                          std::numeric_limits<uint32_t>::max()
+                      ? -1
+                      : static_cast<int>(first_yaw_limited_tick))
+              << " first_rp_limited="
+              << (first_rp_limited_tick ==
+                          std::numeric_limits<uint32_t>::max()
+                      ? -1
+                      : static_cast<int>(first_rp_limited_tick))
+              << " authority_limited="
+              << (limited_tick == std::numeric_limits<uint32_t>::max()
+                      ? -1
+                      : static_cast<int>(limited_tick))
+              << " max_sat_target_run_ms=" << max_saturated_target_run
+              << " pitch_priority=" << priority_pitch_deg
+              << "deg pitch_uniform=" << uniform_pitch_deg
+              << "deg pid_hz=" << min_pid_hz << ".." << max_pid_hz
+              << "\n";
+
+    CHECK_MSG(sampleAtTick(priority, kLowThrottleTick - 1U)
+                      .base_throttle_us == 1300 &&
+                  sampleAtTick(priority, kLowThrottleTick + 1U)
+                      .base_throttle_us == 1270,
+              "fixture did not establish 1300us then descend to 1270us");
+    CHECK_MSG(pre_disturbance_max_pitch_deg < 0.25,
+              "normal 1300us/settled-1270us segment was not level");
+    CHECK_MSG(first_yaw_limited_tick !=
+                  std::numeric_limits<uint32_t>::max(),
+              "yaw allocation never limited under excessive yaw torque");
+    CHECK_MSG(first_yaw_limited_tick < first_rp_limited_tick,
+              "roll/pitch allocation limited before yaw");
+    CHECK_MSG(min_rp_scale >= 0.999,
+              "roll/pitch was scaled even though its own demand fit");
+    CHECK_MSG(min_yaw_scale <= YAW_AUTH_ENTRY_SCALE,
+              "yaw allocation did not reach the authority-entry threshold");
+    CHECK_MSG(limited_tick != std::numeric_limits<uint32_t>::max(),
+              "yaw authority state never reached LIMITED");
+    CHECK_MSG(max_saturated_target_run < 500U,
+              "target yaw rate remained at +/-180dps for 0.5s after LIMITED");
+    CHECK_MSG(priority_pitch_deg + 0.25 < uniform_pitch_deg,
+              "priority allocation did not beat the independent uniform oracle");
+    CHECK_MSG(priority_pitch_deg < 15.0,
+              "priority allocation exceeded the 15deg pitch safety gate");
+    CHECK_MSG(priority.all_motors_in_range && motor_limits_valid,
+              "motor output left the active PWM bounds");
+    CHECK_MSG(priority.all_finite && !priority.raw_saturated,
+              "SIL state or synthetic IMU left its valid numeric range");
+    CHECK_MSG(uniform.all_finite && !uniform.raw_saturated,
+              "uniform oracle left its valid numeric range");
+    CHECK_MSG(!uniform.safety_lock_ever && uniform_faults_clear &&
+                  uniform_failsafe_clear,
+              "uniform oracle tripped safety or failsafe before comparison");
+    CHECK_MSG(!priority.safety_lock_ever && faults_clear && failsafe_clear,
+              "manual low-throttle scenario tripped safety or failsafe");
+    CHECK_MSG(min_pid_hz >= 999 && max_pid_hz <= 1001,
+              "PID loop cadence left the 1kHz invariant");
   });
 
   runCase("S3: anti-windup clamps and recovers after saturation", [] {
