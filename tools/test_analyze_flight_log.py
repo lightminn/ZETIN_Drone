@@ -88,6 +88,83 @@ class AnalyzeFlightLogAllocationTest(unittest.TestCase):
         self.assertIn("PID |max| (us): legacy/unknown", result.stdout)
         self.assertIn("I-term |max| (us): legacy/unknown", result.stdout)
 
+    def test_authority_duration_is_unavailable_without_timestamp_column(self):
+        result = self._run_analyzer(
+            ("Yaw_Authority_State",),
+            [{"Yaw_Authority_State": 0}, {"Yaw_Authority_State": 1}],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Yaw authority LIMITED: 1 entries, duration unavailable",
+            result.stdout,
+        )
+        self.assertNotIn("0.000 s cumulative", result.stdout)
+
+    def test_authority_duration_is_unavailable_when_all_timestamps_are_invalid(self):
+        result = self._run_analyzer(
+            ("Timestamp", "Yaw_Authority_State"),
+            [
+                {"Timestamp": "invalid-a", "Yaw_Authority_State": 0},
+                {"Timestamp": "invalid-b", "Yaw_Authority_State": 1},
+            ],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Yaw authority LIMITED: 1 entries, duration unavailable",
+            result.stdout,
+        )
+
+    def test_unknown_authority_gap_breaks_duration_continuity(self):
+        result = self._run_analyzer(
+            ("Timestamp", "Yaw_Authority_State"),
+            [
+                {"Timestamp": "00:00:00.000", "Yaw_Authority_State": 0},
+                {"Timestamp": "00:00:00.100", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.200", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.300", "Yaw_Authority_State": ""},
+                {"Timestamp": "00:00:00.400", "Yaw_Authority_State": 0},
+            ],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Yaw authority LIMITED: 1 entries, "
+            "0.100 s cumulative (incomplete: unknown state/time gap)",
+            result.stdout,
+        )
+        self.assertNotIn("0.300 s cumulative", result.stdout)
+
+    def test_authority_duration_handles_midnight_rollover(self):
+        result = self._run_analyzer(
+            ("Timestamp", "Yaw_Authority_State"),
+            [
+                {"Timestamp": "23:59:59.900", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.100", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.300", "Yaw_Authority_State": 0},
+            ],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Yaw authority LIMITED: 1 entries, 0.400 s cumulative",
+            result.stdout,
+        )
+
+    def test_single_timed_authority_sample_reports_measured_zero_duration(self):
+        result = self._run_analyzer(
+            ("Timestamp", "Yaw_Authority_State"),
+            [{"Timestamp": "00:00:00.000", "Yaw_Authority_State": 1}],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Yaw authority LIMITED: 1 entries, 0.000 s cumulative",
+            result.stdout,
+        )
+        self.assertNotIn("duration unavailable", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

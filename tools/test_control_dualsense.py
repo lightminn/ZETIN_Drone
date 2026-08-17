@@ -1123,9 +1123,47 @@ class ControlDualsenseRegressionTests(unittest.TestCase):
         output = self._run_telemetry([sample] * 4)
 
         diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("FW_Armed=1", diag)
         self.assertIn("RP_Scale=0.75", diag)
         self.assertIn("Yaw_Scale=0.50", diag)
         self.assertIn("Yaw_Authority=LIMITED(1)", diag)
+
+    def test_local_armed_diag_does_not_present_disarmed_reset_values_as_healthy(self):
+        self.module.is_armed = True
+        self.module.last_arm_time = self.module.time.monotonic()
+        sample = _telemetry_sample(
+            Armed=0,
+            Mixer_RP_Scale=1.0,
+            Mixer_Yaw_Scale=1.0,
+            Yaw_Authority_State=0,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("FW_Armed=0", diag)
+        self.assertIn("RP_Scale=-", diag)
+        self.assertIn("Yaw_Scale=-", diag)
+        self.assertIn("Yaw_Authority=-", diag)
+        self.assertNotIn("Yaw_Authority=NORMAL(0)", diag)
+
+    def test_local_armed_legacy_diag_labels_firmware_armed_unknown(self):
+        self.module.is_armed = True
+        sample = _telemetry_sample(
+            Armed=None,
+            Mixer_RP_Scale=1.0,
+            Mixer_Yaw_Scale=1.0,
+            Yaw_Authority_State=0,
+        )
+
+        output = self._run_telemetry([sample] * 4)
+
+        diag = [line for line in output.splitlines() if "[DIAG]" in line][0]
+        self.assertIn("FW_Armed=-", diag)
+        self.assertIn("RP_Scale=-", diag)
+        self.assertIn("Yaw_Scale=-", diag)
+        self.assertIn("Yaw_Authority=-", diag)
+        self.assertNotIn("Yaw_Authority=NORMAL(0)", diag)
 
     def test_armed_diag_line_renders_missing_allocation_values_as_dash(self):
         self.module.is_armed = True

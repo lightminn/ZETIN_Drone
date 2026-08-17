@@ -191,31 +191,61 @@ if authority is None:
 else:
     entries = 0
     cumulative_seconds = 0.0
-    previous_state = None
-    previous_seconds = None
+    previous_entry_state = None
+    previous_timed_state = None
+    previous_timed_seconds = None
+    previous_clock_seconds = None
     day_offset = 0.0
-    for index, raw_state in authority.items():
-        state = int(raw_state)
-        seconds = (
+    has_timed_sample = False
+    incomplete_timing = False
+    for index, raw_state in df["Yaw_Authority_State"].items():
+        state = phase_number(raw_state)
+        if state is None:
+            previous_entry_state = None
+        else:
+            if state == 1 and previous_entry_state != 1:
+                entries += 1
+            previous_entry_state = state
+
+        raw_seconds = (
             timestamp_seconds(df.at[index, "Timestamp"])
             if "Timestamp" in df.columns
             else None
         )
-        if seconds is not None:
-            seconds += day_offset
-            if previous_seconds is not None and seconds < previous_seconds - 43200.0:
+        seconds = raw_seconds
+        if raw_seconds is not None:
+            seconds = raw_seconds + day_offset
+            if (
+                previous_clock_seconds is not None
+                and seconds < previous_clock_seconds - 43200.0
+            ):
                 day_offset += 86400.0
                 seconds += 86400.0
-        if previous_state == 1 and previous_seconds is not None and seconds is not None:
-            cumulative_seconds += max(0.0, seconds - previous_seconds)
-        if state == 1 and previous_state != 1:
-            entries += 1
-        previous_state = state
-        previous_seconds = seconds
-    print(
-        f"  Yaw authority LIMITED: {entries} entries, "
-        f"{cumulative_seconds:.3f} s cumulative"
-    )
+            previous_clock_seconds = seconds
+
+        if state is None or seconds is None:
+            incomplete_timing = True
+            previous_timed_state = None
+            previous_timed_seconds = None
+            continue
+
+        has_timed_sample = True
+        if previous_timed_state == 1 and previous_timed_seconds is not None:
+            cumulative_seconds += max(0.0, seconds - previous_timed_seconds)
+        previous_timed_state = state
+        previous_timed_seconds = seconds
+
+    prefix = f"  Yaw authority LIMITED: {entries} entries, "
+    if not has_timed_sample:
+        print(prefix + "duration unavailable")
+    elif incomplete_timing:
+        print(
+            prefix
+            + f"{cumulative_seconds:.3f} s cumulative "
+            "(incomplete: unknown state/time gap)"
+        )
+    else:
+        print(prefix + f"{cumulative_seconds:.3f} s cumulative")
 
 pid_maxima = _absolute_axis_maxima(
     df, ("PID_Roll_US", "PID_Pitch_US", "PID_Yaw_US")

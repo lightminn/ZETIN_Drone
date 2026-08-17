@@ -855,6 +855,19 @@ def telemetry_thread():
                 az = sample["Yaw"] or 0.0
                 cw = m[0] + m[1]   # M1(FL)+M2(RR) = CW 대각쌍
                 ccw = m[2] + m[3]  # M3(FR)+M4(RL) = CCW 대각쌍 (차이 = yaw축)
+                firmware_armed = phase_number(sample.get("Armed"))
+                if firmware_armed == 1:
+                    rp_scale = _format_optional_float(
+                        sample.get("Mixer_RP_Scale"), 2
+                    )
+                    yaw_scale = _format_optional_float(
+                        sample.get("Mixer_Yaw_Scale"), 2
+                    )
+                    yaw_authority = _format_yaw_authority(
+                        sample.get("Yaw_Authority_State")
+                    )
+                else:
+                    rp_scale = yaw_scale = yaw_authority = "-"
                 print(f" [DIAG] M1(FL)={m[0]} M2(RR)={m[1]} M3(FR)={m[2]} M4(RL)={m[3]} "
                       f"[yaw축 CW-CCW={cw - ccw:+d}] | "
                       f"aX={sample['Roll']:+5.1f} aY={sample['Pitch']:+5.1f} aZ={az:+6.1f} | "
@@ -864,9 +877,10 @@ def telemetry_thread():
                       f"Trim={_format_drone_trim(sample)} "
                       f"AGL={_format_agl(sample)} "
                       f"Yaw_Hold={_format_binary_flag(sample.get('Yaw_Hold'))} "
-                      f"RP_Scale={_format_optional_float(sample.get('Mixer_RP_Scale'), 2)} "
-                      f"Yaw_Scale={_format_optional_float(sample.get('Mixer_Yaw_Scale'), 2)} "
-                      f"Yaw_Authority={_format_yaw_authority(sample.get('Yaw_Authority_State'))} "
+                      f"FW_Armed={_format_binary_flag(sample.get('Armed'))} "
+                      f"RP_Scale={rp_scale} "
+                      f"Yaw_Scale={yaw_scale} "
+                      f"Yaw_Authority={yaw_authority} "
                       f"tR={tr:+5.1f} tP={tp:+5.1f} tY={ty:+6.1f} "
                       f"th={sample['Throttle']} "
                       f"Hover_Est={_format_optional_float(sample.get('Hover_Est'), 1)} "
