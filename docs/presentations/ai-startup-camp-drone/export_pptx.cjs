@@ -384,10 +384,10 @@ async function renderVideoPoster(record, captureDir, ffmpegBin) {
 
 async function buildPptx(records, runtimeDir, output, PptxGenJS, ffprobeBin, ffmpegBin) {
   const pptx = new PptxGenJS();
-  pptx.author = "ZETIN";
-  pptx.company = "ZETIN";
+  pptx.author = "서울시립대학교";
+  pptx.company = "서울시립대학교";
   pptx.subject = "AI 창업캠프 드론 비행제어 발표자료";
-  pptx.title = "ZETIN Drone 비행 제어 시스템 직접 만들기";
+  pptx.title = "자작 드론 비행 제어 시스템 직접 만들기";
   pptx.lang = "ko-KR";
   pptx.theme = { headFontFace: "Noto Sans CJK KR", bodyFontFace: "Noto Sans CJK KR", lang: "ko-KR" };
   pptx.defineLayout({ name: "ZETIN_WIDE", width: PPTX_W, height: PPTX_H });

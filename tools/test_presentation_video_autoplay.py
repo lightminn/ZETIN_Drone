@@ -45,6 +45,21 @@ class _VideoParser(HTMLParser):
 
 
 class PresentationVideoMarkupTests(unittest.TestCase):
+    def test_deck_omits_zetin_team_name(self) -> None:
+        source = (DECK_DIR / "index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("zetin", source.casefold())
+
+    def test_future_pptx_metadata_omits_zetin_team_name(self) -> None:
+        source = (DECK_DIR / "export_pptx.cjs").read_text(encoding="utf-8")
+        metadata = "\n".join(
+            line.strip()
+            for line in source.splitlines()
+            if line.strip().startswith(("pptx.author", "pptx.company", "pptx.title"))
+        )
+
+        self.assertNotIn("zetin", metadata.casefold())
+
     def test_every_video_is_muted_for_input_free_autoplay(self) -> None:
         parser = _VideoParser()
         parser.feed((DECK_DIR / "index.html").read_text(encoding="utf-8"))

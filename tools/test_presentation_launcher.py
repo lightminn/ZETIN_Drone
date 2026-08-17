@@ -90,7 +90,7 @@ class PresentationLauncherTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("ZETIN Drone", response_body.read_text())
+        self.assertIn("자작 드론", response_body.read_text())
         self.assertIn(
             f"--app=http://127.0.0.1:{port}/", browser_args.read_text()
         )
@@ -103,7 +103,7 @@ class PresentationLauncherTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertIn("ZETIN Drone", response_body.read_text())
+        self.assertIn("자작 드론", response_body.read_text())
         self.assertFalse(_port_accepts_connections(port))
         self.assertEqual(list(runtime_root.iterdir()), [])
 
