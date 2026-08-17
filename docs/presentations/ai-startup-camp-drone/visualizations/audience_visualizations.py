@@ -11,6 +11,14 @@ from __future__ import annotations
 import numpy as np
 from manim import *
 
+from geometry import (
+    body_axis_mapping,
+    capture_heading_reference,
+    gravity_components_2d,
+    integrated_bias_angle_deg,
+    referenced_heading_deg,
+)
+
 
 config.pixel_width = 1280
 config.pixel_height = 720
@@ -133,23 +141,46 @@ class AccelerometerAudience(ExplainerScene):
         body_axis_z = Arrow(DOWN * 1.55, UP * 1.55, buff=0, color=GREEN, stroke_width=5).move_to(body)
         rotating = VGroup(body, body_axis_x, body_axis_z)
 
-        gravity = Arrow(UP * 1.0, DOWN * 2.45, buff=0, color=YELLOW, stroke_width=8)
-        gravity.move_to(frame.get_center() + RIGHT * 0.1 + DOWN * 0.15)
+        tilt_degrees = 28.0
+        gravity_xy, horizontal_xy, vertical_xy = gravity_components_2d(
+            tilt_degrees, 2.5
+        )
+        center = body.get_center()
+        gravity = Arrow(
+            center,
+            center + np.array([*gravity_xy, 0]),
+            buff=0,
+            color=YELLOW,
+            stroke_width=8,
+        )
         gravity_label = text("중력 방향", 27, YELLOW, "BOLD").next_to(gravity, RIGHT, buff=0.25)
+        gravity_label.shift(DOWN * 0.35)
         fixed_note = text("기체가 기울어도\n중력은 수직 아래", 25, WHITE, "BOLD")
         fixed_note.move_to(RIGHT * 5.3 + UP * 1.0)
 
         self.play(FadeIn(rotating), GrowArrow(gravity), FadeIn(gravity_label), FadeIn(fixed_note), run_time=0.75)
-        self.play(Rotate(rotating, angle=28 * DEGREES, about_point=body.get_center()), run_time=1.35, rate_func=smooth)
+        self.play(Rotate(rotating, angle=tilt_degrees * DEGREES, about_point=center), run_time=1.35, rate_func=smooth)
 
-        center = body.get_center()
-        component_h = Arrow(center, center + np.array([1.55, 0.82, 0]), buff=0, color=ORANGE, stroke_width=7)
-        component_v = Arrow(center, center + np.array([-0.63, -1.2, 0]), buff=0, color=GREEN, stroke_width=7)
-        h_label = text("수평 성분", 24, ORANGE, "BOLD").next_to(component_h, UP, buff=0.15)
-        v_label = text("수직 성분", 24, GREEN, "BOLD").next_to(component_v, LEFT, buff=0.18)
-        decompose = text("기체 축에 나누어 읽는다", 29, WHITE, "BOLD")
+        component_h = Arrow(center, center + np.array([*horizontal_xy, 0]), buff=0, color=ORANGE, stroke_width=7)
+        component_v = Arrow(center, center + np.array([*vertical_xy, 0]), buff=0, color=GREEN, stroke_width=7)
+        projection_guides = VGroup(
+            DashedLine(component_h.get_end(), gravity.get_end(), color=MUTED, stroke_width=3),
+            DashedLine(component_v.get_end(), gravity.get_end(), color=MUTED, stroke_width=3),
+        )
+        h_label = text("수평축 성분", 24, ORANGE, "BOLD").next_to(component_h, LEFT, buff=0.18)
+        v_label = text("수직축 성분", 24, GREEN, "BOLD").next_to(component_v, RIGHT, buff=0.18)
+        v_label.shift(UP * 0.4)
+        decompose = text("두 성분을 더하면\n원래 중력 벡터", 28, WHITE, "BOLD")
         decompose.move_to(RIGHT * 5.25 + DOWN * 0.4)
-        self.play(GrowArrow(component_h), GrowArrow(component_v), FadeIn(h_label), FadeIn(v_label), FadeIn(decompose), run_time=0.9)
+        self.play(
+            GrowArrow(component_h),
+            GrowArrow(component_v),
+            Create(projection_guides),
+            FadeIn(h_label),
+            FadeIn(v_label),
+            FadeIn(decompose),
+            run_time=0.9,
+        )
 
         self.conclusion("두 성분의 비율을 보면 Roll·Pitch 기울기를 되찾을 수 있다")
         self.hold_and_clear()
@@ -192,7 +223,7 @@ class ComplementaryFilterAudience(ExplainerScene):
     """Three aligned traces make each sensor's role visible without a legend."""
 
     def construct(self) -> None:
-        self.heading("상보필터", "빠른 자이로와 흔들리지 않는 중력 기준을 함께 쓴다")
+        self.heading("상보필터", "빠른 자이로와 오래 유지되는 중력 기준을 함께 쓴다")
 
         xs = np.linspace(0, 6, 180)
         truth = np.where(xs < 1.4, 20 * xs / 1.4, np.where(xs < 4.2, 20, 20 * np.maximum(0, 1 - (xs - 4.2) / 1.1)))
@@ -236,19 +267,25 @@ class GyroBiasAudience(ExplainerScene):
         right_panel = self.panel(8.6, 4.8).shift(RIGHT * 2.4 + DOWN * 0.15)
         drone = drone_icon(0.9).move_to(left_panel.get_center() + UP * 0.45)
         stopped = text("실제 기체: 정지", 29, WHITE, "BOLD").move_to(left_panel.get_center() + DOWN * 1.15)
-        bias = text("자이로 출력: +0.6°/s", 25, RED, "BOLD").next_to(stopped, DOWN, buff=0.2)
+        bias_rate_dps = 0.1
+        duration_seconds = 60.0
+        bias = text("자이로 출력: +0.1°/s", 25, RED, "BOLD").next_to(stopped, DOWN, buff=0.2)
         self.play(FadeIn(left_panel), FadeIn(right_panel), FadeIn(drone), FadeIn(stopped), FadeIn(bias), run_time=0.75)
 
         axes = Axes(
-            x_range=[0, 6, 1], y_range=[0, 4, 1], x_length=6.8, y_length=3.1,
+            x_range=[0, 60, 10], y_range=[0, 7, 1], x_length=6.8, y_length=3.1,
             axis_config={"include_tip": False, "stroke_color": GRID, "stroke_width": 2},
         ).move_to(right_panel.get_center() + DOWN * 0.15)
-        xs = np.linspace(0, 6, 120)
-        estimate = 0.6 * xs + 0.04 * np.sin(xs * 7)
+        xs = np.linspace(0, duration_seconds, 120)
+        estimate = np.array(
+            [integrated_bias_angle_deg(bias_rate_dps, elapsed) for elapsed in xs]
+        )
         curve = polyline(axes, xs, estimate, RED, 6)
-        x_label = text("시간", 20, MUTED).next_to(axes.x_axis, DOWN, buff=0.12)
+        x_label = text("시간 (초)", 20, MUTED).next_to(axes.x_axis, DOWN, buff=0.12)
         y_label = text("누적 각도 오차", 20, MUTED).next_to(axes.y_axis, LEFT, buff=0.12).rotate(PI / 2)
-        end_label = text("오차가 계속 증가", 25, RED, "BOLD").next_to(axes.c2p(6, estimate[-1]), LEFT, buff=0.25)
+        end_label = text("60초 뒤 6°", 25, RED, "BOLD").next_to(
+            axes.c2p(duration_seconds, estimate[-1]), LEFT, buff=0.25
+        )
         self.play(Create(axes), FadeIn(x_label), FadeIn(y_label), Create(curve), run_time=2.2, rate_func=linear)
         self.play(FadeIn(end_label), run_time=0.35)
 
@@ -257,35 +294,79 @@ class GyroBiasAudience(ExplainerScene):
 
 
 class ImuAxisSignsAudience(ExplainerScene):
-    """Opposite sensor signs cancel even while the real drone is tilted."""
+    """A wrong sensor-to-body sign makes the controller reinforce a tilt."""
 
     def construct(self) -> None:
-        self.heading("이중 IMU 축 부호", "같은 기울기를 두 센서가 반대로 읽으면 평균이 거짓말한다")
+        self.heading("센서축 → 기체축", "부호 하나가 반대면 제어가 기울기를 더 키운다")
 
-        actual_panel = self.panel(4.2, 4.65).shift(LEFT * 5.25 + DOWN * 0.1)
-        actual = drone_icon(0.85).move_to(actual_panel.get_center() + UP * 0.3).rotate(25 * DEGREES)
-        actual_label = text("실제 기울기", 24, MUTED, "BOLD").move_to(actual_panel.get_center() + UP * 1.65)
-        actual_value = text("+25°", 42, WHITE, "BOLD").move_to(actual_panel.get_center() + DOWN * 1.45)
+        actual_panel = self.panel(4.1, 4.65).shift(LEFT * 5.25 + DOWN * 0.1)
+        mapping_panel = self.panel(4.8, 4.65, PANEL_2).shift(DOWN * 0.1)
+        result_panel = self.panel(4.1, 4.65).shift(RIGHT * 5.25 + DOWN * 0.1)
 
-        a_panel = self.panel(4.0, 2.05, PANEL_2).shift(UP * 1.15 + LEFT * 0.35)
-        b_panel = self.panel(4.0, 2.05, PANEL_2).shift(DOWN * 1.2 + LEFT * 0.35)
-        a_name = text("센서 A", 25, BLUE, "BOLD").move_to(a_panel.get_center() + LEFT * 1.15)
-        a_value = text("+25°", 38, BLUE, "BOLD").move_to(a_panel.get_center() + RIGHT * 1.0)
-        b_name = text("센서 B", 25, ORANGE, "BOLD").move_to(b_panel.get_center() + LEFT * 1.15)
-        b_value = text("−25°", 38, ORANGE, "BOLD").move_to(b_panel.get_center() + RIGHT * 1.0)
+        actual_label = text("실제 기체", 24, MUTED, "BOLD").move_to(
+            actual_panel.get_center() + UP * 1.65
+        )
+        actual = drone_icon(0.78).move_to(actual_panel.get_center() + UP * 0.25)
+        actual.rotate(18 * DEGREES)
+        actual_value = text("+Roll로 기울어짐", 28, WHITE, "BOLD").move_to(
+            actual_panel.get_center() + DOWN * 1.45
+        )
 
-        result_panel = self.panel(4.0, 4.65).shift(RIGHT * 5.1 + DOWN * 0.1)
-        result_name = text("그대로 평균", 25, MUTED, "BOLD").move_to(result_panel.get_center() + UP * 1.65)
-        result_value = text("0°", 58, RED, "BOLD").move_to(result_panel.get_center() + UP * 0.15)
-        wrong = text("기체가 수평이라고 오판", 25, RED, "BOLD").move_to(result_panel.get_center() + DOWN * 1.45)
+        sensor_names = ("X", "Y", "Z")
+        body_names = ("Roll", "Pitch", "Yaw")
+        mapping_title = text("현재 자이로 변환", 25, BLUE, "BOLD").move_to(
+            mapping_panel.get_center() + UP * 1.7
+        )
+        mapping_rows = VGroup()
+        for body_name, (source_axis, sign) in zip(
+            body_names, body_axis_mapping("gyro")
+        ):
+            sign_text = "+" if sign > 0 else "−"
+            mapping_rows.add(
+                text(
+                    f"{body_name} = {sign_text} 센서 {sensor_names[source_axis]}",
+                    27,
+                    GREEN if body_name == "Roll" else WHITE,
+                    "BOLD",
+                )
+            )
+        mapping_rows.arrange(DOWN, aligned_edge=LEFT, buff=0.42).move_to(
+            mapping_panel.get_center() + DOWN * 0.15
+        )
 
-        arrow1 = Arrow(actual_panel.get_right(), a_panel.get_left(), buff=0.2, color=MUTED, stroke_width=5)
-        arrow2 = Arrow(b_panel.get_right(), result_panel.get_left(), buff=0.2, color=MUTED, stroke_width=5)
+        result_name = text("잘못된 부호를 쓰면", 24, RED, "BOLD").move_to(
+            result_panel.get_center() + UP * 1.65
+        )
+        wrong_signal = text("실제 +Roll\n→ 추정 −Roll", 27, RED, "BOLD").move_to(
+            result_panel.get_center() + UP * 0.65
+        )
+        result_drone = drone_icon(0.7).move_to(result_panel.get_center() + DOWN * 0.55)
+        result_drone.rotate(18 * DEGREES)
+        result_note = text("반대로 보정", 25, MUTED, "BOLD").move_to(
+            result_panel.get_center() + DOWN * 1.65
+        )
+        amplified_note = text("기울기 증가", 27, RED, "BOLD").move_to(result_note)
+
+        arrow1 = Arrow(actual_panel.get_right(), mapping_panel.get_left(), buff=0.2, color=MUTED, stroke_width=5)
+        arrow2 = Arrow(mapping_panel.get_right(), result_panel.get_left(), buff=0.2, color=MUTED, stroke_width=5)
         self.play(FadeIn(actual_panel), FadeIn(actual_label), FadeIn(actual_value), FadeIn(actual), run_time=0.65)
-        self.play(GrowArrow(arrow1), FadeIn(a_panel), FadeIn(a_name), FadeIn(a_value), FadeIn(b_panel), FadeIn(b_name), FadeIn(b_value), run_time=0.85)
-        self.play(GrowArrow(arrow2), FadeIn(result_panel), FadeIn(result_name), FadeIn(result_value), FadeIn(wrong), run_time=0.75)
+        self.play(GrowArrow(arrow1), FadeIn(mapping_panel), FadeIn(mapping_title), FadeIn(mapping_rows), run_time=0.85)
+        self.play(
+            GrowArrow(arrow2),
+            FadeIn(result_panel),
+            FadeIn(result_name),
+            FadeIn(wrong_signal),
+            FadeIn(result_drone),
+            FadeIn(result_note),
+            run_time=0.75,
+        )
+        self.play(
+            result_drone.animate.rotate(18 * DEGREES),
+            Transform(result_note, amplified_note),
+            run_time=0.85,
+        )
 
-        self.conclusion("두 센서의 축 방향과 부호를 먼저 맞춘 뒤 융합해야 한다", RED)
+        self.conclusion("센서값을 기체축의 방향과 부호로 맞춘 뒤 제어기에 넣어야 한다", RED)
         self.hold_and_clear()
 
 
@@ -324,7 +405,7 @@ class CascadeTimingAudience(ExplainerScene):
     """Four inner-loop corrections are grouped under each outer update."""
 
     def construct(self) -> None:
-        self.heading("캐스케이드 제어", "바깥 루프가 목표를 정하면 안쪽 루프가 네 번 더 빠르게 따라간다")
+        self.heading("캐스케이드 제어", "바깥 루프가 목표를 정하면 안쪽 루프가 네 배 빠르게 따라간다")
 
         outer_label = text("각도 루프 · 250Hz", 28, RED, "BOLD").move_to(LEFT * 5.5 + UP * 1.2)
         inner_label = text("각속도 루프 · 1kHz", 28, BLUE, "BOLD").move_to(LEFT * 5.35 + DOWN * 1.2)
@@ -362,7 +443,7 @@ class YawCorrectionAudience(ExplainerScene):
     """A drifting gyro heading is pulled back to a fixed magnetic reference."""
 
     def construct(self) -> None:
-        self.heading("Yaw 기준", "자이로 추정값이 흐르면 지자기 기준으로 천천히 되돌린다")
+        self.heading("Yaw 기준", "자이로 추정값이 흐르면 잡아 둔 방향으로 천천히 되돌린다")
 
         compass = Circle(radius=2.35, color=GRID, stroke_width=6).shift(LEFT * 3.2 + DOWN * 0.05)
         center = compass.get_center()
@@ -371,28 +452,65 @@ class YawCorrectionAudience(ExplainerScene):
             letter = text(label, 22, MUTED, "BOLD").move_to(center + direction * 2.65)
             self.add(mark, letter)
 
-        reference = Arrow(center, center + UP * 1.85, buff=0, color=CYAN, stroke_width=9)
-        estimate = Arrow(center, center + UP * 1.75, buff=0, color=RED, stroke_width=8)
-        true_label = text("지자기 기준", 24, CYAN, "BOLD").move_to(center + LEFT * 2.0 + UP * 1.65)
+        captured_yaw_deg = 25.0
+        captured_magnetic_heading_deg = 62.0
+        reference_offset_deg = capture_heading_reference(
+            captured_yaw_deg, captured_magnetic_heading_deg
+        )
+        reference_heading_deg = referenced_heading_deg(
+            captured_magnetic_heading_deg, reference_offset_deg
+        )
+        reference_vector = rotate_vector(
+            UP * 1.85, -reference_heading_deg * DEGREES
+        )
+        estimate_vector = rotate_vector(
+            UP * 1.75, -reference_heading_deg * DEGREES
+        )
+        reference = Arrow(center, center + reference_vector, buff=0, color=CYAN, stroke_width=9)
+        estimate = Arrow(center, center + estimate_vector, buff=0, color=RED, stroke_width=8)
+        true_label = text("잡아 둔 방향", 24, CYAN, "BOLD").move_to(center + LEFT * 2.0 + UP * 1.65)
         estimate_label = text("자이로 추정", 24, RED, "BOLD").move_to(center + RIGHT * 2.0 + UP * 1.5)
         self.play(Create(compass), GrowArrow(reference), GrowArrow(estimate), FadeIn(true_label), FadeIn(estimate_label), run_time=0.75)
 
         explanation = self.panel(6.2, 4.2).shift(RIGHT * 4.0 + DOWN * 0.05)
         step1 = text("1  작은 자이로 오차가 누적", 27, RED, "BOLD")
-        step2 = text("2  나침반이 장기 기준 제공", 27, CYAN, "BOLD")
+        step2 = text("2  지자기가 상대 기준 제공", 27, CYAN, "BOLD")
         step3 = text("3  오차를 조금씩 되돌림", 27, GREEN, "BOLD")
         steps = VGroup(step1, step2, step3).arrange(DOWN, aligned_edge=LEFT, buff=0.48).move_to(explanation)
         self.play(FadeIn(explanation), FadeIn(step1), run_time=0.5)
 
-        drifted = Arrow(center, center + rotate_vector(UP * 1.75, -38 * DEGREES), buff=0, color=RED, stroke_width=8)
+        drift_error_deg = 38.0
+        drifted_heading_deg = reference_heading_deg + drift_error_deg
+        drifted = Arrow(
+            center,
+            center + rotate_vector(UP * 1.75, -drifted_heading_deg * DEGREES),
+            buff=0,
+            color=RED,
+            stroke_width=8,
+        )
         self.play(Transform(estimate, drifted), run_time=1.3, rate_func=smooth)
-        gap = Arc(radius=1.15, start_angle=52 * DEGREES, angle=38 * DEGREES, color=YELLOW, stroke_width=7).move_arc_center_to(center)
-        gap_label = text("누적 오차", 24, YELLOW, "BOLD").next_to(gap, RIGHT, buff=0.15)
+        gap = Arc(
+            radius=1.15,
+            start_angle=(90.0 - drifted_heading_deg) * DEGREES,
+            angle=drift_error_deg * DEGREES,
+            color=YELLOW,
+            stroke_width=7,
+        ).move_arc_center_to(center)
+        gap_label = text("누적 오차", 24, YELLOW, "BOLD").move_to(
+            center + RIGHT * 1.6 + DOWN * 0.45
+        )
         self.play(Create(gap), FadeIn(gap_label), FadeIn(step2), run_time=0.65)
 
-        corrected = Arrow(center, center + rotate_vector(UP * 1.75, -5 * DEGREES), buff=0, color=GREEN, stroke_width=9)
+        corrected_heading_deg = reference_heading_deg + 5.0
+        corrected = Arrow(
+            center,
+            center + rotate_vector(UP * 1.75, -corrected_heading_deg * DEGREES),
+            buff=0,
+            color=GREEN,
+            stroke_width=9,
+        )
         self.play(Transform(estimate, corrected), FadeOut(gap), FadeOut(gap_label), FadeIn(step3), run_time=1.8, rate_func=smooth)
-        self.conclusion("지자기는 빠른 움직임을 대신하지 않고, 장기적으로 기준만 잡아준다", GREEN)
+        self.conclusion("지자기는 북쪽으로 돌리지 않고, 처음 잡은 방향을 장기 기준으로 유지한다", GREEN)
         self.hold_and_clear()
 
 

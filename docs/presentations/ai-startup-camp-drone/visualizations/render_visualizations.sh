@@ -6,16 +6,23 @@ DECK_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
 ASSET_DIR="$DECK_DIR/assets"
 if [[ -n "${PYTHON_BIN:-}" ]]; then
   PYTHON_BIN="$PYTHON_BIN"
-elif [[ -x "$SCRIPT_DIR/.venv/bin/python" ]]; then
-  PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
-else
+elif [[ -x /home/light/anaconda3/bin/python ]]; then
   PYTHON_BIN=/home/light/anaconda3/bin/python
+else
+  PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
 fi
 
 if ! "$PYTHON_BIN" -c 'import manim' >/dev/null 2>&1; then
   echo "Manim을 불러오지 못했습니다: $PYTHON_BIN" >&2
   echo "README.md의 전용 렌더링 환경 설정을 먼저 실행하십시오." >&2
   exit 1
+fi
+
+MANIM_BIN=$(dirname -- "$PYTHON_BIN")/manim
+if [[ -x "$MANIM_BIN" ]]; then
+  MANIM_CMD=("$MANIM_BIN")
+else
+  MANIM_CMD=("$PYTHON_BIN" -m manim)
 fi
 WORK_DIR=$(mktemp -d)
 trap 'find "$WORK_DIR" -mindepth 1 -delete; rmdir "$WORK_DIR"' EXIT
@@ -36,7 +43,7 @@ for entry in "${SCENES[@]}"; do
   scene=${entry%%:*}
   output=${entry#*:}
   media_dir="$WORK_DIR/$scene"
-  "$PYTHON_BIN" -m manim \
+  "${MANIM_CMD[@]}" \
     --media_dir "$media_dir" \
     --resolution 1280,720 \
     --frame_rate 30 \

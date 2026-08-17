@@ -13,12 +13,12 @@
 
 ## 렌더링
 
-렌더링 라이브러리가 기존 Python 환경과 충돌하지 않도록 이 폴더 안에 전용 환경을
-한 번 만든다.
+기본 렌더러는 conda base의 Python이다. 최초 한 번 아래 의존성을 설치한다.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-render.txt
+conda activate base
+conda install pango
+python -m pip install -r requirements-render.txt
 ```
 
 이후 아래 스크립트를 실행한다.
@@ -28,7 +28,7 @@ python3 -m venv .venv
 ```
 
 다른 Python 환경을 쓰려면 `PYTHON_BIN=/경로/python`을 앞에 붙인다. 스크립트는
-`PYTHON_BIN`, 이 폴더의 `.venv`, conda base 순으로 렌더러를 찾는다.
+`PYTHON_BIN`, conda base, 이 폴더의 `.venv` 순으로 렌더러를 찾는다.
 
 출력 대상은 다음 9개이다.
 
