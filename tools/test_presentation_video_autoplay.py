@@ -215,6 +215,44 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             time.sleep(0.05)
         raise AssertionError(f"{filename} did not autoplay; last state={state}")
 
+    def test_rendered_deck_omits_scheduled_presentation_duration(self) -> None:
+        self._call(
+            "Page.navigate",
+            {"url": f"http://127.0.0.1:{self.http_port}/#1"},
+        )
+        deadline = time.monotonic() + 4.0
+        deck_state = {"sections": 0, "content": ""}
+        while time.monotonic() < deadline:
+            deck_state = self._evaluate(
+                """
+                (() => {
+                  const sections = [...document.querySelectorAll('section')];
+                  const parts = [];
+                  for (const section of sections) {
+                    parts.push(section.textContent || '');
+                    for (const element of section.querySelectorAll('*')) {
+                      for (const attribute of element.attributes) parts.push(attribute.value);
+                    }
+                  }
+                  return {
+                    sections: sections.length,
+                    content: parts.join(' ').replace(/\\s+/g, ' ').trim(),
+                  };
+                })()
+                """
+            )
+            if deck_state["sections"] == 77:
+                break
+            time.sleep(0.05)
+
+        self.assertEqual(deck_state["sections"], 77)
+        self.assertNotRegex(
+            deck_state["content"],
+            r"(?:\d+(?:\.\d+)?\s*시간\s*과정|"
+            r"(?:발표|시연|체험|진행).{0,8}\d+(?:\.\d+)?\s*(?:시간|분|초)|"
+            r"\d+(?:\.\d+)?\s*(?:시간|분|초).{0,8}(?:발표|시연|체험|진행|과정))",
+        )
+
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._call(
             "Page.navigate",
