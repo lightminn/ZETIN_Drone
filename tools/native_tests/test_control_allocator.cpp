@@ -102,7 +102,7 @@ int main() {
   });
 
   runCase("unsaturated combined command retains the old integer mix", [] {
-    // Catches a changed unsaturated formula or changed rounding behavior.
+    // Catches a changed unsaturated formula, float composition, or rounding behavior.
     ControlAllocation allocation =
         allocateControl(10.0f, 20.0f, 5.0f, 1175, 1050, 1300);
     checkMotors(allocation, 1160, 1180, 1150, 1210);
@@ -110,6 +110,16 @@ int main() {
     CHECK_NEAR(allocation.rp_scale, 1.0f, 1e-6f);
     CHECK_NEAR(allocation.yaw_scale, 1.0f, 1e-6f);
     CHECK(!allocation.scaled);
+
+    // The legacy float mixer rounds M2 to 1179. Promoting these contributions
+    // to double before composition incorrectly rounds that motor to 1178.
+    ControlAllocation fractional =
+        allocateControl(-0.351f, -5.178f, -8.327f, 1175, 1050, 1300);
+    checkMotors(fractional, 1188, 1179, 1172, 1161);
+    CHECK_NEAR(fractional.collective_us, 1175.0f, 1e-6f);
+    CHECK_NEAR(fractional.rp_scale, 1.0f, 1e-6f);
+    CHECK_NEAR(fractional.yaw_scale, 1.0f, 1e-6f);
+    CHECK(!fractional.scaled);
   });
 
   runCase("yaw saturation leaves allocated roll-pitch pair differences intact", [] {
