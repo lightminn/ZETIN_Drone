@@ -7,6 +7,7 @@ import json
 import importlib.util
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -21,6 +22,7 @@ GEOMETRY_PATH = (
     / "visualizations"
     / "geometry.py"
 )
+VISUALIZATION_SOURCE_PATH = GEOMETRY_PATH.with_name("audience_visualizations.py")
 VISUALIZATION_FILES = (
     "accelerometer.mp4",
     "gyro.mp4",
@@ -47,7 +49,31 @@ def load_geometry_module():
     return module
 
 
+def load_visualization_module():
+    if not VISUALIZATION_SOURCE_PATH.is_file():
+        return None
+    source_dir = str(VISUALIZATION_SOURCE_PATH.parent)
+    if source_dir not in sys.path:
+        sys.path.insert(0, source_dir)
+    spec = importlib.util.spec_from_file_location(
+        "presentation_audience_visualizations", VISUALIZATION_SOURCE_PATH
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class PresentationVisualizationGeometryTests(unittest.TestCase):
+    def test_video_text_is_rendered_ten_percent_larger(self) -> None:
+        module = load_visualization_module()
+        self.assertIsNotNone(module)
+
+        rendered = module.text("가독성", 20)
+
+        self.assertAlmostEqual(rendered.font_size, 22.0, places=6)
+
     def test_tilted_axis_components_reconstruct_downward_gravity(self) -> None:
         module = load_geometry_module()
         self.assertIsNotNone(module)
@@ -109,6 +135,114 @@ class PresentationVisualizationGeometryTests(unittest.TestCase):
         self.assertAlmostEqual(
             module.referenced_heading_deg(82.0, offset), 45.0, places=6
         )
+
+
+class PresentationVisualizationLayoutTests(unittest.TestCase):
+    @staticmethod
+    def _rendered_scene(scene_name: str):
+        from manim import tempconfig
+
+        module = load_visualization_module()
+        if module is None:
+            raise AssertionError("presentation visualization module is missing")
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            scene = getattr(module, scene_name)()
+            scene.hold_and_clear = lambda *args, **kwargs: None
+            scene.render()
+        return scene
+
+    @staticmethod
+    def _mobjects(scene):
+        def descendants(mobject):
+            yield mobject
+            for child in mobject.submobjects:
+                yield from descendants(child)
+
+        for root in scene.mobjects:
+            yield from descendants(root)
+
+    @classmethod
+    def _text(cls, scene, normalized_text: str):
+        for mobject in cls._mobjects(scene):
+            if getattr(mobject, "text", None) == normalized_text:
+                return mobject
+        raise AssertionError(f"missing rendered text: {normalized_text}")
+
+    def test_accelerometer_component_labels_use_the_explanation_zone(self) -> None:
+        scene = self._rendered_scene("AccelerometerAudience")
+
+        horizontal = self._text(scene, "수평축성분")
+        vertical = self._text(scene, "수직축성분")
+
+        self.assertGreater(horizontal.get_left()[0], 2.8)
+        self.assertGreater(vertical.get_left()[0], 2.8)
+
+    def test_pi_curve_labels_stay_above_the_plot_lines(self) -> None:
+        scene = self._rendered_scene("PiErrorAudience")
+
+        p_label = self._text(scene, "P만:오차가남음")
+        pi_label = self._text(scene, "P+I:오차가0으로복귀")
+
+        self.assertGreater(p_label.get_bottom()[1], 1.3)
+        self.assertGreater(pi_label.get_bottom()[1], 1.3)
+
+    def test_complementary_filter_descriptions_clear_the_plot_area(self) -> None:
+        scene = self._rendered_scene("ComplementaryFilterAudience")
+        descriptions = [
+            self._text(scene, "빠르지만서서히표류"),
+            self._text(scene, "장기기준이지만순간진동"),
+            self._text(scene, "빠르고기준에서벗어나지않음"),
+        ]
+        curves = sorted(
+            (
+                item
+                for item in self._mobjects(scene)
+                if type(item).__name__ == "VMobject"
+                and len(item.get_all_points()) > 500
+                and str(item.get_color()) in {"#FF6474", "#FF9F43", "#55D68B"}
+            ),
+            key=lambda item: item.get_center()[1],
+            reverse=True,
+        )
+
+        self.assertEqual(len(curves), 3)
+        for description, curve in zip(descriptions, curves):
+            self.assertLess(
+                description.get_right()[0] + 0.18,
+                curve.get_left()[0],
+            )
+
+    def test_cascade_row_labels_clear_the_first_target_box(self) -> None:
+        scene = self._rendered_scene("CascadeTimingAudience")
+
+        outer = self._text(scene, "각도루프·250Hz")
+        inner = self._text(scene, "각속도루프·1kHz")
+
+        self.assertLess(outer.get_right()[0], -4.4)
+        self.assertLess(inner.get_right()[0], -4.4)
+
+    def test_gyro_bias_axis_label_is_horizontal_above_the_plot(self) -> None:
+        scene = self._rendered_scene("GyroBiasAudience")
+
+        axis_label = self._text(scene, "누적각도오차")
+
+        self.assertGreater(axis_label.width, axis_label.height)
+        self.assertGreater(axis_label.get_bottom()[1], 1.25)
+
+    def test_landing_comparison_label_sits_above_both_panels(self) -> None:
+        scene = self._rendered_scene("LandingAmbiguityAudience")
+
+        comparison = self._text(scene, "움직임은다르지만센서값은같다")
+
+        self.assertGreater(comparison.get_bottom()[1], 2.05)
 
 
 @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")

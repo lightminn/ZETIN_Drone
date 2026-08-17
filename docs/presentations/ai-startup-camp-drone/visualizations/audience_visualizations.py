@@ -41,10 +41,17 @@ GREEN = "#55D68B"
 YELLOW = "#FFD166"
 ORANGE = "#FF9F43"
 RED = "#FF6474"
+TEXT_SCALE = 1.1
 
 
 def text(label: str, size: int, color: str = WHITE, weight: str = "NORMAL") -> Text:
-    return Text(label, font=FONT, font_size=size, color=color, weight=weight)
+    return Text(
+        label,
+        font=FONT,
+        font_size=size * TEXT_SCALE,
+        color=color,
+        weight=weight,
+    )
 
 
 def polyline(axes: Axes, xs, ys, color: str, width: float = 5) -> VMobject:
@@ -167,17 +174,19 @@ class AccelerometerAudience(ExplainerScene):
             DashedLine(component_h.get_end(), gravity.get_end(), color=MUTED, stroke_width=3),
             DashedLine(component_v.get_end(), gravity.get_end(), color=MUTED, stroke_width=3),
         )
-        h_label = text("수평축 성분", 24, ORANGE, "BOLD").next_to(component_h, LEFT, buff=0.18)
-        v_label = text("수직축 성분", 24, GREEN, "BOLD").next_to(component_v, RIGHT, buff=0.18)
-        v_label.shift(UP * 0.4)
+        h_label = text("수평축 성분", 24, ORANGE, "BOLD")
+        v_label = text("수직축 성분", 24, GREEN, "BOLD")
+        component_legend = VGroup(h_label, v_label).arrange(
+            DOWN, aligned_edge=LEFT, buff=0.28
+        )
+        component_legend.move_to(RIGHT * 5.25 + DOWN * 0.25)
         decompose = text("두 성분을 더하면\n원래 중력 벡터", 28, WHITE, "BOLD")
-        decompose.move_to(RIGHT * 5.25 + DOWN * 0.4)
+        decompose.move_to(RIGHT * 5.25 + DOWN * 1.35)
         self.play(
             GrowArrow(component_h),
             GrowArrow(component_v),
             Create(projection_guides),
-            FadeIn(h_label),
-            FadeIn(v_label),
+            FadeIn(component_legend),
             FadeIn(decompose),
             run_time=0.9,
         )
@@ -241,9 +250,9 @@ class ComplementaryFilterAudience(ExplainerScene):
             panel = self.panel(14.2, 1.35, PANEL if index < 2 else PANEL_2)
             panel.move_to(DOWN * (index * 1.55 - 1.35) + DOWN * 0.15)
             axes = Axes(
-                x_range=[0, 6, 1], y_range=[-5, 32, 10], x_length=9.2, y_length=0.9,
+                x_range=[0, 6, 1], y_range=[-5, 32, 10], x_length=8.0, y_length=0.9,
                 axis_config={"include_tip": False, "stroke_color": GRID, "stroke_width": 2},
-            ).move_to(panel.get_center() + RIGHT * 1.65)
+            ).move_to(panel.get_center() + RIGHT * 2.5)
             curve = polyline(axes, xs, values, color, 5 if index == 2 else 4)
             label = text(name, 27, color, "BOLD").move_to(panel.get_center() + LEFT * 5.25 + UP * 0.2)
             description = text(note, 20, MUTED).next_to(label, DOWN, aligned_edge=LEFT, buff=0.08)
@@ -282,7 +291,9 @@ class GyroBiasAudience(ExplainerScene):
         )
         curve = polyline(axes, xs, estimate, RED, 6)
         x_label = text("시간 (초)", 20, MUTED).next_to(axes.x_axis, DOWN, buff=0.12)
-        y_label = text("누적 각도 오차", 20, MUTED).next_to(axes.y_axis, LEFT, buff=0.12).rotate(PI / 2)
+        y_label = text("누적 각도 오차", 20, MUTED).move_to(
+            right_panel.get_center() + LEFT * 2.4 + UP * 1.75
+        )
         end_label = text("60초 뒤 6°", 25, RED, "BOLD").next_to(
             axes.c2p(duration_seconds, estimate[-1]), LEFT, buff=0.25
         )
@@ -390,11 +401,14 @@ class PiErrorAudience(ExplainerScene):
         wind = VGroup(Arrow(LEFT * 0.8, RIGHT * 0.8, color=CYAN, stroke_width=7), text("일정한 바람", 23, CYAN, "BOLD")).arrange(DOWN, buff=0.08)
         wind.move_to(panel.get_center() + LEFT * 5.6 + UP * 1.25)
         self.play(FadeIn(panel), Create(axes), Create(zero), FadeIn(wind), run_time=0.75)
+        p_label = text("P만: 오차가 남음", 25, ORANGE, "BOLD")
+        pi_label = text("P + I: 오차가 0으로 복귀", 25, GREEN, "BOLD")
+        curve_labels = VGroup(p_label, pi_label).arrange(RIGHT, buff=0.7)
+        curve_labels.move_to(panel.get_center() + RIGHT * 0.8 + UP * 1.85)
+
         self.play(Create(p_curve), run_time=1.65, rate_func=linear)
-        p_label = text("P만: 오차가 남음", 25, ORANGE, "BOLD").move_to(axes.c2p(6.3, 9.6))
         self.play(FadeIn(p_label), run_time=0.3)
         self.play(Create(pi_curve), run_time=1.65, rate_func=linear)
-        pi_label = text("P + I: 오차가 0으로 복귀", 25, GREEN, "BOLD").move_to(axes.c2p(5.6, 2.0))
         self.play(FadeIn(pi_label), run_time=0.3)
 
         self.conclusion("I항은 오래 남은 오차를 기억하고 필요한 힘을 더 보탠다", GREEN)
@@ -407,8 +421,8 @@ class CascadeTimingAudience(ExplainerScene):
     def construct(self) -> None:
         self.heading("캐스케이드 제어", "바깥 루프가 목표를 정하면 안쪽 루프가 네 배 빠르게 따라간다")
 
-        outer_label = text("각도 루프 · 250Hz", 28, RED, "BOLD").move_to(LEFT * 5.5 + UP * 1.2)
-        inner_label = text("각속도 루프 · 1kHz", 28, BLUE, "BOLD").move_to(LEFT * 5.35 + DOWN * 1.2)
+        outer_label = text("각도 루프 · 250Hz", 28, RED, "BOLD").move_to(LEFT * 6.25 + UP * 1.2)
+        inner_label = text("각속도 루프 · 1kHz", 28, BLUE, "BOLD").move_to(LEFT * 6.25 + DOWN * 1.2)
         self.play(FadeIn(outer_label), FadeIn(inner_label), run_time=0.45)
 
         groups = VGroup()
@@ -520,9 +534,9 @@ class LandingAmbiguityAudience(ExplainerScene):
     def construct(self) -> None:
         self.heading("착지 판정의 한계", "가속도계 1g만으로는 정지와 등속 하강을 구분할 수 없다")
 
-        left_panel = self.panel(6.8, 4.9).shift(LEFT * 3.65 + DOWN * 0.1)
-        right_panel = self.panel(6.8, 4.9).shift(RIGHT * 3.65 + DOWN * 0.1)
-        divider = Line(UP * 2.35, DOWN * 2.35, color=GRID, stroke_width=3)
+        left_panel = self.panel(6.8, 4.55).shift(LEFT * 3.65 + DOWN * 0.35)
+        right_panel = self.panel(6.8, 4.55).shift(RIGHT * 3.65 + DOWN * 0.35)
+        divider = Line(UP * 1.9, DOWN * 2.55, color=GRID, stroke_width=3)
         left_title = text("지면에 정지", 29, WHITE, "BOLD").move_to(left_panel.get_center() + UP * 1.8)
         right_title = text("등속으로 하강", 29, WHITE, "BOLD").move_to(right_panel.get_center() + UP * 1.8)
 
@@ -541,7 +555,7 @@ class LandingAmbiguityAudience(ExplainerScene):
         velocity = text("속도는 아래로", 24, CYAN, "BOLD").next_to(down_arrow, RIGHT, buff=0.15)
         self.play(GrowArrow(down_arrow), FadeIn(velocity), right_drone.animate.shift(DOWN * 1.55), right_accel.animate.shift(DOWN * 1.55), run_time=1.8, rate_func=linear)
 
-        same = text("움직임은 다르지만 센서값은 같다", 29, RED, "BOLD").move_to(UP * 0.2)
+        same = text("움직임은 다르지만 센서값은 같다", 29, RED, "BOLD").move_to(UP * 2.45)
         self.play(FadeIn(same), run_time=0.45)
         self.conclusion("착지를 판단하려면 거리·광류처럼 움직임을 직접 보는 센서가 필요하다", RED)
         self.hold_and_clear()

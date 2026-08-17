@@ -8,10 +8,10 @@
   --uos-slide-w: 1280px;
   --uos-slide-h: 720px;
   --uos-font: "Noto Sans CJK KR", "Noto Sans KR", sans-serif;
-  --uos-fs-title: 58.667px;
-  --uos-fs-chapter: 32px;
-  --uos-fs-body: 20px;
-  --uos-fs-caption: 18.667px;
+  --uos-fs-title: 64.5337px;
+  --uos-fs-chapter: 35.2px;
+  --uos-fs-body: 22px;
+  --uos-fs-caption: 20.5337px;
   --uos-gutter: 41.12px;
 
   --uos-title-panel-left: -2.44px;
@@ -47,7 +47,7 @@
   --uos-toc-body-width: 587.35px;
   --uos-toc-body-height: 397.44px;
   --uos-toc-first-line-offset: 10.4px;
-  --uos-chapter-title-width: 558.75px;
+  --uos-chapter-title-width: 640px;
   --uos-chapter-title-height: 126.02px;
 
   --uos-content-title-left: 38.51px;
@@ -308,6 +308,7 @@
   top: var(--uos-content-top);
   width: var(--uos-content-width);
   height: var(--uos-content-height);
+  padding-top: 4px;
   overflow: hidden;
 }
 

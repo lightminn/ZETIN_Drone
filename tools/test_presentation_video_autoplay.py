@@ -170,10 +170,14 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             return message.get("result", {})
 
     @classmethod
-    def _evaluate(cls, expression: str):
+    def _evaluate(cls, expression: str, *, await_promise: bool = False):
         response = cls._call(
             "Runtime.evaluate",
-            {"expression": expression, "returnByValue": True},
+            {
+                "expression": expression,
+                "returnByValue": True,
+                "awaitPromise": await_promise,
+            },
         )
         if "exceptionDetails" in response:
             raise RuntimeError(response["exceptionDetails"])
@@ -214,6 +218,158 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                 return state
             time.sleep(0.05)
         raise AssertionError(f"{filename} did not autoplay; last state={state}")
+
+    @classmethod
+    def _open_deck(cls) -> None:
+        deadline = time.monotonic() + 6.0
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{cls.http_port}/", timeout=0.2
+                ) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.05)
+        else:
+            raise AssertionError("presentation HTTP server did not become ready")
+        cls._call(
+            "Page.navigate",
+            {"url": f"http://127.0.0.1:{cls.http_port}/?_snthumb=1#1"},
+        )
+        deadline = time.monotonic() + 10.0
+        ready = False
+        while time.monotonic() < deadline:
+            ready = bool(
+                cls._evaluate(
+                    "document.readyState === 'complete' && "
+                    "document.querySelector('deck-stage')?._slides?.length === 77"
+                )
+            )
+            if ready:
+                break
+            time.sleep(0.05)
+        if not ready:
+            raise AssertionError("77-slide presentation did not become ready")
+        cls._evaluate(
+            "(() => { const stage = document.querySelector('deck-stage'); "
+            "stage.setAttribute('no-rail', ''); stage._fit(); return true; })()"
+        )
+        deadline = time.monotonic() + 6.0
+        while time.monotonic() < deadline:
+            if cls._evaluate("document.fonts.status === 'loaded'"):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError("presentation fonts did not finish loading")
+
+    def test_slide_type_scale_is_ten_percent_larger(self) -> None:
+        self._open_deck()
+        sizes = self._evaluate(
+            """
+            (() => {
+              const slides = document.querySelector('deck-stage')._slides;
+              const deepFind = (root, selector) => {
+                const direct = root.querySelector?.(selector);
+                if (direct) return direct;
+                for (const element of root.querySelectorAll?.('*') || []) {
+                  if (element.shadowRoot) {
+                    const nested = deepFind(element.shadowRoot, selector);
+                    if (nested) return nested;
+                  }
+                }
+                return null;
+              };
+              const title = deepFind(slides[0], '.uos-title-slide__title-text');
+              const body = [...slides[1].querySelectorAll('div')].find(
+                element => element.textContent.trim() === '01'
+              );
+              const chartLabel = [...slides[50].querySelectorAll('svg text')].find(
+                element => element.textContent.trim() === '기준 근처'
+              );
+              return {
+                title: title && parseFloat(getComputedStyle(title).fontSize),
+                body: body && parseFloat(getComputedStyle(body).fontSize),
+                chart: chartLabel && parseFloat(getComputedStyle(chartLabel).fontSize),
+              };
+            })()
+            """
+        )
+
+        self.assertAlmostEqual(sizes["title"], 64.5337, places=3)
+        self.assertAlmostEqual(sizes["body"], 22.0, places=3)
+        self.assertAlmostEqual(sizes["chart"], 16.5, places=3)
+
+    def test_all_slide_text_stays_inside_clipping_ancestors(self) -> None:
+        self.maxDiff = None
+        self._open_deck()
+        clipped = self._evaluate(
+            """
+            (async () => {
+              const stage = document.querySelector('deck-stage');
+              const clipped = [];
+              const walk = (root, output) => {
+                for (const element of root.querySelectorAll('*')) {
+                  output.push(element);
+                  if (element.shadowRoot) walk(element.shadowRoot, output);
+                }
+              };
+              for (let index = 0; index < stage._slides.length; index += 1) {
+                stage.goTo(index);
+                stage._fit();
+                await new Promise(resolve => requestAnimationFrame(
+                  () => requestAnimationFrame(resolve)
+                ));
+                const slide = stage._slides[index];
+                const elements = [];
+                walk(slide, elements);
+                for (const element of elements) {
+                  const hasText = [...element.childNodes].some(
+                    node => node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+                  );
+                  if (!hasText) continue;
+                  const style = getComputedStyle(element);
+                  const rect = element.getBoundingClientRect();
+                  if (style.display === 'none' || style.visibility === 'hidden' ||
+                      Number(style.opacity) === 0 || rect.width < 0.5 || rect.height < 0.5) {
+                    continue;
+                  }
+                  let ancestor = element;
+                  while (ancestor) {
+                    ancestor = ancestor.parentElement ||
+                      (ancestor.getRootNode() instanceof ShadowRoot
+                        ? ancestor.getRootNode().host : null);
+                    if (!ancestor || ancestor === slide) break;
+                    const ancestorStyle = getComputedStyle(ancestor);
+                    const clips = [ancestorStyle.overflow, ancestorStyle.overflowX,
+                      ancestorStyle.overflowY].some(value =>
+                        value === 'hidden' || value === 'clip'
+                      );
+                    if (!clips) continue;
+                    const parentRect = ancestor.getBoundingClientRect();
+                    if (rect.left < parentRect.left - 1 || rect.top < parentRect.top - 1 ||
+                        rect.right > parentRect.right + 1 ||
+                        rect.bottom > parentRect.bottom + 1) {
+                      clipped.push({
+                        slide: index + 1,
+                        label: slide.dataset.label,
+                        text: element.textContent.trim().slice(0, 80),
+                        rect: [rect.left, rect.top, rect.right, rect.bottom],
+                        clippingRect: [parentRect.left, parentRect.top,
+                          parentRect.right, parentRect.bottom],
+                      });
+                      break;
+                    }
+                  }
+                }
+              }
+              return clipped;
+            })()
+            """,
+            await_promise=True,
+        )
+
+        self.assertEqual(clipped, [])
 
     def test_rendered_deck_omits_scheduled_presentation_duration(self) -> None:
         self._call(
