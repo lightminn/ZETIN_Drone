@@ -11,7 +11,74 @@
 #include <string>
 #include <vector>
 
+#include "control_allocator.h"
+
+// Test-only allocator dispatch. The production allocator is still called
+// unchanged for normal SIL runs. The negative-control run selects an
+// independent legacy policy before the sketch is included, so the real PID
+// tick receives the same scale that produces motorOut and drives the plant.
+static bool silUseUniformAllocator = false;
+static ControlAllocation silLastDispatchedAllocation = {
+    {1000, 1000, 1000, 1000}, 1000.0f, 1.0f, 1.0f, false};
+
+static ControlAllocation silUniformAllocation(float roll, float pitch,
+                                               float yaw, int throttle,
+                                               int minMotor, int maxMotor) {
+  // Independent legacy policy: compose all three axes first, then apply one
+  // span scale to every axis. This does not call or reproduce the production
+  // RP-first priority solver.
+  minMotor = std::max(1000, std::min(2000, minMotor));
+  maxMotor = std::max(minMotor, std::min(2000, maxMotor));
+  const double rollValue = std::isfinite(roll) ? roll : 0.0;
+  const double pitchValue = std::isfinite(pitch) ? pitch : 0.0;
+  const double yawValue = std::isfinite(yaw) ? yaw : 0.0;
+  std::array<double, 4> diff = {
+      -pitchValue + rollValue - yawValue,
+      pitchValue - rollValue - yawValue,
+      -pitchValue - rollValue + yawValue,
+      pitchValue + rollValue + yawValue,
+  };
+  const auto bounds = std::minmax_element(diff.begin(), diff.end());
+  const double available = static_cast<double>(maxMotor - minMotor);
+  const double span = *bounds.second - *bounds.first;
+  double scale = 1.0;
+  if (span > available && span > 0.0) scale = available / span;
+  for (double &value : diff) value *= scale;
+
+  const auto scaledBounds = std::minmax_element(diff.begin(), diff.end());
+  const double collectiveLow = minMotor - *scaledBounds.first;
+  const double collectiveHigh = maxMotor - *scaledBounds.second;
+  const double collective = std::max(
+      collectiveLow,
+      std::min(collectiveHigh, static_cast<double>(throttle)));
+
+  ControlAllocation out = {};
+  out.collective_us = static_cast<float>(collective);
+  out.rp_scale = static_cast<float>(scale);
+  out.yaw_scale = static_cast<float>(scale);
+  out.scaled = scale < 1.0;
+  for (std::size_t index = 0; index < diff.size(); ++index) {
+    const int rounded = static_cast<int>(std::lround(collective + diff[index]));
+    out.motor[index] = std::max(minMotor, std::min(maxMotor, rounded));
+  }
+  return out;
+}
+
+static ControlAllocation silDispatchAllocateControl(
+    float roll, float pitch, float yaw, int throttle,
+    int minMotor, int maxMotor) {
+  silLastDispatchedAllocation =
+      silUseUniformAllocator
+          ? silUniformAllocation(roll, pitch, yaw, throttle,
+                                 minMotor, maxMotor)
+          : allocateControl(roll, pitch, yaw, throttle,
+                            minMotor, maxMotor);
+  return silLastDispatchedAllocation;
+}
+
+#define allocateControl silDispatchAllocateControl
 #include "dual_imu_cascade_pwm.ino"
+#undef allocateControl
 
 namespace {
 
@@ -191,9 +258,7 @@ struct RunConfig {
   std::function<Disturbance(uint32_t)> disturbance_for_interval;
   std::function<int(uint32_t)> throttle_for_tick;
   std::function<void(uint32_t, PlantState &)> state_for_tick;
-  // Test-only negative-control policy. This never enters flight firmware: it
-  // replaces the motors seen by the SIL plant with an independently calculated
-  // legacy uniform-axis allocation.
+  // Test-only negative-control policy. This never enters flight firmware.
   bool uniform_allocator_oracle = false;
 };
 
@@ -215,6 +280,7 @@ struct Sample {
   double i_yaw_us = 0.0;
   double mixer_rp_scale = 1.0;
   double mixer_yaw_scale = 1.0;
+  double plant_allocator_scale = 1.0;
   double target_yaw_rate_dps = 0.0;
   int yaw_authority_state = YAW_AUTH_NORMAL;
   int pid_loop_hz = 0;
@@ -457,54 +523,6 @@ void resetFirmwareState(const PlantState &initial) {
   (void)injectImuFromPlant(initial, 0);
 }
 
-struct UniformOracleAllocation {
-  std::array<int, 4> motors = {1000, 1000, 1000, 1000};
-  double scale = 1.0;
-  double collective_us = 1000.0;
-};
-
-UniformOracleAllocation uniformAllocationOracle(
-    const AllocationTelemetrySample &requested, int throttle,
-    int min_motor, int max_motor) {
-  // Independent legacy policy: compose all three axes first, then apply one
-  // span scale to every axis. Do not call or reproduce the production RP-first
-  // priority solver here.
-  min_motor = std::max(1000, std::min(2000, min_motor));
-  max_motor = std::max(min_motor, std::min(2000, max_motor));
-  const double roll = std::isfinite(requested.pid_roll_us)
-                          ? requested.pid_roll_us : 0.0;
-  const double pitch = std::isfinite(requested.pid_pitch_us)
-                           ? requested.pid_pitch_us : 0.0;
-  const double yaw = std::isfinite(requested.pid_yaw_us)
-                         ? requested.pid_yaw_us : 0.0;
-  std::array<double, 4> diff = {
-      -pitch + roll - yaw,
-      pitch - roll - yaw,
-      -pitch - roll + yaw,
-      pitch + roll + yaw,
-  };
-  const auto bounds = std::minmax_element(diff.begin(), diff.end());
-  const double available = static_cast<double>(max_motor - min_motor);
-  const double span = *bounds.second - *bounds.first;
-
-  UniformOracleAllocation out;
-  if (span > available && span > 0.0) out.scale = available / span;
-  for (double &value : diff) value *= out.scale;
-
-  const auto scaled_bounds = std::minmax_element(diff.begin(), diff.end());
-  const double collective_low = min_motor - *scaled_bounds.first;
-  const double collective_high = max_motor - *scaled_bounds.second;
-  out.collective_us = std::max(
-      collective_low,
-      std::min(collective_high, static_cast<double>(throttle)));
-  for (std::size_t index = 0; index < out.motors.size(); ++index) {
-    const int rounded = static_cast<int>(
-        std::lround(out.collective_us + diff[index]));
-    out.motors[index] = std::max(min_motor, std::min(max_motor, rounded));
-  }
-  return out;
-}
-
 Disturbance disturbanceAt(const RunConfig &config, uint32_t interval,
                           const PlantState &state) {
   Disturbance disturbance =
@@ -544,16 +562,10 @@ double deterministicAccelNoiseG(uint32_t tick, double target_sd_g) {
 
 PlantStep integratePlant(PlantState &state, const Disturbance &disturbance,
                          bool inject_roll_sign_fault, bool vertical_enabled,
-                         const PlantParameters &parameters,
-                         const std::array<int, 4> *motor_override = nullptr) {
+                         const PlantParameters &parameters) {
   std::array<double, 4> applied = {
       static_cast<double>(motorOut[0]), static_cast<double>(motorOut[1]),
       static_cast<double>(motorOut[2]), static_cast<double>(motorOut[3])};
-  if (motor_override != nullptr) {
-    for (std::size_t index = 0; index < applied.size(); ++index) {
-      applied[index] = static_cast<double>((*motor_override)[index]);
-    }
-  }
 
   if (inject_roll_sign_fault) {
     // 뮤테이션은 mixer roll 축의 부호 하나(roll allocation column 전체)를
@@ -632,7 +644,8 @@ bool finiteState(const PlantState &state) {
 }
 
 void appendSample(RunResult &result, uint32_t tick, const PlantState &state,
-                  const PlantStep &plant_step) {
+                  const PlantStep &plant_step,
+                  double plant_allocator_scale = 1.0) {
   Sample sample;
   sample.tick = tick;
   sample.time_s = tick * kDt;
@@ -646,6 +659,7 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state,
       readAllocationTelemetrySnapshot();
   sample.mixer_rp_scale = allocation.rp_scale;
   sample.mixer_yaw_scale = allocation.yaw_scale;
+  sample.plant_allocator_scale = plant_allocator_scale;
   sample.target_yaw_rate_dps = tgtRate[2];
   sample.yaw_authority_state = allocation.yaw_authority_state;
   sample.pid_loop_hz = pidLoopHz;
@@ -726,6 +740,16 @@ void appendSample(RunResult &result, uint32_t tick, const PlantState &state,
 
 RunResult runSil(const RunConfig &config) {
   CHECK_MSG(config.ticks > 0, "tick limit 0 would make pid_task unbounded");
+  struct AllocatorPolicyGuard {
+    bool previous;
+    explicit AllocatorPolicyGuard(bool use_uniform)
+        : previous(silUseUniformAllocator) {
+      silUseUniformAllocator = use_uniform;
+      silLastDispatchedAllocation = {
+          {1000, 1000, 1000, 1000}, 1000.0f, 1.0f, 1.0f, false};
+    }
+    ~AllocatorPolicyGuard() { silUseUniformAllocator = previous; }
+  } allocator_policy(config.uniform_allocator_oracle);
   PlantState state = config.initial;
   resetFirmwareState(state);
 
@@ -758,19 +782,11 @@ RunResult runSil(const RunConfig &config) {
   result.samples.reserve(static_cast<std::size_t>(config.ticks) + 1U);
   PlantStep plant_step;
   arduino_fake::pre_tick_hook = [&](uint32_t tick) {
-    UniformOracleAllocation uniform_oracle;
-    const std::array<int, 4> *motor_override = nullptr;
-    if (config.uniform_allocator_oracle && tick > 0) {
-      uniform_oracle = uniformAllocationOracle(
-          readAllocationTelemetrySnapshot(), base_throttle,
-          min_throttle, max_throttle);
-      motor_override = &uniform_oracle.motors;
-    }
     if (tick > 0) {
       plant_step = integratePlant(
           state, disturbanceAt(config, tick - 1U, state),
           config.inject_roll_sign_fault, config.vertical_enabled,
-          config.plant_parameters, motor_override);
+          config.plant_parameters);
     }
     if (config.state_for_tick) config.state_for_tick(tick, state);
     if (config.throttle_for_tick) {
@@ -778,12 +794,6 @@ RunResult runSil(const RunConfig &config) {
       base_throttle = scheduled_throttle;
       min_throttle = std::max(1050, scheduled_throttle - CTRL_MARGIN);
       max_throttle = std::min(1900, scheduled_throttle + CTRL_MARGIN);
-    }
-    if (config.uniform_allocator_oracle && tick > 0) {
-      // Feed the physical uniform delivery fraction into the next authority
-      // decision. Pitch anti-windup remains production code, which makes this
-      // a conservative physical oracle rather than a copy of the firmware.
-      mixer_yaw_scale = static_cast<float>(uniform_oracle.scale);
     }
     arduino_fake::millis_value += 1U;
     arduino_fake::micros_value += 1000U;
@@ -818,7 +828,8 @@ RunResult runSil(const RunConfig &config) {
       result.first_raw_saturation_tick = tick;
     }
     result.raw_saturated = raw_saturated_now || result.raw_saturated;
-    appendSample(result, tick, state, plant_step);
+    appendSample(result, tick, state, plant_step,
+                 silLastDispatchedAllocation.rp_scale);
   };
   arduino_fake::tick_index = 0;
   arduino_fake::tick_limit = config.ticks;
@@ -1001,6 +1012,7 @@ RunConfig constantYawDisturbance(float ki_yaw, double torque_nm,
 constexpr uint32_t kLowThrottleTick = 1000U;
 constexpr uint32_t kLowThrottleDisturbanceTick = 1200U;
 constexpr uint32_t kLowThrottleRunTicks = 2500U;
+constexpr uint32_t kPostLimitedObservationTicks = 500U;
 constexpr double kLowThrottleYawTorqueNm = 0.030;
 constexpr double kLowThrottlePitchTorqueNm = 0.025;
 
@@ -1961,6 +1973,9 @@ int main() {
     bool failsafe_clear = true;
     bool uniform_faults_clear = true;
     bool uniform_failsafe_clear = true;
+    uint32_t uniform_scaled_samples = 0;
+    double uniform_max_scale_mismatch = 0.0;
+    double uniform_max_axis_scale_mismatch = 0.0;
     double pre_disturbance_max_pitch_deg = 0.0;
 
     for (const Sample &sample : priority.samples) {
@@ -2017,6 +2032,16 @@ int main() {
       failsafe_clear = failsafe_clear && sample.failsafe_phase == FS_NONE;
     }
     for (const Sample &sample : uniform.samples) {
+      if (sample.plant_allocator_scale < 0.999) {
+        uniform_scaled_samples++;
+        uniform_max_scale_mismatch = std::max(
+            uniform_max_scale_mismatch,
+            std::fabs(sample.mixer_rp_scale -
+                      sample.plant_allocator_scale));
+        uniform_max_axis_scale_mismatch = std::max(
+            uniform_max_axis_scale_mismatch,
+            std::fabs(sample.mixer_rp_scale - sample.mixer_yaw_scale));
+      }
       uniform_faults_clear =
           uniform_faults_clear && !sample.fault_rc_now &&
           !sample.fault_imu1_now && !sample.fault_imu2_now &&
@@ -2029,6 +2054,10 @@ int main() {
         maxAbsPitchFromTick(priority, kLowThrottleDisturbanceTick);
     const double uniform_pitch_deg =
         maxAbsPitchFromTick(uniform, kLowThrottleDisturbanceTick);
+    const uint32_t post_limited_observation_ticks =
+        limited_tick == std::numeric_limits<uint32_t>::max()
+            ? 0U
+            : priority.samples.back().tick - limited_tick;
     std::cout << "[SIL] S2b throttle=1300->1270us yaw_torque="
               << kLowThrottleYawTorqueNm << "Nm authority="
               << available_yaw_torque_nm << "Nm pitch_torque="
@@ -2048,10 +2077,17 @@ int main() {
               << (limited_tick == std::numeric_limits<uint32_t>::max()
                       ? -1
                       : static_cast<int>(limited_tick))
+              << " post_limited_observation_ms="
+              << post_limited_observation_ticks
               << " max_sat_target_run_ms=" << max_saturated_target_run
               << " pitch_priority=" << priority_pitch_deg
               << "deg pitch_uniform=" << uniform_pitch_deg
-              << "deg pid_hz=" << min_pid_hz << ".." << max_pid_hz
+              << "deg uniform_scaled_samples=" << uniform_scaled_samples
+              << " uniform_max_scale_mismatch="
+              << uniform_max_scale_mismatch
+              << " uniform_max_axis_scale_mismatch="
+              << uniform_max_axis_scale_mismatch
+              << " pid_hz=" << min_pid_hz << ".." << max_pid_hz
               << "\n";
 
     CHECK_MSG(sampleAtTick(priority, kLowThrottleTick - 1U)
@@ -2072,8 +2108,17 @@ int main() {
               "yaw allocation did not reach the authority-entry threshold");
     CHECK_MSG(limited_tick != std::numeric_limits<uint32_t>::max(),
               "yaw authority state never reached LIMITED");
+    CHECK_MSG(post_limited_observation_ticks >=
+                  kPostLimitedObservationTicks,
+              "SIL ended before the complete 500ms post-LIMITED window");
     CHECK_MSG(max_saturated_target_run < 500U,
               "target yaw rate remained at +/-180dps for 0.5s after LIMITED");
+    CHECK_MSG(uniform_scaled_samples > 0U,
+              "uniform oracle never exercised a scaled allocation");
+    CHECK_MSG(uniform_max_scale_mismatch <= 1.0e-6,
+              "uniform plant delivery disagreed with PID anti-windup scale");
+    CHECK_MSG(uniform_max_axis_scale_mismatch <= 1.0e-6,
+              "uniform PID tick received unequal RP and yaw scales");
     CHECK_MSG(priority_pitch_deg + 0.25 < uniform_pitch_deg,
               "priority allocation did not beat the independent uniform oracle");
     CHECK_MSG(priority_pitch_deg < 15.0,
