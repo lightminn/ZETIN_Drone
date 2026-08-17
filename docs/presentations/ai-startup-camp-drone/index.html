@@ -1437,32 +1437,57 @@
     </x-import>
   </section>
 
-  <section data-label="보정 결과" data-screen-label="51" data-speaker-notes="가로축이 스로틀, 세로축이 헤딩 오차이다. 파란 기울기가 보정 전, 회색이 보정 후이다." style="background:#fff">
+  <section data-label="보정 결과" data-screen-label="51" data-speaker-notes="같은 0도에서 4도 눈금으로 막대 길이를 비교한다. 스로틀을 100마이크로초 올렸을 때 헤딩 오차는 보정 전 3.64도였고 보정 후 0.02도로 줄었다. 점선은 허용 한계 0.5도이며 보정 후 값은 그 안쪽이다. 타원체 재보정 뒤 재시험한 마이너스 0.067도도 같은 허용 범위 안이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="전류 간섭 보정 결과 — 벤치 실측">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.5fr 1fr;gap:32px">
-        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
-          <div style="flex:1;background:#fff;border:1px solid var(--uos-rule);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
-            <img src="assets/chart_mag.png" alt="스로틀에 따른 헤딩 오차 — 보정 전후 비교" style="max-width:100%;max-height:100%;object-fit:contain" />
-          </div>
-          <figcaption style="font-size:18.667px;color:var(--uos-ink-muted);text-align:center">벤치 로그 · 가로축 스로틀(µs), 세로축 헤딩 오차(°)</figcaption>
-        </figure>
-        <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
-          <div style="font-size:20px;font-weight:700;color:var(--uos-blue)">스로틀 100µs 변화당 헤딩 오차</div>
-          <div style="border-top:1px solid var(--uos-rule);border-bottom:1px solid var(--uos-rule)">
-            <div style="display:grid;grid-template-columns:90px 150px 1fr;gap:14px;padding:20px 0;border-bottom:1px solid var(--uos-rule);align-items:center">
-              <div style="font-size:20px;font-weight:700">보정 전</div>
-              <div style="font-size:24px;font-weight:700;color:var(--uos-blue)">+3.64°</div>
-              <div style="font-size:20px;line-height:1.45">호버 출력에서 약 12.6° 틀어짐</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-rows:auto 1fr auto;gap:18px">
+        <div style="font-size:28px;font-weight:700;line-height:1.35">스로틀을 같은 만큼 올렸을 때, 나침반이 얼마나 틀어지는가</div>
+        <div style="display:grid;grid-template-columns:1.55fr .75fr;gap:32px;min-height:0">
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px;min-height:0">
+            <div style="flex:1;background:#fff;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);min-height:0;display:grid;place-items:center">
+              <svg viewBox="0 0 760 350" role="img" aria-label="스로틀 100마이크로초 증가 시 헤딩 오차: 보정 전 3.64도, 보정 후 0.02도, 허용 기준 0.5도" style="width:100%;height:100%;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif">
+                <rect x="165" y="52" width="67" height="222" fill="#e8f1fb"/>
+                <line x1="232" y1="52" x2="232" y2="286" stroke="#004094" stroke-width="2" stroke-dasharray="7 6"/>
+                <text x="242" y="72" font-size="17" font-weight="700" fill="#004094">허용 한계 0.5°</text>
+
+                <line x1="165" y1="286" x2="700" y2="286" stroke="#6b7280" stroke-width="2"/>
+                <g fill="#6b7280" font-size="16" text-anchor="middle">
+                  <text x="165" y="314">0</text>
+                  <text x="299" y="314">1</text>
+                  <text x="433" y="314">2</text>
+                  <text x="566" y="314">3</text>
+                  <text x="700" y="314">4</text>
+                </g>
+                <g stroke="#d7dce2" stroke-width="1">
+                  <line x1="299" y1="84" x2="299" y2="286"/>
+                  <line x1="433" y1="84" x2="433" y2="286"/>
+                  <line x1="566" y1="84" x2="566" y2="286"/>
+                  <line x1="700" y1="84" x2="700" y2="286"/>
+                </g>
+
+                <text x="24" y="137" font-size="22" font-weight="700" fill="#222b36">보정 전</text>
+                <rect x="165" y="100" width="487" height="58" fill="#5f6874"/>
+                <text x="636" y="138" font-size="24" font-weight="700" fill="#ffffff" text-anchor="end">3.64°</text>
+
+                <text x="24" y="245" font-size="22" font-weight="700" fill="#004094">보정 후</text>
+                <line x1="165" y1="216" x2="168" y2="216" stroke="#004094" stroke-width="10"/>
+                <circle cx="168" cy="216" r="9" fill="#004094"/>
+                <text x="188" y="224" font-size="24" font-weight="700" fill="#004094">0.02°</text>
+
+                <text x="700" y="342" font-size="16" fill="#6b7280" text-anchor="end">헤딩 오차 변화량 (° / 100µs)</text>
+              </svg>
             </div>
-            <div style="display:grid;grid-template-columns:90px 150px 1fr;gap:14px;padding:20px 0;align-items:center">
-              <div style="font-size:20px;font-weight:700">보정 후</div>
-              <div style="font-size:24px;font-weight:700;color:var(--uos-blue)">+0.02°</div>
-              <div style="font-size:20px;line-height:1.45">같은 조건에서 잔차 ±2.4° 이내</div>
+            <figcaption style="font-size:17.333px;color:var(--uos-ink-muted);line-height:1.4;text-align:center">같은 눈금으로 비교 · 점선 안쪽이 벤치 허용 기준</figcaption>
+          </figure>
+          <div style="display:flex;flex-direction:column;justify-content:center;gap:20px">
+            <div style="border-top:6px solid var(--uos-blue);padding-top:18px">
+              <div style="font-size:32px;font-weight:700;line-height:1.25;color:var(--uos-blue)">3.64° → 0.02°</div>
+              <div style="font-size:20px;line-height:1.45;margin-top:10px">오차 기울기가 <strong>약 180분의 1</strong>로 감소</div>
             </div>
+            <div style="border-top:1px solid var(--uos-rule);padding-top:18px;font-size:20px;line-height:1.5">보정 전에는 허용 한계를 크게 넘었지만, 보정 후에는 <strong style="color:var(--uos-blue)">기준 안쪽</strong>으로 들어왔다.</div>
+            <div style="background:var(--uos-surface);border-left:6px solid var(--uos-blue);padding:18px 20px;font-size:18.667px;line-height:1.5">타원체 재보정 뒤 재시험도 <strong>−0.067°/100µs</strong>로 같은 수준을 확인했다.</div>
           </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:22px;font-size:20px;line-height:1.5">출력을 올려도 추세선이 거의 기울지 않도록 만들었다.</div>
-          <div style="font-size:18.667px;color:var(--uos-ink-muted);line-height:1.5">타원체 재보정 뒤 재시험도 −0.067°/100µs로 같은 수준을 확인했다.</div>
         </div>
+        <div style="font-size:20px;line-height:1.5;border-top:1px solid var(--uos-rule);padding-top:16px">모터 출력을 올려도 헤딩 추세가 거의 움직이지 않도록 전류 간섭을 제거했다.</div>
       </div>
     </x-import>
   </section>

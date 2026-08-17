@@ -221,7 +221,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             {"url": f"http://127.0.0.1:{self.http_port}/#1"},
         )
         deadline = time.monotonic() + 4.0
-        deck_state = {"sections": 0, "content": ""}
+        deck_state = {"hash": "", "sections": 0, "content": ""}
         while time.monotonic() < deadline:
             deck_state = self._evaluate(
                 """
@@ -235,13 +235,14 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                     }
                   }
                   return {
+                    hash: location.hash,
                     sections: sections.length,
                     content: parts.join(' ').replace(/\\s+/g, ' ').trim(),
                   };
                 })()
                 """
             )
-            if deck_state["sections"] == 77:
+            if deck_state["hash"] == "#1" and deck_state["sections"] == 77:
                 break
             time.sleep(0.05)
 
@@ -252,6 +253,58 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             r"(?:발표|시연|체험|진행).{0,8}\d+(?:\.\d+)?\s*(?:시간|분|초)|"
             r"\d+(?:\.\d+)?\s*(?:시간|분|초).{0,8}(?:발표|시연|체험|진행|과정))",
         )
+
+    def test_slide_51_exposes_direct_before_after_comparison(self) -> None:
+        self._call(
+            "Page.navigate",
+            {"url": f"http://127.0.0.1:{self.http_port}/#51"},
+        )
+        deadline = time.monotonic() + 4.0
+        comparison = None
+        while time.monotonic() < deadline:
+            comparison = self._evaluate(
+                """
+                (() => {
+                  const findDeep = (root, selector) => {
+                    if (!root) return null;
+                    const direct = root.querySelector?.(selector);
+                    if (direct) return direct;
+                    for (const element of root.querySelectorAll?.('*') || []) {
+                      const nested = findDeep(element.shadowRoot, selector);
+                      if (nested) return nested;
+                    }
+                    return null;
+                  };
+                  const chart = findDeep(document.body, 'svg[role="img"][aria-label^="스로틀 100마이크로초"]');
+                  return {
+                    hash: location.hash,
+                    readyState: document.readyState,
+                    sections: document.querySelectorAll('section').length,
+                    label: chart?.getAttribute('aria-label') || null,
+                    hasLegacyScatter: Boolean(findDeep(document.body, 'img[src$="chart_mag.png"]')),
+                  };
+                })()
+                """
+            )
+            if (
+                comparison["hash"] == "#51"
+                and comparison["readyState"] == "complete"
+                and comparison["sections"] == 77
+                and comparison["label"]
+            ):
+                break
+            time.sleep(0.05)
+
+        self.assertEqual(comparison["hash"], "#51", comparison)
+        self.assertEqual(comparison["readyState"], "complete", comparison)
+        self.assertEqual(comparison["sections"], 77, comparison)
+        self.assertEqual(
+            comparison["label"],
+            "스로틀 100마이크로초 증가 시 헤딩 오차: "
+            "보정 전 3.64도, 보정 후 0.02도, 허용 기준 0.5도",
+            comparison,
+        )
+        self.assertFalse(comparison["hasLegacyScatter"], comparison)
 
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._call(
