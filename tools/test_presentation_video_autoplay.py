@@ -350,6 +350,57 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertGreaterEqual(hierarchy["forceLabels"], 4, hierarchy)
         self.assertEqual(hierarchy["droneBodies"], 1, hierarchy)
 
+    def test_slide_10_yaw_diagram_is_top_down_and_pair_driven(self) -> None:
+        self._call(
+            "Page.navigate",
+            {"url": f"http://127.0.0.1:{self.http_port}/#10"},
+        )
+        deadline = time.monotonic() + 4.0
+        yaw = None
+        while time.monotonic() < deadline:
+            yaw = self._evaluate(
+                """
+                (() => {
+                  if (document.readyState !== 'complete') return null;
+                  const figure = document.querySelector('svg[data-control-mixing]');
+                  if (!figure) return null;
+                  const rotors = [...figure.querySelectorAll('[data-yaw-rotor]')];
+                  return {
+                    view: figure.dataset.view || null,
+                    rotors: rotors.length,
+                    circularRotors: rotors.filter(rotor => {
+                      const rect = rotor.getBoundingClientRect();
+                      return Math.abs(rect.width - rect.height) < 2;
+                    }).length,
+                    cw: figure.querySelectorAll('[data-spin="cw"]').length,
+                    ccw: figure.querySelectorAll('[data-spin="ccw"]').length,
+                    increase: figure.querySelectorAll(
+                      '[data-pair-command="increase"]'
+                    ).length,
+                    decrease: figure.querySelectorAll(
+                      '[data-pair-command="decrease"]'
+                    ).length,
+                    yawResult: figure.querySelector('[data-yaw-result]')?.dataset.direction || null,
+                    body: figure.querySelectorAll('[data-yaw-body]').length,
+                  };
+                })()
+                """
+            )
+            if (yaw):
+                break
+            time.sleep(0.05)
+
+        self.assertIsNotNone(yaw)
+        self.assertEqual(yaw["view"], "top", yaw)
+        self.assertEqual(yaw["rotors"], 4, yaw)
+        self.assertEqual(yaw["circularRotors"], 4, yaw)
+        self.assertEqual(yaw["cw"], 2, yaw)
+        self.assertEqual(yaw["ccw"], 2, yaw)
+        self.assertEqual(yaw["increase"], 2, yaw)
+        self.assertEqual(yaw["decrease"], 2, yaw)
+        self.assertEqual(yaw["yawResult"], "cw", yaw)
+        self.assertEqual(yaw["body"], 1, yaw)
+
     def test_slide_type_scale_is_ten_percent_larger(self) -> None:
         self._open_deck()
         sizes = self._evaluate(

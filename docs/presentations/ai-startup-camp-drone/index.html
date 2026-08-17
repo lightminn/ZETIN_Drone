@@ -291,35 +291,88 @@
     </x-import>
   </section>
 
-  <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="네 로터를 같은 비율로 바꾸면 총추력이 변해 상승, 호버링, 하강이 결정된다. 앞뒤나 좌우 로터의 추력 차이는 모멘트 암을 통해 롤과 피치 토크를 만든다. 서로 반대 방향으로 도는 로터 두 쌍의 반작용 토크 균형을 깨면 요가 발생한다. 헬리콥터는 메인로터의 토크를 꼬리로터가 상쇄하지만, 쿼드콥터는 시계와 반시계 로터 쌍이 서로 상쇄한다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="네 추력의 합력과 차동 토크">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.05fr;gap:28px">
-        <div style="display:flex;flex-direction:column;gap:13px">
-          <div style="background:#eaf2fb;border-left:6px solid var(--uos-blue);border-radius:4px;padding:18px 22px"><div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">합력 · 상승 / 호버링 / 하강</div><div style="font-size:22px;line-height:1.45;margin-top:8px">네 로터를 함께 조절<br><strong>TΣ &gt; mg · TΣ = mg · TΣ &lt; mg</strong></div></div>
-          <div style="background:var(--uos-surface);border-left:6px solid #23836f;border-radius:4px;padding:18px 22px"><div style="font-size:24.2px;font-weight:800">롤·피치 토크 · 전후좌우 이동</div><div style="font-size:22px;line-height:1.45;margin-top:8px">한쪽 추력을 키워 기체를 기울이고<br>기울어진 T⃗Σ의 수평 성분으로 이동</div></div>
-          <div style="background:var(--uos-surface);border-left:6px solid #d49b00;border-radius:4px;padding:18px 22px"><div style="font-size:24.2px;font-weight:800">요 토크 · 제자리 회전</div><div style="font-size:22px;line-height:1.45;margin-top:8px">CW·CCW 로터 쌍의 반작용 토크 차이로 회전</div></div>
-          <div style="border:1px solid var(--uos-rule);border-radius:4px;padding:16px 20px;font-size:20.5337px;line-height:1.45"><strong>헬리콥터</strong> · 메인로터 토크를 꼬리로터가 상쇄<br><strong>쿼드콥터</strong> · CW 2개와 CCW 2개가 서로 상쇄</div>
-        </div>
-        <div style="background:#f7f9fc;border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:8px;min-height:0">
-          <svg data-control-mixing role="img" aria-label="네 프로펠러의 출력 배분으로 힘과 토크를 만드는 쿼드콥터 제어 혼합" viewBox="0 0 620 420" style="width:100%;flex:1;min-height:0">
-            <defs>
-              <marker id="mix-blue-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#004094"/></marker>
-              <marker id="mix-gold-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#d49b00"/></marker>
-            </defs>
-            <g stroke="#6d7888" stroke-width="18" stroke-linecap="round"><path d="M165 335 L455 85"/><path d="M165 85 L455 335"/></g>
-            <rect x="262" y="162" width="96" height="96" rx="20" fill="#004094"/><path d="M286 210 H334" stroke="#fff" stroke-width="7"/><path d="M310 186 V234" stroke="#fff" stroke-width="7"/>
-            <g fill="#fff" stroke="#004094" stroke-width="8"><circle cx="165" cy="85" r="55"/><circle cx="455" cy="85" r="55"/><circle cx="165" cy="335" r="55"/><circle cx="455" cy="335" r="55"/></g>
-            <g font-size="22" font-weight="800" text-anchor="middle" fill="#004094"><text x="165" y="92">M1 · CW</text><text x="455" y="92">M2 · CCW</text><text x="165" y="342">M3 · CCW</text><text x="455" y="342">M4 · CW</text></g>
-            <g fill="none" stroke="#d49b00" stroke-width="6" marker-end="url(#mix-gold-arrow)"><path d="M113 85 A52 52 0 0 1 165 33"/><path d="M507 85 A52 52 0 0 0 455 33"/><path d="M113 335 A52 52 0 0 0 165 387"/><path d="M507 335 A52 52 0 0 1 455 387"/></g>
-            <path d="M310 155 V35" stroke="#004094" stroke-width="9" marker-end="url(#mix-blue-arrow)"/><text x="330" y="60" font-size="24" font-weight="800" fill="#004094">T⃗Σ</text>
-            <path d="M242 210 A68 68 0 1 1 281 271" fill="none" stroke="#d49b00" stroke-width="7" marker-end="url(#mix-gold-arrow)"/><text x="370" y="230" font-size="22" font-weight="800" fill="#8a6100">τyaw</text>
-          </svg>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;font-size:20.5337px;line-height:1.35">
-            <div style="background:#eaf2fb;padding:12px;border-radius:4px"><strong>Collective</strong><br>네 개 함께</div>
-            <div style="background:#e7f3ef;padding:12px;border-radius:4px"><strong>Roll · Pitch</strong><br>앞뒤·좌우 차이</div>
-            <div style="background:#fff5d9;padding:12px;border-radius:4px"><strong>Yaw</strong><br>CW·CCW 차이</div>
+  <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="Yaw는 로터가 도는 방향과 반대 방향으로 기체에 작용하는 반작용 토크를 이용한다. 평상시에는 CW와 CCW 쌍의 토크가 서로 상쇄된다. M2와 M3 CCW 로터의 출력을 키우고 M1과 M4 CW 로터의 출력을 줄이면 CW 반작용 토크가 우세해져 기체가 CW로 회전한다. 두 쌍의 증감량을 비슷하게 맞추면 합추력을 거의 유지한 채 Yaw만 만들 수 있다. 헬리콥터는 꼬리로터가 메인로터 토크를 상쇄하지만, 쿼드콥터는 두 로터 쌍의 출력 차이를 사용한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="Yaw의 원인은 로터 쌍의 토크 차이이다">
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:12px;min-height:0">
+        <div style="display:grid;grid-template-columns:330px 1fr;gap:28px;flex:1;min-height:0">
+          <div style="border-top:2px solid var(--uos-ink);border-bottom:1px solid var(--uos-rule);display:flex;flex-direction:column;justify-content:space-evenly;min-height:0;padding:2px 0">
+            <div style="padding:14px 4px 16px">
+              <div style="font-size:20.5337px;font-weight:800;letter-spacing:.03em;color:var(--uos-ink-muted);margin-bottom:7px">평상시 · 토크 상쇄</div>
+              <div style="font-size:22px;line-height:1.42;font-weight:700">CW·CCW 쌍의 출력이 같으면<br><strong style="color:var(--uos-blue)">기체 토크의 합 = 0</strong></div>
+            </div>
+            <div style="border-top:1px solid var(--uos-rule);padding:16px 4px 17px">
+              <div style="font-size:20.5337px;font-weight:800;letter-spacing:.03em;color:var(--uos-ink-muted);margin-bottom:8px">Yaw 명령 · 쌍별 출력 차이</div>
+              <div style="font-size:22px;line-height:1.5;font-weight:800;color:var(--uos-blue)">M2·M3 · CCW 로터 출력 ↑</div>
+              <div style="font-size:22px;line-height:1.5;font-weight:800;color:#9a6900">M1·M4 · CW 로터 출력 ↓</div>
+              <div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted);margin-top:7px">증가·감소를 비슷하게 조절<br><strong>합추력 TΣ는 거의 유지</strong></div>
+            </div>
+            <div style="border-top:1px solid var(--uos-rule);padding:16px 4px 14px">
+              <div style="font-size:20.5337px;font-weight:800;letter-spacing:.03em;color:var(--uos-ink-muted);margin-bottom:7px">결과 · 반작용 토크 우세</div>
+              <div style="font-size:27.5px;line-height:1.3;font-weight:900;color:var(--uos-blue)">CCW 로터 ↑<br>기체는 CW Yaw</div>
+              <div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted);margin-top:7px">로터 회전과 기체 반작용은<br><strong>서로 반대 방향</strong></div>
+            </div>
+          </div>
+
+          <div style="border-top:2px solid var(--uos-ink);border-bottom:1px solid var(--uos-rule);display:flex;align-items:stretch;min-width:0;min-height:0;padding:5px 0 2px">
+            <svg data-control-mixing data-view="top" role="img" aria-label="네 프로펠러의 출력 배분으로 힘과 토크를 만드는 쿼드콥터 제어 혼합" viewBox="0 0 760 440" style="width:100%;height:100%;min-height:0;overflow:visible">
+              <defs>
+                <marker id="yaw-cw-gold-arrow" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="15" refX="13" refY="7.5" orient="auto"><path d="M0,0 L0,15 L14,7.5 z" fill="#b47b00"/></marker>
+                <marker id="yaw-ccw-blue-arrow" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="15" refX="13" refY="7.5" orient="auto"><path d="M0,0 L0,15 L14,7.5 z" fill="#004094"/></marker>
+                <marker id="yaw-body-arrow" markerUnits="userSpaceOnUse" markerWidth="21" markerHeight="21" refX="19" refY="10.5" orient="auto"><path d="M0,0 L0,21 L20,10.5 z" fill="#004094"/></marker>
+              </defs>
+
+              <g aria-hidden="true">
+                <path d="M160 122 L600 318 M600 122 L160 318" fill="none" stroke="#253448" stroke-width="22" stroke-linecap="round"/>
+                <path d="M160 122 L600 318 M600 122 L160 318" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round" opacity=".62"/>
+              </g>
+
+              <g aria-label="M1과 M4는 시계 방향으로 도는 출력 감소 로터 쌍">
+                <circle data-yaw-rotor data-spin="cw" data-pair-command="decrease" cx="160" cy="122" r="54" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
+                <circle data-yaw-rotor data-spin="cw" data-pair-command="decrease" cx="600" cy="318" r="54" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
+                <g fill="none" stroke="#b47b00" stroke-width="5" stroke-linecap="round" marker-end="url(#yaw-cw-gold-arrow)">
+                  <path d="M160 54 A68 68 0 0 1 228 122"/>
+                  <path d="M600 250 A68 68 0 0 1 668 318"/>
+                </g>
+                <g fill="#815900" font-size="20.5337px" text-anchor="middle">
+                  <text x="160" y="116" font-weight="900">M1 · CW</text><text x="160" y="142" font-weight="800">출력 ↓</text>
+                  <text x="600" y="312" font-weight="900">M4 · CW</text><text x="600" y="338" font-weight="800">출력 ↓</text>
+                </g>
+              </g>
+
+              <g aria-label="M2와 M3은 반시계 방향으로 도는 출력 증가 로터 쌍">
+                <circle data-yaw-rotor data-spin="ccw" data-pair-command="increase" cx="600" cy="122" r="54" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
+                <circle data-yaw-rotor data-spin="ccw" data-pair-command="increase" cx="160" cy="318" r="54" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
+                <g fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round" marker-end="url(#yaw-ccw-blue-arrow)">
+                  <path d="M600 54 A68 68 0 0 0 532 122"/>
+                  <path d="M160 250 A68 68 0 0 0 92 318"/>
+                </g>
+                <g fill="#004094" font-size="20.5337px" text-anchor="middle">
+                  <text x="600" y="116" font-weight="900">M2 · CCW</text><text x="600" y="142" font-weight="900">출력 ↑</text>
+                  <text x="160" y="312" font-weight="900">M3 · CCW</text><text x="160" y="338" font-weight="900">출력 ↑</text>
+                </g>
+              </g>
+
+              <g>
+                <path data-yaw-body d="M380 166 L427 191 L438 240 L407 278 L353 278 L322 240 L333 191 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
+                <path d="M380 179 L397 211 H363 Z" fill="#fff"/>
+                <circle cx="380" cy="228" r="11" fill="#004094" stroke="#fff" stroke-width="4"/>
+              </g>
+
+              <path d="M380 146 A82 82 0 1 1 321 287" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+              <path data-yaw-result data-direction="cw" d="M380 146 A82 82 0 1 1 321 287" fill="none" stroke="#004094" stroke-width="8" stroke-linecap="round" marker-end="url(#yaw-body-arrow)"/>
+              <g transform="translate(380 25)" text-anchor="middle">
+                <text x="0" y="0" fill="#004094" font-size="25.3px" font-weight="900">기체 CW Yaw</text>
+                <text x="0" y="28" fill="#516074" font-size="20.5337px" font-weight="700">CCW 로터 ↑ → CW 반작용 토크 우세</text>
+              </g>
+
+              <g transform="translate(380 412)" text-anchor="middle">
+                <text x="0" y="0" fill="#004094" font-size="22px" font-weight="900">M2·M3 ↑ + M1·M4 ↓</text>
+                <text x="0" y="25" fill="#516074" font-size="20.5337px" font-weight="700">합추력은 거의 그대로 · Yaw 토크만 변화</text>
+              </g>
+            </svg>
           </div>
         </div>
+        <div style="border-top:1px solid var(--uos-rule);padding:10px 2px 0;font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted);text-align:center"><strong style="color:var(--uos-ink)">헬리콥터</strong>는 꼬리로터로 메인로터 토크를 상쇄 · <strong style="color:var(--uos-ink)">쿼드콥터</strong>는 CW·CCW 로터 쌍의 출력 차이로 Yaw 제어</div>
       </div>
     </x-import>
   </section>
