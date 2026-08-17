@@ -2383,6 +2383,42 @@ int main() {
     CHECK_EQ(sample.imu2_accel[2], 26);
   });
 
+  runCase("yaw limitation does not stop roll and pitch integration", [] {
+    arduino_fake::reset();
+    fault_rc = fault_imu1 = fault_imu2 = fault_disagree = fault_attitude = false;
+    imu1_frozen_now = imu2_frozen_now = imu_disagree_now = false;
+    calibration_ok = true;
+    mag_calibrating = false;
+    safety_lock = true;
+    fs_phase = FS_NONE;
+    angleX = angleY = angleZ = 0.0f;
+    gyro_bias1[0] = gyro_bias1[1] = gyro_bias1[2] = 0.0f;
+    gyro_bias2[0] = gyro_bias2[1] = gyro_bias2[2] = 0.0f;
+    setFakeAccelMagnitude(1.0f, 0);
+    sendUdpCommandOnce("start");
+    runPidTicks(1);
+    CHECK(!safety_lock);
+
+    base_throttle = 1200;
+    min_throttle = 1100;
+    max_throttle = 1300;
+    lastRcMs = millis();
+    Kp_Angle_Roll = Kp_Angle_Pitch = Kp_Angle_Yaw = 1.0f;
+    Kp_Rate_Roll = Kp_Rate_Pitch = Kp_Rate_Yaw = 1.0f;
+    Ki_Rate_Roll = Ki_Rate_Pitch = Ki_Rate_Yaw = 1.0f;
+    Kd_Rate_Roll = Kd_Rate_Pitch = Kd_Rate_Yaw = 0.0f;
+    targetAngleX = 5.0f;
+    targetAngleY = 5.0f;
+    targetYawRate = 100.0f;
+    iTermRoll = iTermPitch = iTermYaw = 0.0f;
+
+    runPidTicks(1);
+
+    CHECK(iTermRoll > 0.0f);
+    CHECK(iTermPitch > 0.0f);
+    CHECK_NEAR(iTermYaw, 0.0f, 1e-7f);
+  });
+
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count
             << " native control-math cases passed\n";
   return failure_count == 0 ? 0 : 1;

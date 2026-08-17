@@ -14,6 +14,7 @@
 #include "failsafe_land.h"
 #include "msp_sensor.h"
 #include "control_allocator.h"
+#include "yaw_authority.h"
 
 static const uint32_t IMU_RAW_RING_SIZE = 512;
 static const uint32_t IMU_RAW_RING_MASK = IMU_RAW_RING_SIZE - 1;
@@ -156,6 +157,7 @@ volatile int  min_throttle  = 1050;
 volatile int  max_throttle  = 1300;
 volatile bool yaw_hold_override = false;   // "yaw 1": heading 고정 + 재슬레이빙 금지
 volatile bool yaw_hold_now = false;   // 텔레메트리용: 현재 heading 잠금 중인가
+volatile int yaw_authority_state = YAW_AUTH_NORMAL;
 
 const int MAG_THROTTLE_REF_US = 1000;   // 보정 기준(모터 off 근처)
 // 모터 전류 간섭 보정: body-frame ΔB(µT)는 base_throttle에 비례. raw mag에서 뺀다.
@@ -1171,6 +1173,8 @@ void pid_task(void *pv) {
   uint32_t fs_enter_ms = 0;
   float fs_hold_yaw = 0.0f;
   bool fs_probe_blocked_logged = false;
+  YawAuthorityTracker yawAuthority = {};
+  float previousYawScale = 1.0f;
 
   inv_imu_sensor_event_t e1 = {}, e2 = {};
 
@@ -1400,6 +1404,9 @@ void pid_task(void *pv) {
       outerCnt = 0;
       fs_first_enter_ms = 0;
       fs_first_enter_valid = false;
+      resetYawAuthority(yawAuthority);
+      yaw_authority_state = YAW_AUTH_NORMAL;
+      previousYawScale = 1.0f;
       wasLocked = false;
     }
 
@@ -1534,6 +1541,9 @@ void pid_task(void *pv) {
       targetYawRate = 0.0f;
       targetAngleZ = angleZ;
       yaw_hold_now = false;
+      resetYawAuthority(yawAuthority);
+      yaw_authority_state = YAW_AUTH_NORMAL;
+      previousYawScale = 1.0f;
       prevGyroX = bodyGx; prevGyroY = bodyGy; prevGyroZ = bodyGz;
       lpfD_Roll.reset(); lpfD_Pitch.reset(); lpfD_Yaw.reset();
       outerCnt = 0;
@@ -1547,20 +1557,32 @@ void pid_task(void *pv) {
     // ---------- Outer loop (250Hz): 각도 -> 목표 각속도 ----------
     // yaw는 각속도 명령 + 자동 heading 잠금. hold가 아닌 동안 setpoint를
     // 매 tick 현재 heading으로 슬레이빙해 stale setpoint를 원천 차단한다.
+    updateYawAuthority(
+        yawAuthority, previousYawScale, targetYawRate, bodyGz,
+        true, fs_phase != FS_NONE, false, nowMs,
+        YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
+    yaw_authority_state = static_cast<int>(yawAuthority.state);
+
     const YawOuter yawOuter = updateYawOuter(
         targetYawRate, bodyGz, angleZ, targetAngleZ,
         yaw_hold_now, yaw_hold_override,
         YAW_RATE_DEADZONE, YAW_HOLD_SETTLE_DPS);
-    targetAngleZ = yawOuter.target_angle_deg;
-    yaw_hold_now = yawOuter.hold;
+    const float normalTargetRateYaw = yawTargetRateDps(
+        yawOuter, targetYawRate, angleZ, Kp_Angle_Yaw, MAX_TARGET_RATE_YAW);
+    const YawAuthorityCommand yawCommand = applyYawAuthority(
+        yawAuthority.state, angleZ, yawOuter.target_angle_deg,
+        normalTargetRateYaw, yawOuter.hold);
+    targetAngleZ = yawCommand.target_angle_deg;
+    yaw_hold_now = yawCommand.hold;
 
     if (outerCnt == 0) {
       targetRateRoll = constrain((targetAngleX - angleX) * Kp_Angle_Roll,
                                  -MAX_TARGET_RATE_RP, MAX_TARGET_RATE_RP);
       targetRatePitch = constrain((targetAngleY - angleY) * Kp_Angle_Pitch,
                                   -MAX_TARGET_RATE_RP, MAX_TARGET_RATE_RP);
-      targetRateYaw = yawTargetRateDps(yawOuter, targetYawRate, angleZ,
-                                       Kp_Angle_Yaw, MAX_TARGET_RATE_YAW);
+      targetRateYaw = yawCommand.target_rate_dps;
+    } else if (yawAuthority.state != YAW_AUTH_NORMAL) {
+      targetRateYaw = 0.0f;
     }
     outerCnt++;
     if (outerCnt >= OUTER_DIV) outerCnt = 0;
@@ -1587,6 +1609,7 @@ void pid_task(void *pv) {
     MotorMix mix = mixAndDesaturate(pidRoll, pidPitch, pidYaw,
                                     throttle, min_throttle, max_throttle);
     mixer_scaled = mix.scaled;
+    previousYawScale = mix.yaw_scale;
     if (checkProbeDelivery) {
       const float deliveredUs =
           (float)probeReferenceThrottle - mix.collective_us;
@@ -1601,21 +1624,20 @@ void pid_task(void *pv) {
     // 적분은 모터 출력 기여(µs) 단위로 누적하고 I_TERM_MAX_US로 제한한다.
     // (이전 errorSum ±200deg 클램프는 기본 Ki에서 최대 기여 1µs라 적분이
     //  사실상 없는 것과 같아 CG 치우침 같은 정상상태 오차를 못 잡았다.)
-    if (throttle > 1100 && !mix.scaled) {
-      iTermRoll  = constrain(iTermRoll  + Ki_Rate_Roll  * eRoll  * realDt,
-                             -I_TERM_MAX_US, I_TERM_MAX_US);
-      iTermPitch = constrain(iTermPitch + Ki_Rate_Pitch * ePitch * realDt,
-                             -I_TERM_MAX_US, I_TERM_MAX_US);
-      // yaw 적분은 rate/hold 두 모드 모두에서 돈다. 안쪽 루프의 임무가
-      // "목표 각속도 추종"이고, P 단독으로는 모터 토크 불균형 같은 일정
-      // 외란에서 정상상태 각속도 오차가 남아 정착 임계치 아래로 내려가지
-      // 않는다(2026-07-27 실측 최대 +16.6dps). 그러면 자동 잠금이 영영
-      // 걸리지 않는다.
-      iTermYaw = constrain(iTermYaw + Ki_Rate_Yaw * eYaw * realDt,
-                           -I_TERM_MAX_US, I_TERM_MAX_US);
-    } else if (throttle <= 1100) {
-      iTermRoll = iTermPitch = iTermYaw = 0.0f;
-    }
+    iTermRoll = conditionalAxisIntegral(
+        iTermRoll, Ki_Rate_Roll * eRoll * realDt, pidRoll,
+        mix.rp_scale, throttle, I_TERM_MAX_US);
+    iTermPitch = conditionalAxisIntegral(
+        iTermPitch, Ki_Rate_Pitch * ePitch * realDt, pidPitch,
+        mix.rp_scale, throttle, I_TERM_MAX_US);
+    // yaw 적분은 rate/hold 두 모드 모두에서 돈다. 안쪽 루프의 임무가
+    // "목표 각속도 추종"이고, P 단독으로는 모터 토크 불균형 같은 일정
+    // 외란에서 정상상태 각속도 오차가 남아 정착 임계치 아래로 내려가지
+    // 않는다(2026-07-27 실측 최대 +16.6dps). 그러면 자동 잠금이 영영
+    // 걸리지 않는다.
+    iTermYaw = conditionalAxisIntegral(
+        iTermYaw, Ki_Rate_Yaw * eYaw * realDt, pidYaw,
+        mix.yaw_scale, throttle, I_TERM_MAX_US);
 
     // 모터 PWM의 단일 writer는 PID task로 유지한다.
     if (safety_lock) {
