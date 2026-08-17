@@ -254,7 +254,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             r"\d+(?:\.\d+)?\s*(?:시간|분|초).{0,8}(?:발표|시연|체험|진행|과정))",
         )
 
-    def test_slide_51_exposes_direct_before_after_comparison(self) -> None:
+    def test_slide_51_renders_yaw_drift_as_two_time_series(self) -> None:
         self._call(
             "Page.navigate",
             {"url": f"http://127.0.0.1:{self.http_port}/#51"},
@@ -275,13 +275,14 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                     }
                     return null;
                   };
-                  const chart = findDeep(document.body, 'svg[role="img"][aria-label^="스로틀 100마이크로초"]');
+                  const chart = findDeep(document.body, 'svg[role="img"][aria-label^="30초 SIL"]');
                   return {
                     hash: location.hash,
                     readyState: document.readyState,
                     sections: document.querySelectorAll('section').length,
                     label: chart?.getAttribute('aria-label') || null,
-                    hasLegacyScatter: Boolean(findDeep(document.body, 'img[src$="chart_mag.png"]')),
+                    seriesCount: chart?.querySelectorAll('polyline[data-series]').length || 0,
+                    slideText: chart?.closest('section')?.textContent?.replace(/\s+/g, ' ').trim() || '',
                   };
                 })()
                 """
@@ -300,11 +301,13 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertEqual(comparison["sections"], 77, comparison)
         self.assertEqual(
             comparison["label"],
-            "스로틀 100마이크로초 증가 시 헤딩 오차: "
-            "보정 전 3.64도, 보정 후 0.02도, 허용 기준 0.5도",
+            "30초 SIL: 자이로만 사용하면 Yaw 오차가 18.3도까지 누적되고, "
+            "지자기 융합은 2.4도 근처에 머묾",
             comparison,
         )
-        self.assertFalse(comparison["hasLegacyScatter"], comparison)
+        self.assertEqual(comparison["seriesCount"], 2, comparison)
+        self.assertIn("SIL 시뮬레이션", comparison["slideText"], comparison)
+        self.assertIn("전류 간섭 벤치", comparison["slideText"], comparison)
 
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._call(
