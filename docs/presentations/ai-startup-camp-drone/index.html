@@ -1524,10 +1524,21 @@
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:34px">
           <div style="border-top:6px solid var(--uos-blue);padding-top:24px">
             <div style="font-size:22px;font-weight:700;color:var(--uos-blue);margin-bottom:20px">제어 태스크 heartbeat</div>
-            <div style="display:grid;grid-template-columns:1fr 120px 1fr;align-items:center;gap:22px">
-              <div style="font-size:26.4px;font-weight:700;line-height:1.4">신호가 계속 들어옴<br><span style="font-size:22px;font-weight:500;color:var(--uos-ink-muted)">제어 태스크 정상</span></div>
-              <div style="height:2px;background:var(--uos-blue);position:relative"><div style="position:absolute;left:50%;top:-8px;width:2px;height:18px;background:var(--uos-blue)"></div><div style="position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:20.5337px;color:var(--uos-ink-muted);white-space:nowrap">500ms</div></div>
-              <div style="font-size:26.4px;font-weight:700;line-height:1.4;color:var(--uos-blue)">신호가 500ms 끊김<br><span style="font-size:22px;font-weight:500;color:var(--uos-ink-muted)">강제 재부팅</span></div>
+            <div style="display:grid;grid-template-columns:1fr 260px 1fr;align-items:center;gap:22px">
+              <div style="line-height:1.4">
+                <div style="font-size:26.4px;font-weight:700">heartbeat를 계속 갱신</div>
+                <div style="font-size:22px;font-weight:500;color:var(--uos-ink-muted)">제어 태스크 정상</div>
+              </div>
+              <div style="height:58px;position:relative">
+                <div data-watchdog-label style="font-size:20.5337px;font-weight:500;color:var(--uos-ink-muted);text-align:center;white-space:nowrap">500ms 동안 heartbeat 없음</div>
+                <div data-watchdog-arrow style="position:absolute;left:10px;right:28px;bottom:8px;height:4px;background:var(--uos-blue)">
+                  <div data-watchdog-arrowhead style="position:absolute;right:-18px;top:-5px;width:18px;height:14px;background:var(--uos-blue);clip-path:polygon(0 0,100% 50%,0 100%)"></div>
+                </div>
+              </div>
+              <div style="line-height:1.4;color:var(--uos-blue)">
+                <div style="font-size:26.4px;font-weight:700">워치독 발동</div>
+                <div style="font-size:22px;font-weight:500;color:var(--uos-ink-muted)">강제 재부팅</div>
+              </div>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:220px 60px 1fr;align-items:center;border-top:1px solid var(--uos-rule);border-bottom:1px solid var(--uos-rule);padding:24px 0">

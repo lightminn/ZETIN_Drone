@@ -300,6 +300,41 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertAlmostEqual(sizes["body"], 22.0, places=3)
         self.assertAlmostEqual(sizes["chart"], 16.5, places=3)
 
+    def test_slide_53_renders_watchdog_timeout_as_directional_timeline(self) -> None:
+        self._open_deck()
+        timeline = self._evaluate(
+            """
+            (() => {
+              const slide = document.querySelector('deck-stage')._slides[52];
+              const label = slide.querySelector('[data-watchdog-label]');
+              const result = [...slide.querySelectorAll('div')].find(
+                element => element.textContent.trim() === '워치독 발동'
+              );
+              const arrow = slide.querySelector('[data-watchdog-arrow]');
+              const arrowhead = slide.querySelector('[data-watchdog-arrowhead]');
+              if (!label || !result || !arrow || !arrowhead) return null;
+              const labelRect = label.getBoundingClientRect();
+              const arrowRect = arrow.getBoundingClientRect();
+              const arrowheadRect = arrowhead.getBoundingClientRect();
+              const slideScale = slide.getBoundingClientRect().width / 1280;
+              return {
+                labelAboveArrow: labelRect.bottom < arrowRect.top,
+                arrowWidth: arrowRect.width / slideScale,
+                arrowHeight: arrowRect.height / slideScale,
+                arrowheadAtRight:
+                  arrowheadRect.left >= arrowRect.right - 1 &&
+                  arrowheadRect.width > arrowheadRect.height,
+              };
+            })()
+            """
+        )
+
+        self.assertIsNotNone(timeline)
+        self.assertTrue(timeline["labelAboveArrow"])
+        self.assertGreater(timeline["arrowWidth"], 180)
+        self.assertAlmostEqual(timeline["arrowHeight"], 4.0, places=3)
+        self.assertTrue(timeline["arrowheadAtRight"])
+
     def test_all_slide_text_stays_inside_clipping_ancestors(self) -> None:
         self.maxDiff = None
         self._open_deck()
