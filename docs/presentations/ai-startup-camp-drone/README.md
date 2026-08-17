@@ -66,8 +66,8 @@ cd docs/presentations/ai-startup-camp-drone
 - 정적 배포·인쇄: PDF. PDF에서는 영상이 재생되지 않으므로 대표 프레임을 사용
 
 변환 산출물은 원본이 아니며, 수정은 다시 `index.html`에 반영한 뒤 재생성한다.
-현재 HTML 기준본은 77장이지만, 체크인된 PPTX는 증보 전 74장 산출물이다. PPTX는
-사용자가 재생성을 요청할 때만 77장 기준으로 갱신한다.
+현재 체크인된 PPTX와 PDF는 HTML 기준본과 같은 77장 산출물이다. PPTX와 PDF는
+사용자가 재생성을 요청할 때만 HTML 기준본에서 다시 만든다.
 
 현재 HTML 기준본을 영상 포함 PPTX로 다시 생성하려면 다음을 실행한다.
 
@@ -81,3 +81,12 @@ node export_pptx.cjs
 개별 편집할 수는 없다. 11개 영상은 파일 안에 포함되며 데스크톱 PowerPoint에서
 영상 영역의 재생 표식을 클릭해 실행한다. LibreOffice·웹 미리보기·Google Slides의
 영상 재생은 보장하지 않는다.
+
+정적 PDF는 PPTX를 만든 뒤 다음과 같이 생성한다.
+
+```bash
+libreoffice --headless --convert-to pdf --outdir . ZETIN_Drone_AI_Startup_Camp.pptx
+```
+
+결과는 `ZETIN_Drone_AI_Startup_Camp.pdf`에 저장된다. PDF에서는 영상 대신 PPTX와
+같은 대표 프레임이 보이며 영상 자체는 재생되지 않는다.

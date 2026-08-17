@@ -27,6 +27,12 @@ DEFAULT_PPTX_PATH = (
 PPTX_PATH = Path(
     os.environ.get("ZETIN_PRESENTATION_PPTX", str(DEFAULT_PPTX_PATH))
 )
+DEFAULT_PDF_PATH = DEFAULT_PPTX_PATH.with_suffix(".pdf")
+PDF_PATH = Path(
+    os.environ.get("ZETIN_PRESENTATION_PDF", str(DEFAULT_PDF_PATH))
+)
+EXPECTED_SLIDES = 77
+EXPECTED_VIDEO_SLIDES = 11
 SLIDE_NAME = re.compile(r"ppt/slides/slide\d+\.xml$")
 NOTE_NAME = re.compile(r"ppt/notesSlides/notesSlide\d+\.xml$")
 PRESENTATION_NS = {
@@ -40,13 +46,19 @@ class PresentationPptxExportTests(unittest.TestCase):
         self.assertTrue(PPTX_PATH.is_file(), f"missing generated PPTX: {PPTX_PATH}")
 
         presentation = Presentation(str(PPTX_PATH))
-        self.assertEqual(len(presentation.slides), 74)
+        self.assertEqual(len(presentation.slides), EXPECTED_SLIDES)
 
         with zipfile.ZipFile(PPTX_PATH) as archive:
             self.assertIsNone(archive.testzip())
             names = archive.namelist()
-            self.assertEqual(sum(bool(SLIDE_NAME.fullmatch(name)) for name in names), 74)
-            self.assertEqual(sum(bool(NOTE_NAME.fullmatch(name)) for name in names), 74)
+            self.assertEqual(
+                sum(bool(SLIDE_NAME.fullmatch(name)) for name in names),
+                EXPECTED_SLIDES,
+            )
+            self.assertEqual(
+                sum(bool(NOTE_NAME.fullmatch(name)) for name in names),
+                EXPECTED_SLIDES,
+            )
 
             root = ElementTree.fromstring(archive.read("ppt/presentation.xml"))
             slide_size = root.find("p:sldSz", PRESENTATION_NS)
@@ -59,7 +71,7 @@ class PresentationPptxExportTests(unittest.TestCase):
                 for name in names
                 if name.startswith("ppt/media/") and name.lower().endswith(".mp4")
             )
-            self.assertEqual(len(video_names), 10)
+            self.assertEqual(len(video_names), EXPECTED_VIDEO_SLIDES)
 
             with tempfile.TemporaryDirectory(prefix="zetin-pptx-media-") as temp_dir:
                 codecs = []
@@ -84,7 +96,35 @@ class PresentationPptxExportTests(unittest.TestCase):
                         text=True,
                     )
                     codecs.append(result.stdout.strip())
-                self.assertEqual(codecs, ["h264"] * 10)
+                self.assertEqual(codecs, ["h264"] * EXPECTED_VIDEO_SLIDES)
+
+
+@unittest.skipUnless(shutil.which("pdfinfo"), "pdfinfo is required")
+class PresentationPdfExportTests(unittest.TestCase):
+    def test_pdf_contains_complete_wide_deck(self) -> None:
+        self.assertTrue(PDF_PATH.is_file(), f"missing generated PDF: {PDF_PATH}")
+
+        result = subprocess.run(
+            ["pdfinfo", str(PDF_PATH)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        metadata = {
+            key.strip(): value.strip()
+            for line in result.stdout.splitlines()
+            if ":" in line
+            for key, value in [line.split(":", 1)]
+        }
+
+        self.assertEqual(metadata.get("Pages"), str(EXPECTED_SLIDES))
+        page_size = re.match(
+            r"^([0-9.]+) x ([0-9.]+) pts",
+            metadata.get("Page size", ""),
+        )
+        self.assertIsNotNone(page_size)
+        self.assertAlmostEqual(float(page_size.group(1)), 960.0, delta=0.02)
+        self.assertAlmostEqual(float(page_size.group(2)), 540.0, delta=0.02)
 
 
 if __name__ == "__main__":
