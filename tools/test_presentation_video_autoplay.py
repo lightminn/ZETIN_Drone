@@ -309,6 +309,47 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertEqual(visuals["swarmLayers"], 6, visuals)
         self.assertEqual(visuals["futureGoal"], "future-goal", visuals)
 
+    def test_slide_9_force_illustration_has_a_clear_vector_hierarchy(self) -> None:
+        self._call(
+            "Page.navigate",
+            {"url": f"http://127.0.0.1:{self.http_port}/#9"},
+        )
+        deadline = time.monotonic() + 4.0
+        hierarchy = None
+        while time.monotonic() < deadline:
+            hierarchy = self._evaluate(
+                """
+                (() => {
+                  if (document.readyState !== 'complete') return null;
+                  const figure = document.querySelector('svg[data-force-sum]');
+                  if (!figure) return null;
+                  return {
+                    rotorThrusts: figure.querySelectorAll(
+                      '[data-vector="rotor-thrust"]'
+                    ).length,
+                    aggregateThrusts: figure.querySelectorAll(
+                      '[data-vector="aggregate-thrust"]'
+                    ).length,
+                    weights: figure.querySelectorAll('[data-vector="weight"]').length,
+                    drags: figure.querySelectorAll('[data-vector="drag"]').length,
+                    forceLabels: figure.querySelectorAll('[data-force-label]').length,
+                    droneBodies: figure.querySelectorAll('[data-drone-body]').length,
+                  };
+                })()
+                """
+            )
+            if hierarchy:
+                break
+            time.sleep(0.05)
+
+        self.assertIsNotNone(hierarchy)
+        self.assertEqual(hierarchy["rotorThrusts"], 4, hierarchy)
+        self.assertEqual(hierarchy["aggregateThrusts"], 1, hierarchy)
+        self.assertEqual(hierarchy["weights"], 1, hierarchy)
+        self.assertEqual(hierarchy["drags"], 1, hierarchy)
+        self.assertGreaterEqual(hierarchy["forceLabels"], 4, hierarchy)
+        self.assertEqual(hierarchy["droneBodies"], 1, hierarchy)
+
     def test_slide_type_scale_is_ten_percent_larger(self) -> None:
         self._open_deck()
         sizes = self._evaluate(

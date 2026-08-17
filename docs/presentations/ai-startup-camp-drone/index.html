@@ -213,33 +213,79 @@
 
   <section data-label="비행의 네 힘" data-screen-label="09" data-speaker-notes="일반적인 비행체에는 양력, 중력, 추력, 항력이 작용한다. 멀티콥터에서는 각 로터의 공기역학적 힘이 양력과 추진 역할을 함께 한다. 네 로터 추력의 벡터 합에 중력과 항력을 더한 것이 기체를 실제로 가속하는 합력이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행의 네 힘과 쿼드콥터의 해석">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:.78fr 1.22fr;gap:32px">
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <div style="background:#eaf2fb;border-left:6px solid var(--uos-blue);padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">양력 Lift</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">기체를 위로 지지하는 공기력</div></div>
-          <div style="background:var(--uos-surface);border-left:6px solid #6f7f92;padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">중력 Weight</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">질량중심에서 아래로 작용하는 mg</div></div>
-          <div style="background:var(--uos-surface);border-left:6px solid #d49b00;padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">추력 Thrust</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">비행체를 진행 방향으로 미는 힘</div></div>
-          <div style="background:var(--uos-surface);border-left:6px solid #b04a55;padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">항력 Drag</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">공기와의 상대운동을 방해하는 힘</div></div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:292px 1fr;gap:28px;min-height:0">
+        <div style="display:flex;flex-direction:column;justify-content:space-between;min-height:0;padding:8px 0 4px">
+          <div>
+            <div style="font-size:20.5337px;font-weight:800;letter-spacing:.04em;color:var(--uos-ink-muted);padding-bottom:12px;border-bottom:2px solid var(--uos-ink)">일반 비행체의 네 힘</div>
+            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0;border-bottom:1px solid var(--uos-rule)"><div style="width:12px;height:12px;border-radius:50%;background:#3a78c2;margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">양력 L</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">기체를 위로 지지하는 공기력</div></div></div>
+            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0;border-bottom:1px solid var(--uos-rule)"><div style="width:12px;height:12px;border-radius:50%;background:#6f7f92;margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">중력 W</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">질량중심에서 아래 방향</div></div></div>
+            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0;border-bottom:1px solid var(--uos-rule)"><div style="width:12px;height:12px;border-radius:50%;background:var(--uos-blue);margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">추력 T</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">추진 장치가 만드는 힘</div></div></div>
+            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0"><div style="width:12px;height:12px;border-radius:50%;background:#b04a55;margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">항력 D</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">운동과 반대 방향의 공기력</div></div></div>
+          </div>
+          <div style="border-left:5px solid var(--uos-blue);padding:5px 0 5px 18px;font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)"><strong style="color:var(--uos-blue)">쿼드콥터</strong>에서는 로터 추력이<br>양력과 추진을 함께 담당</div>
         </div>
-        <div style="background:#f7f9fc;border-radius:4px;padding:18px;display:flex;flex-direction:column;gap:10px;min-height:0">
-          <svg data-force-sum role="img" aria-label="네 로터 추력의 벡터 합과 중력 및 항력이 만드는 쿼드콥터의 합력" viewBox="0 0 690 390" style="width:100%;flex:1;min-height:0">
+        <div style="border-top:2px solid var(--uos-ink);border-bottom:1px solid var(--uos-rule);display:flex;flex-direction:column;min-width:0;min-height:0;padding:10px 0 5px">
+          <svg data-force-sum role="img" aria-label="네 로터 추력의 벡터 합과 중력 및 항력이 만드는 쿼드콥터의 합력" viewBox="0 0 820 440" style="width:100%;flex:1;min-height:0;overflow:visible">
             <defs>
-              <marker id="force-blue-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#004094"/></marker>
-              <marker id="force-gray-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#5f6874"/></marker>
-              <marker id="force-red-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b04a55"/></marker>
+              <marker id="force-rotor-arrow" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#3a78c2"/></marker>
+              <marker id="force-sum-arrow" markerUnits="userSpaceOnUse" markerWidth="28" markerHeight="28" refX="25" refY="14" orient="auto"><path d="M0,0 L0,28 L26,14 z" fill="#004094"/></marker>
+              <marker id="force-weight-arrow" markerUnits="userSpaceOnUse" markerWidth="21" markerHeight="21" refX="19" refY="10.5" orient="auto"><path d="M0,0 L0,21 L20,10.5 z" fill="#6f7f92"/></marker>
+              <marker id="force-drag-arrow" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#b04a55"/></marker>
+              <marker id="force-motion-arrow" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#8b95a5"/></marker>
             </defs>
-            <g stroke="#687588" stroke-width="14" stroke-linecap="round"><path d="M245 245 L445 115"/><path d="M245 115 L445 245"/></g>
-            <g fill="#fff" stroke="#004094" stroke-width="7"><circle cx="245" cy="115" r="42"/><circle cx="445" cy="115" r="42"/><circle cx="245" cy="245" r="42"/><circle cx="445" cy="245" r="42"/></g>
-            <rect x="302" y="137" width="86" height="86" rx="18" fill="#004094"/><circle cx="345" cy="180" r="10" fill="#fff" opacity=".9"/>
-            <g stroke="#004094" stroke-width="7" marker-end="url(#force-blue-arrow)"><path d="M245 94 V28"/><path d="M445 94 V28"/><path d="M245 224 V158"/><path d="M445 224 V158"/></g>
-            <text x="190" y="25" font-size="20" font-weight="700" fill="#004094">T₁</text><text x="465" y="25" font-size="20" font-weight="700" fill="#004094">T₂</text><text x="190" y="176" font-size="20" font-weight="700" fill="#004094">T₃</text><text x="465" y="176" font-size="20" font-weight="700" fill="#004094">T₄</text>
-            <path d="M345 132 V28" stroke="#004094" stroke-width="10" marker-end="url(#force-blue-arrow)"/>
-            <text x="359" y="56" font-size="22" font-weight="800" fill="#004094">T⃗Σ = T⃗₁ + T⃗₂ + T⃗₃ + T⃗₄</text>
-            <path d="M345 225 V350" stroke="#5f6874" stroke-width="9" marker-end="url(#force-gray-arrow)"/>
-            <text x="365" y="344" font-size="22" font-weight="800" fill="#5f6874">W⃗ = mg</text>
-            <path d="M175 180 H65" stroke="#b04a55" stroke-width="7" marker-end="url(#force-red-arrow)"/>
-            <text x="66" y="211" font-size="20" font-weight="700" fill="#b04a55">D⃗</text>
+
+            <g aria-hidden="true" fill="none" stroke="#dfe5ec" stroke-width="1">
+              <path d="M38 224 H782" stroke-dasharray="4 8"/>
+              <path d="M410 32 V418" stroke-dasharray="4 8"/>
+            </g>
+
+            <g data-drone-body>
+              <g fill="none" stroke-linecap="round">
+                <path d="M410 278 L233 223 M410 278 L587 223 M410 278 L303 356 M410 278 L517 356" stroke="#253448" stroke-width="20"/>
+                <path d="M410 278 L233 223 M410 278 L587 223 M410 278 L303 356 M410 278 L517 356" stroke="#748194" stroke-width="4" opacity=".65"/>
+              </g>
+              <g fill="#f7f9fc" stroke="#004094" stroke-width="5">
+                <ellipse cx="233" cy="223" rx="72" ry="22"/><ellipse cx="587" cy="223" rx="72" ry="22"/>
+                <ellipse cx="303" cy="356" rx="72" ry="22"/><ellipse cx="517" cy="356" rx="72" ry="22"/>
+              </g>
+              <g fill="none" stroke="#3a78c2" stroke-width="3" opacity=".58">
+                <path d="M169 223 H297 M523 223 H651 M239 356 H367 M453 356 H581"/>
+              </g>
+              <g fill="#004094"><circle cx="233" cy="223" r="9"/><circle cx="587" cy="223" r="9"/><circle cx="303" cy="356" r="9"/><circle cx="517" cy="356" r="9"/></g>
+              <path d="M410 222 L467 254 L456 321 L410 345 L364 321 L353 254 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
+              <path d="M377 262 L410 244 L443 262 L437 303 L410 318 L383 303 Z" fill="#004094"/>
+              <circle cx="410" cy="278" r="7" fill="#fff"/>
+            </g>
+
+            <g fill="none" stroke="#3a78c2" stroke-width="5" stroke-linecap="round" marker-end="url(#force-rotor-arrow)" opacity=".92">
+              <path data-vector="rotor-thrust" d="M233 202 V126"/>
+              <path data-vector="rotor-thrust" d="M587 202 V126"/>
+              <path data-vector="rotor-thrust" d="M303 334 V258"/>
+              <path data-vector="rotor-thrust" d="M517 334 V258"/>
+            </g>
+            <g fill="#3a78c2" font-size="21" font-weight="800">
+              <text data-force-label x="248" y="150">T₁</text><text data-force-label x="602" y="150">T₂</text>
+              <text data-force-label x="318" y="282">T₃</text><text data-force-label x="532" y="282">T₄</text>
+            </g>
+
+            <path data-vector="aggregate-thrust" d="M410 218 V44" fill="none" stroke="#004094" stroke-width="10" stroke-linecap="round" marker-end="url(#force-sum-arrow)"/>
+            <g transform="translate(431 52)">
+              <text data-force-label x="0" y="0" fill="#004094" font-size="28" font-weight="900">TΣ</text>
+              <text x="0" y="28" fill="#516074" font-size="20.5337px" font-weight="700">T₁ + T₂ + T₃ + T₄</text>
+            </g>
+
+            <path data-vector="weight" d="M410 286 V412" fill="none" stroke="#6f7f92" stroke-width="7" stroke-linecap="round" marker-end="url(#force-weight-arrow)"/>
+            <text data-force-label x="430" y="401" fill="#596575" font-size="23" font-weight="800">W = mg</text>
+
+            <g transform="translate(602 54)">
+              <text x="0" y="0" fill="#596575" font-size="20.5337px" font-weight="800">이동할 때만</text>
+              <path d="M4 30 H154" fill="none" stroke="#8b95a5" stroke-width="3.5" marker-end="url(#force-motion-arrow)"/>
+              <text x="7" y="57" fill="#6f7f92" font-size="20.5337px" font-weight="700">진행 v</text>
+              <path data-vector="drag" d="M150 78 H18" fill="none" stroke="#b04a55" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="8 7" marker-end="url(#force-drag-arrow)"/>
+              <text data-force-label x="45" y="108" fill="#9b3f49" font-size="20.5337px" font-weight="800">항력 D · 반대 방향</text>
+            </g>
           </svg>
-          <div style="font-size:22px;line-height:1.45;text-align:center"><strong>F⃗합 = T⃗Σ + W⃗ + D⃗</strong><br><span style="font-size:20.5337px;color:var(--uos-ink-muted)">멀티콥터의 로터 힘은 양력과 추진 역할을 함께 수행</span></div>
+          <div style="display:flex;align-items:baseline;justify-content:center;gap:24px;padding:3px 18px 2px;border-top:1px solid var(--uos-rule);font-size:22px;line-height:1.4"><strong style="color:var(--uos-blue)">F⃗합 = T⃗Σ + W⃗ + D⃗</strong><span style="font-size:20.5337px;color:var(--uos-ink-muted)">호버링에서는 TΣ = mg, D ≈ 0</span></div>
         </div>
       </div>
     </x-import>
