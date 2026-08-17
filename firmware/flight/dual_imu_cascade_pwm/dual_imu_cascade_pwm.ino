@@ -65,6 +65,7 @@ struct __attribute__((packed)) ImuCalDatagram {
 // Arduino's generated function prototypes are inserted before later global
 // declarations, so snapshot return types must be declared in this top block.
 struct AllocationTelemetrySample {
+  bool scaled;
   float rp_scale;
   float yaw_scale;
   float collective_us;
@@ -716,7 +717,7 @@ volatile int      active_imus     = 2;       // 현재 사용 중인 IMU 수 (te
 volatile bool     mixer_scaled    = false;   // 자세 mixer가 축소됐는지
 volatile float    mixer_yaw_scale = 1.0f;    // 다음 tick yaw authority 입력
 AllocationTelemetrySample allocationTelemetry = {
-    1.0f, 1.0f, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    false, 1.0f, 1.0f, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
     YAW_AUTH_NORMAL};
 portMUX_TYPE allocationTelemetryMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool     calibration_ok  = false;
@@ -1159,10 +1160,11 @@ static inline void enterLockedState(bool &wasLocked) {
 }
 
 static inline void resetAllocationTelemetry() {
-  mixer_yaw_scale = 1.0f;
   portENTER_CRITICAL(&allocationTelemetryMux);
+  mixer_scaled = false;
+  mixer_yaw_scale = 1.0f;
   allocationTelemetry = {
-      1.0f, 1.0f, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+      false, 1.0f, 1.0f, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
       YAW_AUTH_NORMAL};
   portEXIT_CRITICAL(&allocationTelemetryMux);
 }
@@ -1171,9 +1173,10 @@ static inline void publishAllocationTelemetry(
     const MotorMix &mix, float pidRoll, float pidPitch, float pidYaw,
     float iRoll, float iPitch, float iYaw, int yawAuthorityState) {
   const AllocationTelemetrySample sample = {
-      mix.rp_scale, mix.yaw_scale, mix.collective_us,
+      mix.scaled, mix.rp_scale, mix.yaw_scale, mix.collective_us,
       pidRoll, pidPitch, pidYaw, iRoll, iPitch, iYaw, yawAuthorityState};
   portENTER_CRITICAL(&allocationTelemetryMux);
+  mixer_scaled = sample.scaled;
   allocationTelemetry = sample;
   portEXIT_CRITICAL(&allocationTelemetryMux);
 }
@@ -1660,7 +1663,6 @@ void pid_task(void *pv) {
     const int throttle = base_throttle;
     MotorMix mix = mixAndDesaturate(pidRoll, pidPitch, pidYaw,
                                     throttle, min_throttle, max_throttle);
-    mixer_scaled = mix.scaled;
     mixer_yaw_scale = mix.yaw_scale;
     publishAllocationTelemetry(
         mix, pidRoll, pidPitch, pidYaw,
@@ -1914,7 +1916,7 @@ static void sendTelemetry() {
              (int)fault_rc, (int)criticalFault,
              (unsigned long)rcTotalPkts, (unsigned long)rcDroppedPkts,
              (int)fault_imu1, (int)fault_imu2, (int)fault_disagree,
-             active_imus, (int)mixer_scaled, (int)fault_attitude,
+             active_imus, (int)allocationSample.scaled, (int)fault_attitude,
              (int)calibration_ok, (int)!safety_lock,
              motorOut[0], motorOut[1], motorOut[2], motorOut[3], pidLoopHz,
              tgtRate[0], tgtRate[1], tgtRate[2], magHeading,

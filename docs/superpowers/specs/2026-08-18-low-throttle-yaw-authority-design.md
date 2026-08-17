@@ -1,6 +1,6 @@
 # 저스로틀 수동 착륙 yaw 권한 관리 설계
 
-작성일: 2026-08-18  
+작성일: 2026-08-18
 대상: `firmware/flight/dual_imu_cascade_pwm`, `scripts/`, `tools/`
 
 ## 1. 목적과 관측 근거

@@ -105,6 +105,14 @@ void sendUdpCommandOnce(const std::string &command) {
   }
 }
 
+std::vector<std::string> splitCsv(const std::string &payload) {
+  std::vector<std::string> fields;
+  std::istringstream stream(payload);
+  std::string field;
+  while (std::getline(stream, field, ',')) fields.push_back(field);
+  return fields;
+}
+
 void runPidTicks(uint32_t ticks, uint32_t us_per_tick = 1000) {
   arduino_fake::tick_index = 0;
   arduino_fake::tick_limit = ticks;
@@ -2546,6 +2554,57 @@ int main() {
     for (int motor : motorOut) CHECK_EQ(motor, 1000);
     CHECK_EQ(state_at_immediate_lock, (int)YAW_AUTH_NORMAL);
     CHECK_NEAR(scale_at_immediate_lock, 1.0f, 1e-6f);
+  });
+
+  runCase("telemetry packet uses one allocation snapshot for legacy and axis scales", [] {
+    arduino_fake::reset();
+    wifi_udp_fake::reset();
+    connectionEstablished = true;
+    calibration_ok = true;
+    active_imus = 2;
+
+    MotorMix limited = {};
+    limited.collective_us = 1210.0f;
+    limited.rp_scale = 0.8f;
+    limited.yaw_scale = 0.4f;
+    limited.scaled = true;
+    publishAllocationTelemetry(
+        limited, 11.0f, 12.0f, 13.0f, 1.0f, 2.0f, 3.0f,
+        YAW_AUTH_LIMITED);
+
+    // Deliberately disagree with the published tick. Field 19 must come from
+    // the same protected record as fields 66 and 67, not this live global.
+    mixer_scaled = false;
+    sendTelemetry();
+
+    const std::vector<std::string> fields =
+        splitCsv(wifi_udp_fake::telemetry_output);
+    CHECK_EQ(fields.size(), 75U);
+    CHECK_EQ(fields[18], "1");
+    CHECK_EQ(fields[65], "0.800");
+    CHECK_EQ(fields[66], "0.400");
+  });
+
+  runCase("default allocation reset clears legacy and axis diagnostics", [] {
+    MotorMix limited = {};
+    limited.collective_us = 1200.0f;
+    limited.rp_scale = 0.7f;
+    limited.yaw_scale = 0.3f;
+    limited.scaled = true;
+    mixer_scaled = true;
+    publishAllocationTelemetry(
+        limited, 10.0f, 20.0f, 30.0f, 1.0f, 2.0f, 3.0f,
+        YAW_AUTH_LIMITED);
+
+    // The post-mix lock path relies only on this common reset helper.
+    resetAllocationTelemetry();
+    const AllocationTelemetrySample sample =
+        readAllocationTelemetrySnapshot();
+
+    CHECK(!mixer_scaled);
+    CHECK_NEAR(sample.rp_scale, 1.0f, 1e-6f);
+    CHECK_NEAR(sample.yaw_scale, 1.0f, 1e-6f);
+    CHECK_EQ(sample.yaw_authority_state, (int)YAW_AUTH_NORMAL);
   });
 
   std::cout << "\n" << (test_count - failure_count) << "/" << test_count

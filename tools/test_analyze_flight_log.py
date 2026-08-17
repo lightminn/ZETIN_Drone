@@ -165,6 +165,68 @@ class AnalyzeFlightLogAllocationTest(unittest.TestCase):
         )
         self.assertNotIn("duration unavailable", result.stdout)
 
+    def test_non_finite_scale_pid_and_integrator_values_are_excluded(self):
+        fieldnames = (
+            "Timestamp",
+            "Mixer_RP_Scale", "Mixer_Yaw_Scale",
+            "Yaw_Authority_State",
+            "PID_Roll_US", "PID_Pitch_US", "PID_Yaw_US",
+            "I_Roll_US", "I_Pitch_US", "I_Yaw_US",
+        )
+        result = self._run_analyzer(
+            fieldnames,
+            [
+                dict(zip(
+                    fieldnames,
+                    ("00:00:00.000", 0.5, 0.25, 0, 5, -6, 7, 1, -2, 3),
+                )),
+                dict(zip(
+                    fieldnames,
+                    (
+                        "00:00:00.100", "-inf", "-inf", 0,
+                        "inf", "-inf", "inf", "inf", "-inf", "inf",
+                    ),
+                )),
+            ],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Allocator scale: RP min 0.500, p05 0.500; "
+            "Yaw min 0.250, p05 0.250",
+            result.stdout,
+        )
+        self.assertIn(
+            "PID |max| (us): Roll 5.000, Pitch 6.000, Yaw 7.000",
+            result.stdout,
+        )
+        self.assertIn(
+            "I-term |max| (us): Roll 1.000, Pitch 2.000, Yaw 3.000",
+            result.stdout,
+        )
+
+    def test_invalid_authority_states_are_unknown_duration_gaps(self):
+        result = self._run_analyzer(
+            ("Timestamp", "Yaw_Authority_State"),
+            [
+                {"Timestamp": "00:00:00.000", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.100", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.200", "Yaw_Authority_State": "inf"},
+                {"Timestamp": "00:00:00.300", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.400", "Yaw_Authority_State": 3},
+                {"Timestamp": "00:00:00.500", "Yaw_Authority_State": 1},
+                {"Timestamp": "00:00:00.600", "Yaw_Authority_State": 0},
+            ],
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(
+            "Yaw authority LIMITED: 3 entries, "
+            "0.200 s cumulative (incomplete: unknown state/time gap)",
+            result.stdout,
+        )
+        self.assertNotIn("0.300 s cumulative", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

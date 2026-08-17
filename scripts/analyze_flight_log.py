@@ -1,3 +1,4 @@
+import math
 import sys
 from pathlib import Path
 
@@ -160,7 +161,13 @@ def _valid_numeric(frame, column):
     if column not in frame.columns:
         return None
     valid = frame[column].dropna()
+    valid = valid[valid.map(math.isfinite)]
     return None if valid.empty else valid
+
+
+def _yaw_authority_number(value):
+    state = phase_number(value)
+    return state if state in (0, 1, 2) else None
 
 
 def _absolute_axis_maxima(frame, columns):
@@ -185,8 +192,12 @@ else:
         f"Yaw min {yaw_scale.min():.3f}, p05 {yaw_scale.quantile(0.05):.3f}"
     )
 
-authority = _valid_numeric(df, "Yaw_Authority_State")
-if authority is None:
+authority = (
+    None
+    if "Yaw_Authority_State" not in df.columns
+    else df["Yaw_Authority_State"].map(_yaw_authority_number).dropna()
+)
+if authority is None or authority.empty:
     print("  Yaw authority LIMITED: legacy/unknown")
 else:
     entries = 0
@@ -199,7 +210,7 @@ else:
     has_timed_sample = False
     incomplete_timing = False
     for index, raw_state in df["Yaw_Authority_State"].items():
-        state = phase_number(raw_state)
+        state = _yaw_authority_number(raw_state)
         if state is None:
             previous_entry_state = None
         else:
