@@ -428,19 +428,12 @@ int main() {
     CHECK_EQ(mix.motor[2] - mix.motor[3], -60);
   });
 
-  runCase("mix: saturation applies one common attitude scale", [] {
-    MotorMix mix = mixAndDesaturate(120, 60, 30, 1100, 1000, 1240);
-    checkMotors(mix, 1120, 1040, 1000, 1240);
+  runCase("mix: sketch delegates saturation priority to the control allocator", [] {
+    MotorMix mix = mixAndDesaturate(20, 0, 100, 1100, 1000, 1200);
+    checkMotors(mix, 1040, 1000, 1160, 1200);
     CHECK(mix.scaled);
-    CHECK_NEAR(
-        static_cast<float>(mix.motor[0] - mix.motor[1]) / (30.0f - -90.0f),
-        2.0f / 3.0f, 1e-6f);
-    CHECK_NEAR(
-        static_cast<float>(mix.motor[1] - mix.motor[2]) / (-90.0f - -150.0f),
-        2.0f / 3.0f, 1e-6f);
-    CHECK_NEAR(
-        static_cast<float>(mix.motor[3] - mix.motor[2]) / (210.0f - -150.0f),
-        2.0f / 3.0f, 1e-6f);
+    CHECK_NEAR(mix.rp_scale, 1.0f, 1e-6f);
+    CHECK_NEAR(mix.yaw_scale, 0.8f, 1e-6f);
   });
 
   runCase("mix: collective shifts before attitude scaling", [] {

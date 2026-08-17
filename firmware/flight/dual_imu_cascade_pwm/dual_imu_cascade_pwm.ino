@@ -13,6 +13,7 @@
 #include "yaw_command.h"
 #include "failsafe_land.h"
 #include "msp_sensor.h"
+#include "control_allocator.h"
 
 static const uint32_t IMU_RAW_RING_SIZE = 512;
 static const uint32_t IMU_RAW_RING_MASK = IMU_RAW_RING_SIZE - 1;
@@ -405,11 +406,7 @@ public:
 };
 
 // Arduino sketch preprocessor의 자동 함수 원형보다 먼저 보여야 하는 반환 타입.
-struct MotorMix {
-  int motor[4];
-  bool scaled;
-  float collective_us;
-};
+using MotorMix = ControlAllocation;
 
 struct ImuTelemetrySample {
   float imu1GyroX, imu1GyroY, imu1GyroZ;
@@ -1020,48 +1017,11 @@ void stopMotors() {
   writeMotor(pinM3, 1000); writeMotor(pinM4, 1000);
 }
 
-// 자세 차동 명령을 먼저 보존하고 collective를 이동한다. 그래도 범위를 넘을 때만
-// 모든 자세 명령을 같은 비율로 축소해 토크 비율을 유지한다.
+// Pure allocator keeps this compatibility entrypoint for sketch callers and native
+// integration tests. It assigns roll/pitch first, then fits yaw in the residual span.
 static MotorMix mixAndDesaturate(float roll, float pitch, float yaw,
                                  int throttle, int minMotor, int maxMotor) {
-  MotorMix out;
-  minMotor = constrain(minMotor, 1000, 2000);
-  maxMotor = constrain(maxMotor, minMotor, 2000);
-
-  float diff[4] = {
-    -pitch + roll - yaw,  // M1: FL
-     pitch - roll - yaw,  // M2: RR
-    -pitch - roll + yaw,  // M3: FR
-     pitch + roll + yaw   // M4: RL
-  };
-
-  float minDiff = diff[0], maxDiff = diff[0];
-  for (int i = 1; i < 4; i++) {
-    minDiff = min(minDiff, diff[i]);
-    maxDiff = max(maxDiff, diff[i]);
-  }
-
-  const float available = (float)(maxMotor - minMotor);
-  const float span = maxDiff - minDiff;
-  float scale = 1.0f;
-  if (span > available && span > 0.0f) scale = available / span;
-  out.scaled = scale < 0.9999f;
-
-  if (out.scaled) {
-    for (int i = 0; i < 4; i++) diff[i] *= scale;
-    minDiff *= scale;
-    maxDiff *= scale;
-  }
-
-  const float collectiveLo = minMotor - minDiff;
-  const float collectiveHi = maxMotor - maxDiff;
-  const float collective = min(max((float)throttle, collectiveLo), collectiveHi);
-  out.collective_us = collective;
-
-  for (int i = 0; i < 4; i++) {
-    out.motor[i] = constrain((int)lroundf(collective + diff[i]), minMotor, maxMotor);
-  }
-  return out;
+  return allocateControl(roll, pitch, yaw, throttle, minMotor, maxMotor);
 }
 
 // ==========================================================
