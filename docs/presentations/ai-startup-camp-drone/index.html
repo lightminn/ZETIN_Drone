@@ -61,29 +61,248 @@
 왜 비행 제어를 직접 만드는가"></x-import>
   </section>
 
-  <section data-label="뜨는 원리" data-screen-label="04" data-speaker-notes="프로펠러 네 개는 각각 위로 미는 힘만 만든다. 방향을 바꾸는 장치는 없다. 네 힘의 크기 차이만으로 기울고 돈다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="드론이 뜨는 원리">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.05fr 1fr;gap:36px">
-        <div style="display:flex;flex-direction:column;gap:24px">
-          <div style="font-size:35.2px;font-weight:700;line-height:1.3">프로펠러는 위로 미는 힘만 만든다. 방향을 바꾸는 부품은 없다.</div>
-          <ul style="margin:0;padding-left:28px;font-size:22px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
-            <li>네 개를 모두 세게 돌리면 <strong>위로 올라간다</strong></li>
-            <li>한쪽 두 개를 더 세게 돌리면 <strong>그쪽이 들려 기울어지고</strong>, 기울어진 방향으로 미끄러져 간다</li>
-            <li>대각선 두 개를 더 세게 돌리면 회전 반작용이 남아 <strong>제자리에서 돈다</strong></li>
-          </ul>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:22px;line-height:1.5">즉 드론 조종은 <strong>네 모터의 출력 배분</strong> 문제로 환원된다. 사람이 직접 배분하는 것은 불가능에 가깝고, 그래서 컴퓨터가 대신한다.</div>
+  <section data-label="드론의 분류" data-screen-label="04" data-speaker-notes="드론은 법률상 하나의 기체 형식 이름이라기보다 무인 비행체를 넓게 부르는 말이다. 이 발표에서 다루는 기체는 초경량비행장치 중 무인동력비행장치, 그중에서도 네 개의 로터를 쓰는 무인멀티콥터이다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="분류 안에서 찾는 우리 드론의 위치">
+      <div data-drone-classification style="width:100%;height:100%;display:grid;grid-template-columns:1.3fr .9fr;gap:36px">
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <div style="font-size:30.8px;font-weight:700;line-height:1.3">우리 기체의 정확한 위치는<br><span style="color:var(--uos-blue)">무인멀티콥터 → 쿼드콥터</span>이다.</div>
+          <div style="display:grid;grid-template-columns:1fr 36px 1fr 36px 1.1fr;align-items:stretch;gap:8px;flex:1">
+            <div style="background:var(--uos-surface);border-top:6px solid #8b95a5;border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:12px">
+              <div style="font-size:24.2px;font-weight:700">비행체</div>
+              <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">항공기<br>경량항공기<br>초경량비행장치</div>
+            </div>
+            <div style="display:grid;place-items:center;font-size:28.6px;color:var(--uos-ink-muted)">→</div>
+            <div style="background:#eaf2fb;border-top:6px solid var(--uos-blue);border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:12px">
+              <div style="font-size:24.2px;font-weight:700;color:var(--uos-blue)">무인동력비행장치</div>
+              <div style="font-size:20.5337px;line-height:1.45">무인비행기<br>무인헬리콥터<br><strong>무인멀티콥터</strong><br>무인수직이착륙기</div>
+            </div>
+            <div style="display:grid;place-items:center;font-size:28.6px;color:var(--uos-ink-muted)">→</div>
+            <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:22px;display:flex;flex-direction:column;justify-content:center;gap:12px">
+              <div style="font-size:20.5337px;opacity:.82">로터 수로 부르는 이름</div>
+              <div style="font-size:33px;font-weight:800">쿼드콥터</div>
+              <div style="font-size:20.5337px;line-height:1.45">로터 4개<br>X자 배치<br>차동 추력 제어</div>
+            </div>
+          </div>
+          <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">이 발표에서 ‘드론’은 사람이 타지 않는 4로터 멀티콥터를 뜻하는 표현이다.</div>
         </div>
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
           <div style="flex:1;background:var(--uos-surface);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
-            <img src="assets/image7.png" alt="쿼드콥터 CAD 상면도 — 프로펠러 4개 배치" style="max-width:100%;max-height:100%;object-fit:contain" />
+            <img src="assets/image7.png" alt="자체 설계 쿼드콥터 CAD 상면도" style="max-width:100%;max-height:100%;object-fit:contain" />
           </div>
-          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">자체 설계 쿼드콥터 — 프로펠러 4개, X자 배치</figcaption>
+          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">자체 설계한 무인멀티콥터</figcaption>
         </figure>
       </div>
     </x-import>
   </section>
 
-  <section data-label="불안정" data-screen-label="05" data-speaker-notes="작은 토크 차이와 외란이 각속도를 만들면, 자세 제어기는 모터 출력을 바꿔 그 움직임을 계속 되돌린다." style="background:#fff">
+  <section data-label="드론 자격" data-screen-label="05" data-speaker-notes="국내 무인동력비행장치 조종자 증명은 기체 무게 구간으로 나뉜다. 250그램 이하는 별도 조종자 증명 대상이 아니고, 250그램 초과 2킬로그램 이하는 4종 온라인 교육 대상이다. 우리 기체가 어느 구간인지는 배터리와 탑재물을 포함한 최대이륙중량을 실제로 측정한 뒤 판단해야 한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기체 무게에 따라 커지는 조종 책임">
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
+        <div style="font-size:30.8px;font-weight:700;line-height:1.35;max-width:1040px">자격 구분의 출발점은 용도가 아니라 <span style="color:var(--uos-blue)">기체의 최대이륙중량</span>이다.</div>
+        <div data-qualification-scale style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;flex:1;min-height:0" aria-label="대한민국 무인동력비행장치 조종자 증명 무게 구간">
+          <div data-band="under-250g" style="background:var(--uos-surface);border-top:8px solid #8b95a5;border-radius:4px;padding:22px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:26.4px;font-weight:800">250g 이하</div>
+            <div style="font-size:22px;font-weight:700">별도 증명 없음</div>
+            <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">비행금지구역·안전 규칙은 그대로 적용</div>
+          </div>
+          <div data-band="class-4" style="background:#eaf2fb;border-top:8px solid #4d88c7;border-radius:4px;padding:22px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:26.4px;font-weight:800">4종</div>
+            <div style="font-size:22px;font-weight:700">250g 초과–2kg 이하</div>
+            <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">공단 온라인 교육 이수</div>
+          </div>
+          <div data-band="class-3" style="background:#dceaf8;border-top:8px solid #2e70b7;border-radius:4px;padding:22px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:26.4px;font-weight:800">3종</div>
+            <div style="font-size:22px;font-weight:700">2kg 초과–7kg 이하</div>
+            <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">비행경력·학과시험 등 자격 요건</div>
+          </div>
+          <div data-band="class-2" style="background:#c9def4;border-top:8px solid #145da7;border-radius:4px;padding:22px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:26.4px;font-weight:800">2종</div>
+            <div style="font-size:22px;font-weight:700">7kg 초과–25kg 이하</div>
+            <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">비행경력·학과·실기 요건</div>
+          </div>
+          <div data-band="class-1" style="background:var(--uos-blue);color:#fff;border-top:8px solid #002f6c;border-radius:4px;padding:22px 18px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:26.4px;font-weight:800">1종</div>
+            <div style="font-size:22px;font-weight:700">25kg 초과</div>
+            <div style="font-size:20.5337px;line-height:1.45;opacity:.85">자체중량 150kg 이하 범위의 상위 자격</div>
+          </div>
+        </div>
+        <div style="background:#fff5d9;border-left:6px solid #e5a400;padding:18px 22px;font-size:20.5337px;line-height:1.45"><strong>우리 기체의 종별은 미확정이다.</strong> 배터리·센서·보호구를 포함한 실제 최대이륙중량 측정이 먼저이다.</div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="비행체 비교와 UAM" data-screen-label="06" data-speaker-notes="비행체마다 잘하는 일이 다르다. 고정익은 오래 멀리 날지만 제자리 비행이 어렵고, 헬리콥터는 호버링과 탑재 성능이 좋지만 기계 구조가 복잡하다. 멀티콥터는 정밀 호버링과 단순한 기계 구조가 장점이지만 체공시간과 탑재중량이 제한된다. eVTOL은 수직이착륙과 순항을 결합하려는 기체이며, UAM은 그 기체만이 아니라 버티포트·운항·교통관리까지 포함하는 도시 항공 이동 체계이다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행체 선택은 임무의 교환관계이다">
+      <div data-aircraft-comparison style="width:100%;height:100%;display:flex;flex-direction:column;gap:14px">
+        <div style="display:grid;grid-template-columns:180px 1fr 1fr;gap:12px;padding:0 20px;font-size:20.5337px;font-weight:700;color:var(--uos-ink-muted)">
+          <div>비행체</div><div>잘하는 일</div><div>감수해야 할 점</div>
+        </div>
+        <div data-aircraft="fixed-wing" style="display:grid;grid-template-columns:180px 1fr 1fr;gap:12px;align-items:center;background:var(--uos-surface);border-left:6px solid #8b95a5;border-radius:4px;padding:18px 20px">
+          <div style="font-size:24.2px;font-weight:800">고정익</div>
+          <div style="font-size:22px;line-height:1.4">긴 항속거리 · 높은 순항 효율</div>
+          <div style="font-size:22px;line-height:1.4">호버링 불가 · 이착륙 공간 필요</div>
+        </div>
+        <div data-aircraft="helicopter" style="display:grid;grid-template-columns:180px 1fr 1fr;gap:12px;align-items:center;background:var(--uos-surface);border-left:6px solid #6f7f92;border-radius:4px;padding:18px 20px">
+          <div style="font-size:24.2px;font-weight:800">헬리콥터</div>
+          <div style="font-size:22px;line-height:1.4">호버링 · 큰 로터의 양력과 탑재 성능</div>
+          <div style="font-size:22px;line-height:1.4">스와시플레이트·꼬리로터 등 복잡한 구조</div>
+        </div>
+        <div data-aircraft="multirotor" style="display:grid;grid-template-columns:180px 1fr 1fr;gap:12px;align-items:center;background:#eaf2fb;border-left:6px solid var(--uos-blue);border-radius:4px;padding:18px 20px">
+          <div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">멀티콥터</div>
+          <div style="font-size:22px;line-height:1.4"><strong>정밀 호버링 · 단순한 기계 구조 · 민첩성</strong></div>
+          <div style="font-size:22px;line-height:1.4">짧은 체공시간 · 제한된 탑재중량</div>
+        </div>
+        <div data-aircraft="evtol" style="display:grid;grid-template-columns:180px 1fr 1fr;gap:12px;align-items:center;background:var(--uos-surface);border-left:6px solid #d49b00;border-radius:4px;padding:18px 20px">
+          <div style="font-size:24.2px;font-weight:800">eVTOL</div>
+          <div style="font-size:22px;line-height:1.4">수직이착륙과 순항의 결합 가능성</div>
+          <div style="font-size:22px;line-height:1.4">에너지·소음·인증·다중 고장 안전성</div>
+        </div>
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:18px 24px;display:grid;grid-template-columns:180px 1fr;gap:18px;align-items:center">
+          <div style="font-size:24.2px;font-weight:800">UAM</div>
+          <div style="font-size:22px;line-height:1.4"><strong>기체 종류가 아니라 이동 체계</strong> — eVTOL 기체, 버티포트, 운항, 통신, 교통관리, 비상대응의 결합</div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="사용처와 필요 사양" data-screen-label="07" data-speaker-notes="드론의 필요 사양은 사용처가 결정한다. 공연은 위치 정밀도와 동기화가, 물류는 탑재중량과 항속거리와 안전한 착륙이 중요하다. 안전감시는 안정화된 영상과 악천후 대응이 중요하고, 국방 분야에서는 임무 환경에 견디는 통신과 센서, 항속성, 고장 대응이 요구된다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="사용처에 따라 달라지는 ‘좋은 드론’의 기준">
+      <div data-mission-specs style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px">
+        <div data-mission="entertainment" style="background:var(--uos-surface);border-top:7px solid #7456a6;border-radius:4px;padding:24px 26px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px"><div style="font-size:28.6px;font-weight:800">엔터테인먼트</div><div style="font-size:20.5337px;color:var(--uos-ink-muted)">드론쇼 · 촬영</div></div>
+          <div style="font-size:22px;line-height:1.5"><strong>위치 정밀도 · 시간 동기화 · 조명 제어</strong></div>
+          <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">여러 대가 같은 장면을 오차 없이 재현하고, 이상 기체가 전체 안전을 해치지 않는 설계</div>
+        </div>
+        <div data-mission="logistics" style="background:var(--uos-surface);border-top:7px solid #d49b00;border-radius:4px;padding:24px 26px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px"><div style="font-size:28.6px;font-weight:800">물류</div><div style="font-size:20.5337px;color:var(--uos-ink-muted)">배송 · 긴급 수송</div></div>
+          <div style="font-size:22px;line-height:1.5"><strong>탑재중량 · 항속거리 · 안전한 착륙</strong></div>
+          <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">화물 무게가 늘어도 남는 추력과 배터리, 경로 이탈·통신 두절에 대응하는 안전장치</div>
+        </div>
+        <div data-mission="safety" style="background:var(--uos-surface);border-top:7px solid #23836f;border-radius:4px;padding:24px 26px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px"><div style="font-size:28.6px;font-weight:800">안전감시</div><div style="font-size:20.5337px;color:var(--uos-ink-muted)">재난 · 시설 점검</div></div>
+          <div style="font-size:22px;line-height:1.5"><strong>안정화 영상 · 열화상/저조도 · 내풍성</strong></div>
+          <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">사람이 접근하기 어려운 곳에서 흔들림 없이 관측하고 결과 데이터를 남기는 능력</div>
+        </div>
+        <div data-mission="defense" style="background:#eaf2fb;border-top:7px solid var(--uos-blue);border-radius:4px;padding:24px 26px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px"><div style="font-size:28.6px;font-weight:800;color:var(--uos-blue)">군사·국방</div><div style="font-size:20.5337px;color:var(--uos-ink-muted)">정찰 · 상황 인식</div></div>
+          <div style="font-size:22px;line-height:1.5"><strong>견고한 통신 · 임무 센서 · 항속성 · 이중화</strong></div>
+          <div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">간섭과 열악한 환경에서도 상태를 파악하고, 일부 고장 때 안전하게 임무를 중단하는 능력</div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="드론 사업 모델" data-screen-label="08" data-speaker-notes="드론 사업은 기체 한 대를 판매하는 데서 끝나지 않는다. 고객은 안전하게 반복되는 운용과 쓸 수 있는 데이터, 사람을 훈련하는 체계를 구매한다. 현재 우리가 가장 현실적으로 시작할 수 있는 지점은 직접 만든 비행제어 과정을 실습 교구와 교육 과정으로 묶는 일이다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="드론으로 돈을 버는 지점은 ‘비행’ 다음이다">
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);align-items:stretch;gap:12px">
+          <div style="background:var(--uos-surface);padding:24px;border-radius:4px;border-top:6px solid #8b95a5"><div style="font-size:26.4px;font-weight:800">기체</div><div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted);margin-top:10px">프레임 · 제어기 · 탑재물</div></div>
+          <div style="background:var(--uos-surface);padding:24px;border-radius:4px;border-top:6px solid #5d7fa6"><div style="font-size:26.4px;font-weight:800">운용</div><div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted);margin-top:10px">점검 · 비행 · 유지보수</div></div>
+          <div style="background:var(--uos-surface);padding:24px;border-radius:4px;border-top:6px solid #23836f"><div style="font-size:26.4px;font-weight:800">데이터</div><div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted);margin-top:10px">영상 · 지도 · 탐지 결과</div></div>
+          <div style="background:var(--uos-blue);color:#fff;padding:24px;border-radius:4px;border-top:6px solid #002f6c"><div style="font-size:26.4px;font-weight:800">교육</div><div style="font-size:20.5337px;line-height:1.45;opacity:.85;margin-top:10px">교구 · 과정 · 강사 훈련</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;flex:1">
+          <div style="border:1px solid var(--uos-rule);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:14px"><div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">맞춤 통합</div><div style="font-size:22px;line-height:1.5">임무에 맞는 기체·센서·제어 소프트웨어 구성</div><div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">제작비 + 개발비 + 유지보수</div></div>
+          <div style="border:1px solid var(--uos-rule);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:14px"><div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">운용·데이터 서비스</div><div style="font-size:22px;line-height:1.5">점검·촬영을 수행하고 의사결정에 쓸 결과 제공</div><div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">비행 횟수보다 결과물의 가치</div></div>
+          <div style="background:#eaf2fb;border:2px solid var(--uos-blue);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:14px"><div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">우리의 시작점 · 교육</div><div style="font-size:22px;line-height:1.5"><strong>CAD–보드–펌웨어–검증</strong> 과정을 실습 모듈로 전환</div><div style="font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)">직접 겪은 문제해결 과정이 교육 콘텐츠가 되는 구조</div></div>
+        </div>
+        <div style="font-size:22px;line-height:1.45"><strong>기체는 수단이고, 반복 가능한 문제 해결이 상품이다.</strong></div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="비행의 네 힘" data-screen-label="09" data-speaker-notes="일반적인 비행체에는 양력, 중력, 추력, 항력이 작용한다. 멀티콥터에서는 각 로터의 공기역학적 힘이 양력과 추진 역할을 함께 한다. 네 로터 추력의 벡터 합에 중력과 항력을 더한 것이 기체를 실제로 가속하는 합력이다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행의 네 힘과 쿼드콥터의 해석">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:.78fr 1.22fr;gap:32px">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="background:#eaf2fb;border-left:6px solid var(--uos-blue);padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">양력 Lift</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">기체를 위로 지지하는 공기력</div></div>
+          <div style="background:var(--uos-surface);border-left:6px solid #6f7f92;padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">중력 Weight</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">질량중심에서 아래로 작용하는 mg</div></div>
+          <div style="background:var(--uos-surface);border-left:6px solid #d49b00;padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">추력 Thrust</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">비행체를 진행 방향으로 미는 힘</div></div>
+          <div style="background:var(--uos-surface);border-left:6px solid #b04a55;padding:18px 22px;border-radius:4px"><div style="font-size:24.2px;font-weight:800">항력 Drag</div><div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted)">공기와의 상대운동을 방해하는 힘</div></div>
+        </div>
+        <div style="background:#f7f9fc;border-radius:4px;padding:18px;display:flex;flex-direction:column;gap:10px;min-height:0">
+          <svg data-force-sum role="img" aria-label="네 로터 추력의 벡터 합과 중력 및 항력이 만드는 쿼드콥터의 합력" viewBox="0 0 690 390" style="width:100%;flex:1;min-height:0">
+            <defs>
+              <marker id="force-blue-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#004094"/></marker>
+              <marker id="force-gray-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#5f6874"/></marker>
+              <marker id="force-red-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b04a55"/></marker>
+            </defs>
+            <g stroke="#687588" stroke-width="14" stroke-linecap="round"><path d="M245 245 L445 115"/><path d="M245 115 L445 245"/></g>
+            <g fill="#fff" stroke="#004094" stroke-width="7"><circle cx="245" cy="115" r="42"/><circle cx="445" cy="115" r="42"/><circle cx="245" cy="245" r="42"/><circle cx="445" cy="245" r="42"/></g>
+            <rect x="302" y="137" width="86" height="86" rx="18" fill="#004094"/><circle cx="345" cy="180" r="10" fill="#fff" opacity=".9"/>
+            <g stroke="#004094" stroke-width="7" marker-end="url(#force-blue-arrow)"><path d="M245 94 V28"/><path d="M445 94 V28"/><path d="M245 224 V158"/><path d="M445 224 V158"/></g>
+            <text x="190" y="25" font-size="20" font-weight="700" fill="#004094">T₁</text><text x="465" y="25" font-size="20" font-weight="700" fill="#004094">T₂</text><text x="190" y="176" font-size="20" font-weight="700" fill="#004094">T₃</text><text x="465" y="176" font-size="20" font-weight="700" fill="#004094">T₄</text>
+            <path d="M345 132 V28" stroke="#004094" stroke-width="10" marker-end="url(#force-blue-arrow)"/>
+            <text x="359" y="56" font-size="22" font-weight="800" fill="#004094">T⃗Σ = T⃗₁ + T⃗₂ + T⃗₃ + T⃗₄</text>
+            <path d="M345 225 V350" stroke="#5f6874" stroke-width="9" marker-end="url(#force-gray-arrow)"/>
+            <text x="365" y="344" font-size="22" font-weight="800" fill="#5f6874">W⃗ = mg</text>
+            <path d="M175 180 H65" stroke="#b04a55" stroke-width="7" marker-end="url(#force-red-arrow)"/>
+            <text x="66" y="211" font-size="20" font-weight="700" fill="#b04a55">D⃗</text>
+          </svg>
+          <div style="font-size:22px;line-height:1.45;text-align:center"><strong>F⃗합 = T⃗Σ + W⃗ + D⃗</strong><br><span style="font-size:20.5337px;color:var(--uos-ink-muted)">멀티콥터의 로터 힘은 양력과 추진 역할을 함께 수행</span></div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="네 로터를 같은 비율로 바꾸면 총추력이 변해 상승, 호버링, 하강이 결정된다. 앞뒤나 좌우 로터의 추력 차이는 모멘트 암을 통해 롤과 피치 토크를 만든다. 서로 반대 방향으로 도는 로터 두 쌍의 반작용 토크 균형을 깨면 요가 발생한다. 헬리콥터는 메인로터의 토크를 꼬리로터가 상쇄하지만, 쿼드콥터는 시계와 반시계 로터 쌍이 서로 상쇄한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="네 추력의 합력과 차동 토크">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.05fr;gap:28px">
+        <div style="display:flex;flex-direction:column;gap:13px">
+          <div style="background:#eaf2fb;border-left:6px solid var(--uos-blue);border-radius:4px;padding:18px 22px"><div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">합력 · 상승 / 호버링 / 하강</div><div style="font-size:22px;line-height:1.45;margin-top:8px">네 로터를 함께 조절<br><strong>TΣ &gt; mg · TΣ = mg · TΣ &lt; mg</strong></div></div>
+          <div style="background:var(--uos-surface);border-left:6px solid #23836f;border-radius:4px;padding:18px 22px"><div style="font-size:24.2px;font-weight:800">롤·피치 토크 · 전후좌우 이동</div><div style="font-size:22px;line-height:1.45;margin-top:8px">한쪽 추력을 키워 기체를 기울이고<br>기울어진 T⃗Σ의 수평 성분으로 이동</div></div>
+          <div style="background:var(--uos-surface);border-left:6px solid #d49b00;border-radius:4px;padding:18px 22px"><div style="font-size:24.2px;font-weight:800">요 토크 · 제자리 회전</div><div style="font-size:22px;line-height:1.45;margin-top:8px">CW·CCW 로터 쌍의 반작용 토크 차이로 회전</div></div>
+          <div style="border:1px solid var(--uos-rule);border-radius:4px;padding:16px 20px;font-size:20.5337px;line-height:1.45"><strong>헬리콥터</strong> · 메인로터 토크를 꼬리로터가 상쇄<br><strong>쿼드콥터</strong> · CW 2개와 CCW 2개가 서로 상쇄</div>
+        </div>
+        <div style="background:#f7f9fc;border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:8px;min-height:0">
+          <svg data-control-mixing role="img" aria-label="네 프로펠러의 출력 배분으로 힘과 토크를 만드는 쿼드콥터 제어 혼합" viewBox="0 0 620 420" style="width:100%;flex:1;min-height:0">
+            <defs>
+              <marker id="mix-blue-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#004094"/></marker>
+              <marker id="mix-gold-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#d49b00"/></marker>
+            </defs>
+            <g stroke="#6d7888" stroke-width="18" stroke-linecap="round"><path d="M165 335 L455 85"/><path d="M165 85 L455 335"/></g>
+            <rect x="262" y="162" width="96" height="96" rx="20" fill="#004094"/><path d="M286 210 H334" stroke="#fff" stroke-width="7"/><path d="M310 186 V234" stroke="#fff" stroke-width="7"/>
+            <g fill="#fff" stroke="#004094" stroke-width="8"><circle cx="165" cy="85" r="55"/><circle cx="455" cy="85" r="55"/><circle cx="165" cy="335" r="55"/><circle cx="455" cy="335" r="55"/></g>
+            <g font-size="22" font-weight="800" text-anchor="middle" fill="#004094"><text x="165" y="92">M1 · CW</text><text x="455" y="92">M2 · CCW</text><text x="165" y="342">M3 · CCW</text><text x="455" y="342">M4 · CW</text></g>
+            <g fill="none" stroke="#d49b00" stroke-width="6" marker-end="url(#mix-gold-arrow)"><path d="M113 85 A52 52 0 0 1 165 33"/><path d="M507 85 A52 52 0 0 0 455 33"/><path d="M113 335 A52 52 0 0 0 165 387"/><path d="M507 335 A52 52 0 0 1 455 387"/></g>
+            <path d="M310 155 V35" stroke="#004094" stroke-width="9" marker-end="url(#mix-blue-arrow)"/><text x="330" y="60" font-size="24" font-weight="800" fill="#004094">T⃗Σ</text>
+            <path d="M242 210 A68 68 0 1 1 281 271" fill="none" stroke="#d49b00" stroke-width="7" marker-end="url(#mix-gold-arrow)"/><text x="370" y="230" font-size="22" font-weight="800" fill="#8a6100">τyaw</text>
+          </svg>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;font-size:20.5337px;line-height:1.35">
+            <div style="background:#eaf2fb;padding:12px;border-radius:4px"><strong>Collective</strong><br>네 개 함께</div>
+            <div style="background:#e7f3ef;padding:12px;border-radius:4px"><strong>Roll · Pitch</strong><br>앞뒤·좌우 차이</div>
+            <div style="background:#fff5d9;padding:12px;border-radius:4px"><strong>Yaw</strong><br>CW·CCW 차이</div>
+          </div>
+        </div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="단일에서 군집으로" data-screen-label="11" data-speaker-notes="여러 대를 띄우는 일은 단일 드론 제어기의 복사가 아니다. 각 기체의 자세와 위치 제어 위에 공통 좌표와 시간, 기체 간 통신, 대형과 임무 분배, 충돌 회피, 집단 고장 대응이 추가된다. 우리 프로젝트에서 군집 비행은 현재 성과가 아니라 단일 기체 검증 다음의 후속 목표이다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="한 대가 날아도, 여러 대는 시스템 문제이다">
+      <div data-swarm-expansion data-status="future-goal" style="width:100%;height:100%;display:flex;flex-direction:column;gap:18px">
+        <div style="display:grid;grid-template-columns:.72fr 72px 1.5fr;gap:14px;align-items:stretch;flex:1;min-height:0">
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;justify-content:center;gap:18px">
+            <div style="font-size:20.5337px;opacity:.82">단일 기체의 기반</div>
+            <div style="font-size:30.8px;font-weight:800;line-height:1.25">자세 안정화<br>위치 추정<br>비상정지</div>
+            <div style="font-size:20.5337px;line-height:1.45;opacity:.85">각 기체가 스스로 안전하게 날 수 있어야 하는 선행 조건</div>
+          </div>
+          <div style="display:grid;place-items:center;font-size:46px;color:var(--uos-blue)">→</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr);gap:12px">
+            <div data-swarm-layer="frame-time" style="background:var(--uos-surface);border-left:6px solid #718096;border-radius:4px;padding:18px"><div style="font-size:22px;font-weight:800">공통 좌표·시간</div><div style="font-size:20.5337px;color:var(--uos-ink-muted);margin-top:6px">같은 위치와 시각 기준</div></div>
+            <div data-swarm-layer="communication" style="background:var(--uos-surface);border-left:6px solid #5d7fa6;border-radius:4px;padding:18px"><div style="font-size:22px;font-weight:800">기체 간 통신</div><div style="font-size:20.5337px;color:var(--uos-ink-muted);margin-top:6px">상태 공유와 지연 관리</div></div>
+            <div data-swarm-layer="localization" style="background:var(--uos-surface);border-left:6px solid #23836f;border-radius:4px;padding:18px"><div style="font-size:22px;font-weight:800">상대·전역 위치</div><div style="font-size:20.5337px;color:var(--uos-ink-muted);margin-top:6px">기체 사이 거리까지 추정</div></div>
+            <div data-swarm-layer="planning" style="background:#eaf2fb;border-left:6px solid var(--uos-blue);border-radius:4px;padding:18px"><div style="font-size:22px;font-weight:800">대형·임무·경로</div><div style="font-size:20.5337px;color:var(--uos-ink-muted);margin-top:6px">역할 분배와 동시 계획</div></div>
+            <div data-swarm-layer="avoidance" style="background:#fff5d9;border-left:6px solid #d49b00;border-radius:4px;padding:18px"><div style="font-size:22px;font-weight:800">충돌 회피</div><div style="font-size:20.5337px;color:var(--uos-ink-muted);margin-top:6px">경로 충돌과 간격 관리</div></div>
+            <div data-swarm-layer="group-safety" style="background:#f8e9eb;border-left:6px solid #b04a55;border-radius:4px;padding:18px"><div style="font-size:22px;font-weight:800">집단 안전장치</div><div style="font-size:20.5337px;color:var(--uos-ink-muted);margin-top:6px">한 대의 고장을 전체와 격리</div></div>
+          </div>
+        </div>
+        <div style="background:#fff5d9;border-left:6px solid #d49b00;padding:18px 22px;font-size:22px;line-height:1.45"><strong>현재 상태 · 후속 확장 목표</strong> — 단일 기체 검증 후 sim-to-real 경로 계획과 군집 제어로 확장할 계획이며, 아직 구현·비행 검증된 성과는 아니다.</div>
+      </div>
+    </x-import>
+  </section>
+
+  <section data-label="불안정" data-screen-label="12" data-speaker-notes="작은 토크 차이와 외란이 각속도를 만들면, 자세 제어기는 모터 출력을 바꿔 그 움직임을 계속 되돌린다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="드론은 스스로 서 있지 못한다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:28px">
         <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1000px">작은 토크 차이와 외란으로 기울기가 생기면, 자세 제어가 없을 때 그 각속도를 스스로 줄일 장치가 없다.</div>
@@ -111,7 +330,7 @@
     </x-import>
   </section>
 
-  <section data-label="FC의 일" data-screen-label="06" data-speaker-notes="네 단계가 1초에 1000번 반복된다. 이 고리 어디 한 곳이라도 부호가 뒤집히면, 바로잡는 대신 넘어뜨리는 방향으로 힘이 들어간다." style="background:#fff">
+  <section data-label="FC의 일" data-screen-label="13" data-speaker-notes="네 단계가 1초에 1000번 반복된다. 이 고리 어디 한 곳이라도 부호가 뒤집히면, 바로잡는 대신 넘어뜨리는 방향으로 힘이 들어간다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행 제어 컴퓨터가 하는 일">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:.76fr 1.24fr;gap:36px;align-items:stretch">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -144,7 +363,7 @@
     </x-import>
   </section>
 
-  <section data-label="직접 만든 이유" data-screen-label="07" data-speaker-notes="기성 FC는 빠르게 운용할 수 있지만, 오류 주입과 제어 경로 계측에는 별도의 수정 환경이 필요하다." style="background:#fff">
+  <section data-label="직접 만든 이유" data-screen-label="14" data-speaker-notes="기성 FC는 빠르게 운용할 수 있지만, 오류 주입과 제어 경로 계측에는 별도의 수정 환경이 필요하다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="시중 제품을 쓰지 않은 이유">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:40px;align-items:stretch">
         <div style="display:flex;flex-direction:column;justify-content:center">
@@ -171,7 +390,7 @@
     </x-import>
   </section>
 
-  <section data-label="세 개의 층" data-screen-label="08" data-speaker-notes="기체, 보드, 코드. 세 층 모두 자체 제작이다. 사진은 모두 실제 우리 것이다." style="background:#fff">
+  <section data-label="세 개의 층" data-screen-label="15" data-speaker-notes="기체, 보드, 코드. 세 층 모두 자체 제작이다. 사진은 모두 실제 우리 것이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="우리가 만든 세 개의 층">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
         <div style="display:flex;flex-direction:column;gap:14px;min-height:0">
@@ -199,7 +418,7 @@
     </x-import>
   </section>
 
-  <section data-label="다섯 국면" data-screen-label="09" data-speaker-notes="이 순서가 오늘 세션 3의 목차이다. 각 국면이 그 앞 국면의 결과에 의존한다." style="background:#fff">
+  <section data-label="다섯 국면" data-screen-label="16" data-speaker-notes="이 순서가 오늘 세션 3의 목차이다. 각 국면이 그 앞 국면의 결과에 의존한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="개발 다섯 국면">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="font-size:22px;line-height:1.55;color:var(--uos-ink-muted);max-width:960px">순서가 중요하다. 센서 추정을 먼저 신뢰할 수 있게 만들고, 그것을 검증할 체계를 세운 다음, 그 체계가 낸 숫자로 게인을 정했다.</div>
@@ -239,7 +458,7 @@
     </x-import>
   </section>
 
-  <section data-label="사업 근거" data-screen-label="10" data-speaker-notes="사업 연결은 이 장과 다음 장에서만 짚고, 이후에는 기술 구현으로 넘어간다. 교육 아이템의 근거는 재사용할 수 있는 개발 기록과 SIL 환경이다." style="background:#fff">
+  <section data-label="사업 근거" data-screen-label="17" data-speaker-notes="사업 연결은 이 장과 다음 장에서만 짚고, 이후에는 기술 구현으로 넘어간다. 교육 아이템의 근거는 재사용할 수 있는 개발 기록과 SIL 환경이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기술이 교육 아이템이 되는 지점">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;flex:1;min-height:0">
@@ -276,7 +495,7 @@
     </x-import>
   </section>
 
-  <section data-label="교육 아이템" data-screen-label="11" data-speaker-notes="지금은 완성 상품이 아니라 시범 구성이다. 실제 기술 과정을 선생님과 참가자가 따라갈 수 있는 단위로 나눠 두었다." style="background:#fff">
+  <section data-label="교육 아이템" data-screen-label="18" data-speaker-notes="지금은 완성 상품이 아니라 시범 구성이다. 실제 기술 과정을 선생님과 참가자가 따라갈 수 있는 단위로 나눠 두었다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기술 발표를 교육 모듈로 바꾸는 방법">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 330px;gap:36px;align-items:stretch">
         <div style="display:flex;flex-direction:column;justify-content:center">
@@ -303,7 +522,7 @@
     </x-import>
   </section>
 
-  <section data-label="가져갈 것" data-screen-label="12" data-speaker-notes="여기까지가 의의 부분이다. 다음부터 실제 하드웨어를 보겠다." style="background:#fff">
+  <section data-label="가져갈 것" data-screen-label="19" data-speaker-notes="여기까지가 의의 부분이다. 다음부터 실제 하드웨어를 보겠다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="오늘 가져갈 것 세 가지">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;gap:30px">
         <div style="display:grid;grid-template-columns:180px 1fr;gap:28px;border-top:6px solid var(--uos-blue);padding-top:22px">
@@ -322,12 +541,12 @@
     </x-import>
   </section>
 
-  <section data-label="02 하드웨어" data-screen-label="13" data-speaker-notes="두 번째 세션. 손으로 만든 부분이다." style="background:#fff">
+  <section data-label="02 하드웨어" data-screen-label="20" data-speaker-notes="두 번째 세션. 손으로 만든 부분이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" chapter-no="02" title="하드웨어
 기체와 보드를 직접 만들다"></x-import>
   </section>
 
-  <section data-label="전체 구성" data-screen-label="14" data-speaker-notes="왼쪽에서 오른쪽으로 힘이 흐르고, 아래에서 위로 정보가 올라온다. 센서에서 모터까지 한 장이다." style="background:#fff">
+  <section data-label="전체 구성" data-screen-label="21" data-speaker-notes="왼쪽에서 오른쪽으로 힘이 흐르고, 아래에서 위로 정보가 올라온다. 센서에서 모터까지 한 장이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="하드웨어 전체 구성">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:flex;align-items:stretch;gap:12px">
@@ -375,7 +594,7 @@
     </x-import>
   </section>
 
-  <section data-label="부품 구성" data-screen-label="15" data-speaker-notes="구동계는 초기 선정을 유지했고, MCU와 센서, 통신 방식은 전부 교체됐다." style="background:#fff">
+  <section data-label="부품 구성" data-screen-label="22" data-speaker-notes="구동계는 초기 선정을 유지했고, MCU와 센서, 통신 방식은 전부 교체됐다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="부품 구성">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px">
@@ -434,7 +653,7 @@
     </x-import>
   </section>
 
-  <section data-label="프레임 설계" data-screen-label="16" data-speaker-notes="암은 세 번 고쳤다. 처음에는 단순 막대였고, 무게를 줄이면서 강성이 떨어져 트러스 구조로 갔다." style="background:#fff">
+  <section data-label="프레임 설계" data-screen-label="23" data-speaker-notes="암은 세 번 고쳤다. 처음에는 단순 막대였고, 무게를 줄이면서 강성이 떨어져 트러스 구조로 갔다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기체 프레임 설계 — 트러스 암">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.15fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -458,7 +677,7 @@
     </x-import>
   </section>
 
-  <section data-label="바디 플레이트" data-screen-label="17" data-speaker-notes="상하판을 분리하면 배선과 배터리를 사이에 넣을 수 있고, 보드가 진동에서 조금 멀어진다." style="background:#fff">
+  <section data-label="바디 플레이트" data-screen-label="24" data-speaker-notes="상하판을 분리하면 배선과 배터리를 사이에 넣을 수 있고, 보드가 진동에서 조금 멀어진다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="바디 플레이트와 경량화">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.15fr 1fr;gap:32px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;min-height:0">
@@ -481,7 +700,7 @@
     </x-import>
   </section>
 
-  <section data-label="반복 제작" data-screen-label="18" data-speaker-notes="사진에 있는 부품들은 모두 버린 것이다. 설계는 출력해서 손으로 만져봐야 판단이 된다." style="background:#fff">
+  <section data-label="반복 제작" data-screen-label="25" data-speaker-notes="사진에 있는 부품들은 모두 버린 것이다. 설계는 출력해서 손으로 만져봐야 판단이 된다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="3D 프린팅 반복 제작">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.3fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
@@ -503,7 +722,7 @@
     </x-import>
   </section>
 
-  <section data-label="조립 결과" data-screen-label="19" data-speaker-notes="왼쪽이 설계, 오른쪽이 실물이다. 실물 사진의 전선 뭉치가 설계에서 가장 과소평가했던 부분이다." style="background:#fff">
+  <section data-label="조립 결과" data-screen-label="26" data-speaker-notes="왼쪽이 설계, 오른쪽이 실물이다. 실물 사진의 전선 뭉치가 설계에서 가장 과소평가했던 부분이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="조립 결과 — 설계와 실물">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:24px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
@@ -522,7 +741,7 @@
     </x-import>
   </section>
 
-  <section data-label="보드 회로" data-screen-label="20" data-speaker-notes="회로도는 핀 하나하나가 펌웨어 상수와 1:1로 대응한다. 여기서 한 칸만 틀리면 엉뚱한 모터가 돈다." style="background:#fff">
+  <section data-label="보드 회로" data-screen-label="27" data-speaker-notes="회로도는 핀 하나하나가 펌웨어 상수와 1:1로 대응한다. 여기서 한 칸만 틀리면 엉뚱한 모터가 돈다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="자체 제작 비행 제어 보드 — 회로">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -544,7 +763,7 @@
     </x-import>
   </section>
 
-  <section data-label="보드 레이아웃" data-screen-label="21" data-speaker-notes="모터 커넥터를 한쪽에 모아 암 방향으로 배선을 짧게 뺐다. 오른쪽은 실제 제작된 보드이다." style="background:#fff">
+  <section data-label="보드 레이아웃" data-screen-label="28" data-speaker-notes="모터 커넥터를 한쪽에 모아 암 방향으로 배선을 짧게 뺐다. 오른쪽은 실제 제작된 보드이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="보드 레이아웃과 실물">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
@@ -569,7 +788,7 @@
     </x-import>
   </section>
 
-  <section data-label="1차 보드의 교훈" data-screen-label="22" data-speaker-notes="첫 보드는 신호선 배치가 빽빽했고 디버깅 접근이 나빴다. 지금 보드는 그걸 고친 결과이다. 차기 PCB는 주문 진행 중이며, 납땜 작업과 알리 부품 납기는 실제 제작 일정의 위험으로 관리하고 있다." style="background:#fff">
+  <section data-label="1차 보드의 교훈" data-screen-label="29" data-speaker-notes="첫 보드는 신호선 배치가 빽빽했고 디버깅 접근이 나빴다. 지금 보드는 그걸 고친 결과이다. 차기 PCB는 주문 진행 중이며, 납땜 작업과 알리 부품 납기는 실제 제작 일정의 위험으로 관리하고 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="1차 보드에서 배운 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.2fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
@@ -608,7 +827,7 @@
     </x-import>
   </section>
 
-  <section data-label="핀 배치" data-screen-label="23" data-speaker-notes="이 표와 아래 믹서 식이 하드웨어와 소프트웨어의 접점이다. 벤치에서 한 모터씩 저속으로 돌려 이 매핑을 물리적으로 확인했다." style="background:#fff">
+  <section data-label="핀 배치" data-screen-label="30" data-speaker-notes="이 표와 아래 믹서 식이 하드웨어와 소프트웨어의 접점이다. 벤치에서 한 모터씩 저속으로 돌려 이 매핑을 물리적으로 확인했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="GPIO 핀 배치와 모터 믹서">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.15fr 1fr;gap:32px">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px;align-self:start">
@@ -662,7 +881,7 @@
     </x-import>
   </section>
 
-  <section data-label="벤치 안전" data-screen-label="24" data-speaker-notes="이 규칙은 오늘 진행자 시연 준비에도 그대로 적용된다. 특히 프로펠러 제거 원칙." style="background:#fff">
+  <section data-label="벤치 안전" data-screen-label="31" data-speaker-notes="이 규칙은 오늘 진행자 시연 준비에도 그대로 적용된다. 특히 프로펠러 제거 원칙." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="전원 계통과 벤치 안전 규칙">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -685,12 +904,12 @@
     </x-import>
   </section>
 
-  <section data-label="03 소프트웨어" data-screen-label="25" data-speaker-notes="세 번째 세션. 여기가 오늘의 본론이다." style="background:#fff">
+  <section data-label="03 소프트웨어" data-screen-label="32" data-speaker-notes="세 번째 세션. 여기가 오늘의 본론이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" chapter-no="03" title="제어 소프트웨어
 측정으로 값을 정하기까지"></x-import>
   </section>
 
-  <section data-label="제어 흐름" data-screen-label="26" data-speaker-notes="바깥 루프가 목표 각속도를 만들고, 안쪽 루프가 그 각속도를 따라간다. 안쪽이 네 배 빠르다." style="background:#fff">
+  <section data-label="제어 흐름" data-screen-label="33" data-speaker-notes="바깥 루프가 목표 각속도를 만들고, 안쪽 루프가 그 각속도를 따라간다. 안쪽이 네 배 빠르다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="제어 소프트웨어 전체 흐름">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:22px">
         <div style="display:flex;align-items:stretch;gap:10px">
@@ -742,7 +961,7 @@
     </x-import>
   </section>
 
-  <section data-label="세션 3 순서" data-screen-label="27" data-speaker-notes="여섯 덩어리이다. 각 덩어리마다 실패한 시도가 하나씩 나온다." style="background:#fff">
+  <section data-label="세션 3 순서" data-screen-label="34" data-speaker-notes="여섯 덩어리이다. 각 덩어리마다 실패한 시도가 하나씩 나온다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="세션 3의 순서">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:24px 40px;align-content:center">
         <div style="display:flex;gap:20px;align-items:baseline">
@@ -773,7 +992,7 @@
     </x-import>
   </section>
 
-  <section data-label="각도 추정" data-screen-label="28" data-speaker-notes="이 기체의 IMU는 기울기 각도를 직접 출력하지 않는다. 가속도와 각속도에서 기울기를 추정한다." style="background:#fff">
+  <section data-label="각도 추정" data-screen-label="35" data-speaker-notes="이 기체의 IMU는 기울기 각도를 직접 출력하지 않는다. 가속도와 각속도에서 기울기를 추정한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="이 기체는 기울기를 두 센서로 추정한다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0;justify-content:center">
@@ -795,7 +1014,7 @@
     </x-import>
   </section>
 
-  <section data-label="반대되는 약점" data-screen-label="29" data-speaker-notes="짧은 구간에는 자이로가, 긴 구간에는 가속도계의 중력 기준이 유리하다. 두 센서는 서로 다른 시간대에서 약점이 드러난다." style="background:#fff">
+  <section data-label="반대되는 약점" data-screen-label="36" data-speaker-notes="짧은 구간에는 자이로가, 긴 구간에는 가속도계의 중력 기준이 유리하다. 두 센서는 서로 다른 시간대에서 약점이 드러난다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 방법의 반대되는 약점">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.12fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:20px;justify-content:center">
@@ -817,7 +1036,7 @@
     </x-import>
   </section>
 
-  <section data-label="상보필터" data-screen-label="30" data-speaker-notes="식은 한 줄이지만 α는 고정값이 아니다. 현재 펌웨어는 가속도 크기가 1g에서 얼마나 벗어났는지에 따라 0.999, 0.9995, 0.9998을 고른다." style="background:#fff">
+  <section data-label="상보필터" data-screen-label="37" data-speaker-notes="식은 한 줄이지만 α는 고정값이 아니다. 현재 펌웨어는 가속도 크기가 1g에서 얼마나 벗어났는지에 따라 0.999, 0.9995, 0.9998을 고른다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="상보필터의 원리">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="background:var(--uos-surface);border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:10px">
@@ -836,7 +1055,7 @@
     </x-import>
   </section>
 
-  <section data-label="적응형 필터" data-screen-label="31" data-speaker-notes="가속도계를 믿을 수 있는 순간과 믿을 수 없는 순간을 구분하는 장치이다. 판단 기준은 가속도의 크기." style="background:#fff">
+  <section data-label="적응형 필터" data-screen-label="38" data-speaker-notes="가속도계를 믿을 수 있는 순간과 믿을 수 없는 순간을 구분하는 장치이다. 판단 기준은 가속도의 크기." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="적응형 상보필터 — 신뢰도를 상황에 따라 바꾼다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1020px">가속도계는 <strong>중력만 걸려 있을 때</strong> 정확하다. 지금 그런 상황인지 판단할 방법이 필요하다.</div>
@@ -857,7 +1076,7 @@
     </x-import>
   </section>
 
-  <section data-label="알파 계산" data-screen-label="32" data-speaker-notes="시간상수 τ를 먼저 정하면 계산 주기 dt에 맞는 α가 결정된다. 1kHz에서 τ가 0.5초이면 약 0.998, 5초이면 약 0.9998이다." style="background:#fff">
+  <section data-label="알파 계산" data-screen-label="39" data-speaker-notes="시간상수 τ를 먼저 정하면 계산 주기 dt에 맞는 α가 결정된다. 1kHz에서 τ가 0.5초이면 약 0.998, 5초이면 약 0.9998이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="알파 값은 시간상수와 계산 주기로 정한다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:24px">
@@ -882,7 +1101,7 @@
     </x-import>
   </section>
 
-  <section data-label="문제 1 부호 반전" data-screen-label="33" data-speaker-notes="증상은 엉뚱했다. 기울이지도 않았는데 과도 기울기 경보가 떴다. 원인은 두 센서의 부호가 반대여서 평균이 0이 된 것." style="background:#fff">
+  <section data-label="문제 1 부호 반전" data-screen-label="40" data-speaker-notes="증상은 엉뚱했다. 기울이지도 않았는데 과도 기울기 경보가 떴다. 원인은 두 센서의 부호가 반대여서 평균이 0이 된 것." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 1 — 두 IMU의 축 부호가 반대였다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 48px 1fr 48px 1fr;align-items:stretch;flex:1">
@@ -908,7 +1127,7 @@
     </x-import>
   </section>
 
-  <section data-label="문제 2 바이어스" data-screen-label="34" data-speaker-notes="정지해 있어도 자이로는 0을 내놓지 않는다. 그 작은 값이 적분되면서 각도가 흘러간다." style="background:#fff">
+  <section data-label="문제 2 바이어스" data-screen-label="41" data-speaker-notes="정지해 있어도 자이로는 0을 내놓지 않는다. 그 작은 값이 적분되면서 각도가 흘러간다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 2 — 정지 상태에서도 남는 고정 오차">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -927,7 +1146,7 @@
     </x-import>
   </section>
 
-  <section data-label="문제 3 축 변환" data-screen-label="35" data-speaker-notes="센서가 읽는 축과 기체의 축은 다르다. 변환식에서 가속도는 맞았는데 자이로만 부호가 뒤집혀 있었다." style="background:#fff">
+  <section data-label="문제 3 축 변환" data-screen-label="42" data-speaker-notes="센서가 읽는 축과 기체의 축은 다르다. 변환식에서 가속도는 맞았는데 자이로만 부호가 뒤집혀 있었다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 3 — 센서축에서 기체축으로 옮기는 과정의 부호 오류">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -943,7 +1162,7 @@
     </x-import>
   </section>
 
-  <section data-label="세 버그의 공통점" data-screen-label="36" data-speaker-notes="세 사고는 모두 센서축과 기체축의 부호 약속이 어긋난 문제였다. 게인 튜닝 전에 SIL에서 이 오류부터 검사했다." style="background:#fff">
+  <section data-label="세 버그의 공통점" data-screen-label="43" data-speaker-notes="세 사고는 모두 센서축과 기체축의 부호 약속이 어긋난 문제였다. 게인 튜닝 전에 SIL에서 이 오류부터 검사했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="세 버그의 공통점">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1020px">세 번 모두 <strong>센서축과 기체축의 부호 약속</strong>이 어긋난 문제였다.</div>
@@ -966,7 +1185,7 @@
     </x-import>
   </section>
 
-  <section data-label="실기 튜닝의 위험" data-screen-label="37" data-speaker-notes="게인 미확정 상태에서 실기 튜닝을 반복하면 기체 파손 위험이 크다. SIL로 부호와 게인 범위를 먼저 좁혔다." style="background:#fff">
+  <section data-label="실기 튜닝의 위험" data-screen-label="44" data-speaker-notes="게인 미확정 상태에서 실기 튜닝을 반복하면 기체 파손 위험이 크다. SIL로 부호와 게인 범위를 먼저 좁혔다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="게인을 실기로 찾는 것의 문제">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:36px;align-items:stretch">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -985,7 +1204,7 @@
     </x-import>
   </section>
 
-  <section data-label="SIL이란" data-screen-label="38" data-speaker-notes="핵심은 제어 코드를 베끼지 않고 그대로 가져왔다는 점이다. 물리 계산만 새로 쓴다." style="background:#fff">
+  <section data-label="SIL이란" data-screen-label="45" data-speaker-notes="핵심은 제어 코드를 베끼지 않고 그대로 가져왔다는 점이다. 물리 계산만 새로 쓴다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="SIL — 컴퓨터 안에 기체를 만든다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
@@ -1017,7 +1236,7 @@
     </x-import>
   </section>
 
-  <section data-label="SIL 물리 흐름" data-screen-label="39" data-speaker-notes="가상 기체는 정답을 알고 있다. 그 정답에서 가짜 센서값을 만들어 제어 코드에 넣는다." style="background:#fff">
+  <section data-label="SIL 물리 흐름" data-screen-label="46" data-speaker-notes="가상 기체는 정답을 알고 있다. 그 정답에서 가짜 센서값을 만들어 제어 코드에 넣는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="SIL의 계산 흐름">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:22px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
@@ -1052,7 +1271,7 @@
     </x-import>
   </section>
 
-  <section data-label="SIL 1ms 폐루프" data-screen-label="40" data-speaker-notes="실제 하니스는 비행 펌웨어 파일을 테스트에 직접 포함한다. 실제 pid_task가 vTaskDelayUntil에 도달할 때마다 훅이 직전 모터 출력으로 물리를 적분하고 듀얼 IMU 원시값을 만든다. 정상 S1은 초기 롤 8도와 피치 마이너스 6도에서 수렴했고, 롤 배분 부호를 뒤집은 빌드는 같은 판정에서 실패했다." style="background:#fff">
+  <section data-label="SIL 1ms 폐루프" data-screen-label="47" data-speaker-notes="실제 하니스는 비행 펌웨어 파일을 테스트에 직접 포함한다. 실제 pid_task가 vTaskDelayUntil에 도달할 때마다 훅이 직전 모터 출력으로 물리를 적분하고 듀얼 IMU 원시값을 만든다. 정상 S1은 초기 롤 8도와 피치 마이너스 6도에서 수렴했고, 롤 배분 부호를 뒤집은 빌드는 같은 판정에서 실패했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 SIL은 펌웨어와 물리 모델을 1ms마다 연결한다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:18px">
         <div style="display:grid;grid-template-columns:1fr 44px 1fr;align-items:stretch">
@@ -1115,7 +1334,7 @@
     </x-import>
   </section>
 
-  <section data-label="부호 반전 주입 결과" data-screen-label="41" data-speaker-notes="SIL_INJECT_SIGN_FAULT 조건에서 최대 롤 각도 1,292° 발산을 검출했다. 확인한 범위는 이 부호 반전 오류 유형이다." style="background:#fff">
+  <section data-label="부호 반전 주입 결과" data-screen-label="48" data-speaker-notes="SIL_INJECT_SIGN_FAULT 조건에서 최대 롤 각도 1,292° 발산을 검출했다. 확인한 범위는 이 부호 반전 오류 유형이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="부호 반전 주입 테스트 결과">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1151,7 +1370,7 @@
     </x-import>
   </section>
 
-  <section data-label="P항의 한계" data-screen-label="42" data-speaker-notes="일정한 외란이 계속되고 적분항이 없으면 P 제어만으로 정상상태 오차가 남는다." style="background:#fff">
+  <section data-label="P항의 한계" data-screen-label="49" data-speaker-notes="일정한 외란이 계속되고 적분항이 없으면 P 제어만으로 정상상태 오차가 남는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="P 항이 남기는 오차">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1171,7 +1390,7 @@
     </x-import>
   </section>
 
-  <section data-label="I항의 역할" data-screen-label="43" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해준다." style="background:#fff">
+  <section data-label="I항의 역할" data-screen-label="50" data-speaker-notes="I항은 '계속 기울어져 있었다'는 사실을 기억해서 힘을 더해준다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="I 항의 역할 — 남은 오차를 기억한다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.14fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1196,7 +1415,7 @@
     </x-import>
   </section>
 
-  <section data-label="Ki 튜닝" data-screen-label="44" data-speaker-notes="측정해보니 I항이 클램프의 1.4%만 쓰고 있었다. 사실상 꺼져 있던 셈이다." style="background:#fff">
+  <section data-label="Ki 튜닝" data-screen-label="51" data-speaker-notes="측정해보니 I항이 클램프의 1.4%만 쓰고 있었다. 사실상 꺼져 있던 셈이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="Ki 게인 튜닝 — 측정하고 나서 올렸다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 42px 1fr 42px 1fr;align-items:stretch;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:22px 0">
@@ -1229,7 +1448,7 @@
     </x-import>
   </section>
 
-  <section data-label="캐스케이드 구조" data-screen-label="45" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있다." style="background:#fff">
+  <section data-label="캐스케이드 구조" data-screen-label="52" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="각도·각속도 캐스케이드 제어">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.16fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1251,7 +1470,7 @@
     </x-import>
   </section>
 
-  <section data-label="게인 설정값" data-screen-label="46" data-speaker-notes="현재 펌웨어에 들어 있는 값이다. 지상국에서 gains 명령으로 읽어 확인한다." style="background:#fff">
+  <section data-label="게인 설정값" data-screen-label="53" data-speaker-notes="현재 펌웨어에 들어 있는 값이다. 지상국에서 gains 명령으로 읽어 확인한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 게인 설정값">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px">
@@ -1307,7 +1526,7 @@
     </x-import>
   </section>
 
-  <section data-label="Yaw 기준점" data-screen-label="47" data-speaker-notes="롤과 피치는 선형 가속이 크지 않은 구간에서 중력을 장기 기준으로 쓸 수 있지만, Yaw는 중력만으로 알 수 없다." style="background:#fff">
+  <section data-label="Yaw 기준점" data-screen-label="54" data-speaker-notes="롤과 피치는 선형 가속이 크지 않은 구간에서 중력을 장기 기준으로 쓸 수 있지만, Yaw는 중력만으로 알 수 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="좌우 회전(Yaw)은 중력으로 기준을 잡을 수 없다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
@@ -1339,7 +1558,7 @@
     </x-import>
   </section>
 
-  <section data-label="헤딩 고정" data-screen-label="48" data-speaker-notes="지자기센서는 나침반이다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞는다." style="background:#fff">
+  <section data-label="헤딩 고정" data-screen-label="55" data-speaker-notes="지자기센서는 나침반이다. 다만 급하게 반영하면 오히려 흔들리므로 아주 천천히 섞는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지자기센서로 헤딩 고정">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.12fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1363,7 +1582,7 @@
     </x-import>
   </section>
 
-  <section data-label="방위 융합 속도" data-screen-label="49" data-speaker-notes="앞 장에서 지자기 기준을 천천히 섞는다고 했다. 실제 코드는 1kHz 상보필터 α를 재사용하지 않고, 250Hz에서 방위 오차의 0.1%를 더해 약 4초의 시간상수를 만든다." style="background:#fff">
+  <section data-label="방위 융합 속도" data-screen-label="56" data-speaker-notes="앞 장에서 지자기 기준을 천천히 섞는다고 했다. 실제 코드는 1kHz 상보필터 α를 재사용하지 않고, 250Hz에서 방위 오차의 0.1%를 더해 약 4초의 시간상수를 만든다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="방위 융합의 실제 보정 속도">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:24px">
@@ -1407,7 +1626,7 @@
     </x-import>
   </section>
 
-  <section data-label="전류 간섭" data-screen-label="50" data-speaker-notes="새 센서를 달자 새 문제가 생겼다. 스로틀을 올리면 헤딩이 틀어졌다." style="background:#fff">
+  <section data-label="전류 간섭" data-screen-label="57" data-speaker-notes="새 센서를 달자 새 문제가 생겼다. 스로틀을 올리면 헤딩이 틀어졌다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 전류가 자기장을 오염시킨다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1020px">전류가 흐르는 전선 주변에는 자기장이 생긴다. 나침반 옆에서 큰 전류를 흘린 것과 같다.</div>
@@ -1437,7 +1656,7 @@
     </x-import>
   </section>
 
-  <section data-label="보정 결과" data-screen-label="51" data-speaker-notes="이 그래프는 실제 펌웨어 코드를 실행한 30초 SIL 결과이다. 정지 기체에 초당 0.6도의 자이로 바이어스를 넣었다. 자이로만 사용하면 오차가 시간에 비례해 18.3도까지 쌓이지만, 지자기 융합을 켜면 오차가 약 2.4도에서 더 커지지 않는다. 앞 장의 모터 전류 간섭은 별도 벤치 시험에서 100마이크로초당 3.64도에서 0.02도로 줄었다." style="background:#fff">
+  <section data-label="보정 결과" data-screen-label="58" data-speaker-notes="이 그래프는 실제 펌웨어 코드를 실행한 30초 SIL 결과이다. 정지 기체에 초당 0.6도의 자이로 바이어스를 넣었다. 자이로만 사용하면 오차가 시간에 비례해 18.3도까지 쌓이지만, 지자기 융합을 켜면 오차가 약 2.4도에서 더 커지지 않는다. 앞 장의 모터 전류 간섭은 별도 벤치 시험에서 100마이크로초당 3.64도에서 0.02도로 줄었다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="시간이 지나도 Yaw 오차를 기준 근처에 붙잡는다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.65fr .72fr;gap:30px;min-height:0">
         <figure style="margin:0;display:flex;flex-direction:column;gap:8px;min-height:0">
@@ -1502,7 +1721,7 @@
     </x-import>
   </section>
 
-  <section data-label="운용 기본값 ON" data-screen-label="52" data-speaker-notes="펌웨어 변수는 안전하게 OFF로 시작하지만, 현재 지상국은 시동 전에 검증된 기본 선택인 ON을 보낸다. 끄는 선택도 조종자에게 남겨둔다." style="background:#fff">
+  <section data-label="운용 기본값 ON" data-screen-label="59" data-speaker-notes="펌웨어 변수는 안전하게 OFF로 시작하지만, 현재 지상국은 시동 전에 검증된 기본 선택인 ON을 보낸다. 끄는 선택도 조종자에게 남겨둔다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 운용 기본값은 ON">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:22px">
@@ -1518,7 +1737,7 @@
     </x-import>
   </section>
 
-  <section data-label="태스크 워치독" data-screen-label="53" data-speaker-notes="제어 코드가 멈추면 모터는 마지막 출력으로 계속 돈다. 그것을 막는 장치이다." style="background:#fff">
+  <section data-label="태스크 워치독" data-screen-label="60" data-speaker-notes="제어 코드가 멈추면 모터는 마지막 출력으로 계속 돈다. 그것을 막는 장치이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="제어 태스크가 멈췄을 때 — 태스크 워치독">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:34px">
@@ -1552,7 +1771,7 @@
     </x-import>
   </section>
 
-  <section data-label="RC 워치독 오탐" data-screen-label="54" data-speaker-notes="조종 신호가 정상인데도 끊긴 것으로 오판한 사례이다. 원인은 뺄셈 한 줄." style="background:#fff">
+  <section data-label="RC 워치독 오탐" data-screen-label="61" data-speaker-notes="조종 신호가 정상인데도 끊긴 것으로 오판한 사례이다. 원인은 뺄셈 한 줄." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="조종 신호가 멀쩡한데 끊긴 것으로 판단한 사고">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1577,7 +1796,7 @@
     </x-import>
   </section>
 
-  <section data-label="RC 시퀀스 거부" data-screen-label="55" data-speaker-notes="조종 패킷 번호를 검사하는 부분이다. 하드웨어 없이 노트북에서 테스트로 찾았다." style="background:#fff">
+  <section data-label="RC 시퀀스 거부" data-screen-label="62" data-speaker-notes="조종 패킷 번호를 검사하는 부분이다. 하드웨어 없이 노트북에서 테스트로 찾았다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비정상 조종 패킷을 거부하기">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:22px;line-height:1.55;max-width:1020px">조종 명령에는 순번(시퀀스)이 붙는다. 늦게 도착한 패킷이나 중복 패킷을 걸러내기 위한 장치이다. 여기에 두 가지 결함이 있었다.</div>
@@ -1598,7 +1817,7 @@
     </x-import>
   </section>
 
-  <section data-label="Failsafe 전환" data-screen-label="56" data-speaker-notes="RC 신호 두절만 시간 기반 하강으로 넘긴다. 현재 종료 조건은 착지 감지가 아니라 3초 백스톱이다." style="background:#fff">
+  <section data-label="Failsafe 전환" data-screen-label="63" data-speaker-notes="RC 신호 두절만 시간 기반 하강으로 넘긴다. 현재 종료 조건은 착지 감지가 아니라 3초 백스톱이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="조종 신호가 끊기면 무엇을 해야 하는가">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
@@ -1631,7 +1850,7 @@
     </x-import>
   </section>
 
-  <section data-label="착지 판정 한계" data-screen-label="57" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류의 수신·기록 경로는 구현됐지만 실물 장착과 판정 연결은 아직 남아 있다." style="background:#fff">
+  <section data-label="착지 판정 한계" data-screen-label="64" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류의 수신·기록 경로는 구현됐지만 실물 장착과 판정 연결은 아직 남아 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="땅에 닿았는지를 어떻게 아는가">
           <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
             <div style="display:flex;flex-direction:column;gap:24px">
@@ -1650,7 +1869,7 @@
     </x-import>
   </section>
 
-  <section data-label="3901-L0X 원리" data-screen-label="58" data-speaker-notes="학생들이 알고 있는 선속도 v = 반지름 r × 각속도 ω와 연결해 설명한다. PMW3901의 광류 ω는 카메라 시야에서 바닥 무늬가 움직이는 각속도이다. VL53L0X가 잰 높이 h를 곱하면 평평한 바닥과 작은 각도 조건에서 바닥 기준 선속도 v ≈ h × ω를 얻을 수 있다." style="background:#fff">
+  <section data-label="3901-L0X 원리" data-screen-label="65" data-speaker-notes="학생들이 알고 있는 선속도 v = 반지름 r × 각속도 ω와 연결해 설명한다. PMW3901의 광류 ω는 카메라 시야에서 바닥 무늬가 움직이는 각속도이다. VL53L0X가 잰 높이 h를 곱하면 평평한 바닥과 작은 각도 조건에서 바닥 기준 선속도 v ≈ h × ω를 얻을 수 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="바닥의 이동과 높이를 한 장에서 함께 읽는다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:34px;align-items:stretch">
         <figure style="margin:0;background:#06152f;border-radius:4px;padding:20px 24px 16px;display:flex;flex-direction:column;min-height:0">
@@ -1708,7 +1927,7 @@
     </x-import>
   </section>
 
-  <section data-label="3901-L0X HW 장착" data-screen-label="59" data-speaker-notes="장착 계획은 기체 하부 중앙에서 두 렌즈가 수직으로 바닥을 보게 하는 것이다. 보드의 방향 화살표는 기체 전방과 맞춘다. 전원은 5V와 GND, 데이터는 모듈 TX에서 ESP32-S3 GPIO16으로만 받으며 모듈 RX는 연결하지 않는다. 최종 장착 뒤 중심으로부터의 오프셋을 측정해 소프트웨어 보정값으로 남긴다." style="background:#fff">
+  <section data-label="3901-L0X HW 장착" data-screen-label="66" data-speaker-notes="장착 계획은 기체 하부 중앙에서 두 렌즈가 수직으로 바닥을 보게 하는 것이다. 보드의 방향 화살표는 기체 전방과 맞춘다. 전원은 5V와 GND, 데이터는 모듈 TX에서 ESP32-S3 GPIO16으로만 받으며 모듈 RX는 연결하지 않는다. 최종 장착 뒤 중심으로부터의 오프셋을 측정해 소프트웨어 보정값으로 남긴다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="기체 하부 중앙에서 두 렌즈가 바닥을 보게 한다">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:.96fr 1.04fr;gap:36px;align-items:stretch">
         <figure style="margin:0;background:var(--uos-surface);border-radius:4px;padding:18px 22px 14px;display:flex;flex-direction:column;min-height:0">
@@ -1753,7 +1972,7 @@
     </x-import>
   </section>
 
-  <section data-label="3901-L0X SW 계획" data-screen-label="60" data-speaker-notes="소프트웨어는 두 구간으로 나뉜다. 현재는 UART 115200bps로 들어오는 MSPv2 프레임을 논블로킹으로 읽어 거리와 광류, 각 품질값을 필드 60부터 64에 기록한다. 다음 단계에서는 품질과 신선도, 축과 스케일, 자세 회전 영향을 검증한 뒤 거리계는 저고도 고도 제한과 착륙에, 광류는 수평 속도와 위치 드리프트 보정에 연결한다." style="background:#fff">
+  <section data-label="3901-L0X SW 계획" data-screen-label="67" data-speaker-notes="소프트웨어는 두 구간으로 나뉜다. 현재는 UART 115200bps로 들어오는 MSPv2 프레임을 논블로킹으로 읽어 거리와 광류, 각 품질값을 필드 60부터 64에 기록한다. 다음 단계에서는 품질과 신선도, 축과 스케일, 자세 회전 영향을 검증한 뒤 거리계는 저고도 고도 제한과 착륙에, 광류는 수평 속도와 위치 드리프트 보정에 연결한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="받는 코드에서 고도·위치 제어로 단계적으로 연결한다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:12px">
         <div style="display:grid;grid-template-columns:138px 1fr;gap:24px;align-items:center">
@@ -1814,7 +2033,7 @@
     </x-import>
   </section>
 
-  <section data-label="IMU 판정 재검토" data-screen-label="61" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확하다. 능동 프로브도 아직 착지 판정기로 검증되지 않았다." style="background:#fff">
+  <section data-label="IMU 판정 재검토" data-screen-label="68" data-speaker-notes="1g 복귀와 충격 검출은 한계가 명확하다. 능동 프로브도 아직 착지 판정기로 검증되지 않았다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="IMU만으로 시도한 착지 판정">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
@@ -1836,7 +2055,7 @@
     </x-import>
   </section>
 
-  <section data-label="프로브 가설과 반증" data-screen-label="62" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
+  <section data-label="프로브 가설과 반증" data-screen-label="69" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="능동 프로브 — 가설과 실제 관측">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.13fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -1853,7 +2072,7 @@
     </x-import>
   </section>
 
-  <section data-label="현재 자동착륙 상태" data-screen-label="63" data-speaker-notes="현재 착지 감지 결과는 모터 정지에 쓰지 않는다. 하강은 3초 타이머로 종료하며, 실내 저고도 자동착륙은 운용 범위에서 제외한다." style="background:#fff">
+  <section data-label="현재 자동착륙 상태" data-screen-label="70" data-speaker-notes="현재 착지 감지 결과는 모터 정지에 쓰지 않는다. 하강은 3초 타이머로 종료하며, 실내 저고도 자동착륙은 운용 범위에서 제외한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="현재 구현 — 시간 기반 하강">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:1fr 42px 1fr 42px 1fr;align-items:stretch;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:22px 0">
@@ -1886,7 +2105,7 @@
     </x-import>
   </section>
 
-  <section data-label="반쪽 락" data-screen-label="64" data-speaker-notes="두 코어가 같은 값을 다루는데, 한쪽만 락을 걸고 있었다. 그건 상호배타가 아니다." style="background:#fff">
+  <section data-label="반쪽 락" data-screen-label="71" data-speaker-notes="두 코어가 같은 값을 다루는데, 한쪽만 락을 걸고 있었다. 그건 상호배타가 아니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="두 코어가 같은 값을 만질 때">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1908,7 +2127,7 @@
     </x-import>
   </section>
 
-  <section data-label="락 통합" data-screen-label="65" data-speaker-notes="규칙을 하나로 정리했다. 요청은 코어0, 실행은 제어 태스크." style="background:#fff">
+  <section data-label="락 통합" data-screen-label="72" data-speaker-notes="규칙을 하나로 정리했다. 요청은 코어0, 실행은 제어 태스크." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="하나의 락, 하나의 소유자">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="display:grid;grid-template-columns:1fr 86px 1fr 86px 1fr;align-items:center;flex:1">
@@ -1933,7 +2152,7 @@
     </x-import>
   </section>
 
-  <section data-label="4겹 검증" data-screen-label="66" data-speaker-notes="세션 3의 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
+  <section data-label="4겹 검증" data-screen-label="73" data-speaker-notes="세션 3의 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="서로 다른 오류를 잡는 4단계 검증">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="display:flex;flex-direction:column;flex:1;border-top:6px solid var(--uos-blue)">
@@ -1963,12 +2182,12 @@
     </x-import>
   </section>
 
-  <section data-label="04 시연·체험" data-screen-label="67" data-speaker-notes="이제 진행자 기체 시연과 스마트폰 체험으로 넘어간다. 실제 기체 조종은 진행자가 맡는다." style="background:#fff">
+  <section data-label="04 시연·체험" data-screen-label="74" data-speaker-notes="이제 진행자 기체 시연과 스마트폰 체험으로 넘어간다. 실제 기체 조종은 진행자가 맡는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" chapter-no="04" title="시연과 체험
 직접 보고, 스마트폰으로 원리 체험하기"></x-import>
   </section>
 
-  <section data-label="시연 안전 규칙" data-screen-label="68" data-speaker-notes="시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
+  <section data-label="시연 안전 규칙" data-screen-label="75" data-speaker-notes="시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 기체 시연 안전 규칙">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.04fr .96fr;gap:36px;align-items:stretch">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -2001,7 +2220,7 @@
     </x-import>
   </section>
 
-  <section data-label="진행자 시연 1 호버링" data-screen-label="69" data-speaker-notes="현장 시연이 어려우면 이 영상으로 대체한다. 테더를 건 상태에서 촬영했다." style="background:#fff">
+  <section data-label="진행자 시연 1 호버링" data-screen-label="76" data-speaker-notes="현장 시연이 어려우면 이 영상으로 대체한다. 테더를 건 상태에서 촬영했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 시연 1 — 제자리 호버링">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.4fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -2023,7 +2242,7 @@
     </x-import>
   </section>
 
-  <section data-label="자세 유지 성능" data-screen-label="70" data-speaker-notes="테더 시험에서 잘라낸 106.4초 구간이다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아니다." style="background:#fff">
+  <section data-label="자세 유지 성능" data-screen-label="77" data-speaker-notes="테더 시험에서 잘라낸 106.4초 구간이다. 제어 응답의 증거이지만 안정 비행 완료 증거는 아니다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="테더 구간의 자세 기록 — 106.4초">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">
@@ -2051,7 +2270,7 @@
     </x-import>
   </section>
 
-  <section data-label="모터 차동" data-screen-label="71" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없다." style="background:#fff">
+  <section data-label="모터 차동" data-screen-label="78" data-speaker-notes="2,135행 전체에서 M3가 M1보다 약 26마이크로초 높았다. 지속 보정은 보이지만 원인을 무게중심 하나로 확정할 수는 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 출력에 남아 있는 상시 차동">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.5fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -2071,7 +2290,7 @@
     </x-import>
   </section>
 
-  <section data-label="진행자 시연 2 이동" data-screen-label="72" data-speaker-notes="좁은 범위 이동 시연이다. 진행자가 스틱을 살짝 기울이면 기체가 그 방향으로 이동한다." style="background:#fff">
+  <section data-label="진행자 시연 2 이동" data-screen-label="79" data-speaker-notes="좁은 범위 이동 시연이다. 진행자가 스틱을 살짝 기울이면 기체가 그 방향으로 이동한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="진행자 시연 2 — 좁은 범위 이동">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1020px">스틱을 앞으로 살짝 기울이면, 기체는 <strong>앞으로 기울어진 상태를 목표로 삼고</strong> 그 방향으로 미끄러져 간다.</div>
@@ -2094,7 +2313,7 @@
     </x-import>
   </section>
 
-  <section data-label="모바일 균형잡기 체험" data-screen-label="73" data-speaker-notes="청중은 QR로 동시에 접속한다. 스마트폰을 세로로 들고 기울임 센서를 사용하며, 권한이나 센서가 없으면 터치 조이스틱으로 같은 체험을 진행한다. 실제 시연 기체는 진행자만 조종한다." style="background:#fff">
+  <section data-label="모바일 균형잡기 체험" data-screen-label="80" data-speaker-notes="청중은 QR로 동시에 접속한다. 스마트폰을 세로로 들고 기울임 센서를 사용하며, 권한이나 센서가 없으면 터치 조이스틱으로 같은 체험을 진행한다. 실제 시연 기체는 진행자만 조종한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="[체험] 스마트폰으로 가상 드론 균형잡기">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:350px 1fr;grid-template-rows:1fr auto;gap:20px 34px">
         <div style="grid-row:1 / 3;background:var(--uos-surface);border-radius:4px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
@@ -2122,7 +2341,7 @@
     </x-import>
   </section>
 
-  <section data-label="로그 해석" data-screen-label="74" data-speaker-notes="실제 로그 한 줄에서 M3 출력이 더 높고 제어기가 비대칭을 보정한다는 사실을 읽을 수 있다. 한 줄만으로 그 원인을 무게중심이라고 확정할 수는 없다." style="background:#fff">
+  <section data-label="로그 해석" data-screen-label="81" data-speaker-notes="실제 로그 한 줄에서 M3 출력이 더 높고 제어기가 비대칭을 보정한다는 사실을 읽을 수 있다. 한 줄만으로 그 원인을 무게중심이라고 확정할 수는 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 로그 한 줄에서 읽을 수 있는 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:12px">
@@ -2198,7 +2417,7 @@
     </x-import>
   </section>
 
-  <section data-label="검증 현황" data-screen-label="75" data-speaker-notes="첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않는다." style="background:#fff">
+  <section data-label="검증 현황" data-screen-label="82" data-speaker-notes="첫 실비행에서 176.2초의 무장 구간과 정상 텔레메트리를 얻었다. 이것은 실비행 기록이지만 안정 호버와 자동착륙 완료를 뜻하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지금까지 검증된 것과 아직 아닌 것">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
         <div style="display:flex;flex-direction:column;gap:16px">
@@ -2237,7 +2456,7 @@
     </x-import>
   </section>
 
-  <section data-label="다음 단계" data-screen-label="76" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
+  <section data-label="다음 단계" data-screen-label="83" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="다음 단계">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
@@ -2265,7 +2484,7 @@
     </x-import>
   </section>
 
-  <section data-label="마무리" data-screen-label="77" data-speaker-notes="마지막에는 우리가 만든 실제 기체의 테더 시험 영상을 다시 보여주며 질문을 받는다. 영상은 자세 제어가 작동한 실기 기록이지만 안정 자유비행 완료를 뜻하지 않는다. 비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣는다." style="background:#fff">
+  <section data-label="마무리" data-screen-label="84" data-speaker-notes="마지막에는 우리가 만든 실제 기체의 테더 시험 영상을 다시 보여주며 질문을 받는다. 영상은 자세 제어가 작동한 실기 기록이지만 안정 자유비행 완료를 뜻하지 않는다. 비행제어 기술과 검증 과정에 관한 질문을 먼저 받고, 교육 적용과 다중 드론 확장에 관한 의견도 듣는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="질문과 답변 — 실제 기체 테더 시험">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.48fr .72fr;gap:32px;align-items:stretch">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">

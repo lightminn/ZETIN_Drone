@@ -243,14 +243,14 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             ready = bool(
                 cls._evaluate(
                     "document.readyState === 'complete' && "
-                    "document.querySelector('deck-stage')?._slides?.length === 77"
+                    "document.querySelector('deck-stage')?._slides?.length === 84"
                 )
             )
             if ready:
                 break
             time.sleep(0.05)
         if not ready:
-            raise AssertionError("77-slide presentation did not become ready")
+            raise AssertionError("84-slide presentation did not become ready")
         cls._evaluate(
             "(() => { const stage = document.querySelector('deck-stage'); "
             "stage.setAttribute('no-rail', ''); stage._fit(); return true; })()"
@@ -262,6 +262,52 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             time.sleep(0.05)
         else:
             raise AssertionError("presentation fonts did not finish loading")
+
+    def test_significance_section_renders_professor_feedback_visuals(self) -> None:
+        self._call(
+            "Page.navigate",
+            {"url": f"http://127.0.0.1:{self.http_port}/#4"},
+        )
+        deadline = time.monotonic() + 4.0
+        visuals = None
+        while time.monotonic() < deadline:
+            visuals = self._evaluate(
+                """
+                (() => {
+                  if (document.readyState !== 'complete') return null;
+                  const classification = document.querySelector('[data-drone-classification]');
+                  const qualification = document.querySelector('[data-qualification-scale]');
+                  const comparison = document.querySelector('[data-aircraft-comparison]');
+                  const missions = document.querySelector('[data-mission-specs]');
+                  const forceSum = document.querySelector('svg[data-force-sum]');
+                  const mixing = document.querySelector('svg[data-control-mixing]');
+                  const swarm = document.querySelector('[data-swarm-expansion]');
+                  return {
+                    classification: Boolean(classification),
+                    qualificationBands: qualification?.querySelectorAll('[data-band]').length || 0,
+                    aircraftRows: comparison?.querySelectorAll('[data-aircraft]').length || 0,
+                    missionRows: missions?.querySelectorAll('[data-mission]').length || 0,
+                    forceLabel: forceSum?.getAttribute('aria-label') || null,
+                    mixingLabel: mixing?.getAttribute('aria-label') || null,
+                    swarmLayers: swarm?.querySelectorAll('[data-swarm-layer]').length || 0,
+                    futureGoal: swarm?.dataset.status || null,
+                  };
+                })()
+                """
+            )
+            if visuals and visuals["classification"]:
+                break
+            time.sleep(0.05)
+
+        self.assertIsNotNone(visuals)
+        self.assertTrue(visuals["classification"], visuals)
+        self.assertEqual(visuals["qualificationBands"], 5, visuals)
+        self.assertEqual(visuals["aircraftRows"], 4, visuals)
+        self.assertEqual(visuals["missionRows"], 4, visuals)
+        self.assertIn("네 로터 추력의 벡터 합", visuals["forceLabel"])
+        self.assertIn("힘과 토크", visuals["mixingLabel"])
+        self.assertEqual(visuals["swarmLayers"], 6, visuals)
+        self.assertEqual(visuals["futureGoal"], "future-goal", visuals)
 
     def test_slide_type_scale_is_ten_percent_larger(self) -> None:
         self._open_deck()
@@ -284,7 +330,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
               const body = [...slides[1].querySelectorAll('div')].find(
                 element => element.textContent.trim() === '01'
               );
-              const chartLabel = [...slides[50].querySelectorAll('svg text')].find(
+              const chartLabel = [...slides[57].querySelectorAll('svg text')].find(
                 element => element.textContent.trim() === '기준 근처'
               );
               return {
@@ -300,12 +346,12 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertAlmostEqual(sizes["body"], 22.0, places=3)
         self.assertAlmostEqual(sizes["chart"], 16.5, places=3)
 
-    def test_slide_53_renders_watchdog_timeout_as_directional_timeline(self) -> None:
+    def test_slide_60_renders_watchdog_timeout_as_directional_timeline(self) -> None:
         self._open_deck()
         timeline = self._evaluate(
             """
             (() => {
-              const slide = document.querySelector('deck-stage')._slides[52];
+              const slide = document.querySelector('deck-stage')._slides[59];
               const label = slide.querySelector('[data-watchdog-label]');
               const result = [...slide.querySelectorAll('div')].find(
                 element => element.textContent.trim() === '워치독 발동'
@@ -433,11 +479,11 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                 })()
                 """
             )
-            if deck_state["hash"] == "#1" and deck_state["sections"] == 77:
+            if deck_state["hash"] == "#1" and deck_state["sections"] == 84:
                 break
             time.sleep(0.05)
 
-        self.assertEqual(deck_state["sections"], 77)
+        self.assertEqual(deck_state["sections"], 84)
         self.assertNotRegex(
             deck_state["content"],
             r"(?:\d+(?:\.\d+)?\s*시간\s*과정|"
@@ -445,10 +491,10 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             r"\d+(?:\.\d+)?\s*(?:시간|분|초).{0,8}(?:발표|시연|체험|진행|과정))",
         )
 
-    def test_slide_51_renders_yaw_drift_as_two_time_series(self) -> None:
+    def test_slide_58_renders_yaw_drift_as_two_time_series(self) -> None:
         self._call(
             "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#51"},
+            {"url": f"http://127.0.0.1:{self.http_port}/#58"},
         )
         deadline = time.monotonic() + 4.0
         comparison = None
@@ -479,17 +525,17 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                 """
             )
             if (
-                comparison["hash"] == "#51"
+                comparison["hash"] == "#58"
                 and comparison["readyState"] == "complete"
-                and comparison["sections"] == 77
+                and comparison["sections"] == 84
                 and comparison["label"]
             ):
                 break
             time.sleep(0.05)
 
-        self.assertEqual(comparison["hash"], "#51", comparison)
+        self.assertEqual(comparison["hash"], "#58", comparison)
         self.assertEqual(comparison["readyState"], "complete", comparison)
-        self.assertEqual(comparison["sections"], 77, comparison)
+        self.assertEqual(comparison["sections"], 84, comparison)
         self.assertEqual(
             comparison["label"],
             "30초 SIL: 자이로만 사용하면 Yaw 오차가 18.3도까지 누적되고, "
@@ -503,11 +549,11 @@ class PresentationVideoBrowserTests(unittest.TestCase):
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._call(
             "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#28"},
+            {"url": f"http://127.0.0.1:{self.http_port}/#35"},
         )
         self._wait_for_playback("accelerometer.mp4")
 
-        self._evaluate("document.querySelector('deck-stage').goTo(28)")
+        self._evaluate("document.querySelector('deck-stage').goTo(35)")
         self._wait_for_playback("gyro.mp4")
         previous = self._video_state("accelerometer.mp4")
 
@@ -518,7 +564,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
     def test_active_video_restores_runtime_playback_properties(self) -> None:
         self._call(
             "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#28"},
+            {"url": f"http://127.0.0.1:{self.http_port}/#35"},
         )
         deadline = time.monotonic() + 4.0
         state = None
