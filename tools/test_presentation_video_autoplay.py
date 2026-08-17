@@ -49,7 +49,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         parser = _VideoParser()
         parser.feed((DECK_DIR / "index.html").read_text(encoding="utf-8"))
 
-        self.assertEqual(len(parser.videos), 10)
+        self.assertEqual(len(parser.videos), 11)
         missing = [attrs.get("src", "<unknown>") for attrs in parser.videos if "muted" not in attrs]
         self.assertEqual(missing, [])
 

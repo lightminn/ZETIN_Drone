@@ -512,7 +512,7 @@ async function main() {
     process.stdout.write("\n");
 
     const videoCount = records.filter((record) => record.video).length;
-    if (videoCount !== 10) throw new Error(`expected 10 video slides, found ${videoCount}`);
+    if (videoCount !== 11) throw new Error(`expected 11 video slides, found ${videoCount}`);
     console.log(`[3/5] Packaging ${videoCount} embedded videos and ${SLIDE_COUNT} speaker notes...`);
     await buildPptx(records, runtimeDir, output, PptxGenJS, ffprobeBin, ffmpegBin);
 
