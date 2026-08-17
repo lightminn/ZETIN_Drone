@@ -16,6 +16,7 @@ AGENTS.md
 __pycache__/
 *.py[cod]
 .venv/
+.worktrees/
 
 # 1kHz IMU raw 로그 (바이너리, 세션당 수십 MB)
 logs/*.bin
