@@ -123,6 +123,7 @@ STATIC_REQUIRED_TEXT = {
         "꼬리로터힘",
         "CW",
         "CCW",
+        "CW·CCW=로터회전방향",
         "평상시토크상쇄",
     },
     "SwarmSystemStatic": {
@@ -373,6 +374,26 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         return scene
 
     @staticmethod
+    def _rendered_static_scene(scene_name: str):
+        from manim import tempconfig
+
+        module = load_static_module()
+        if module is None:
+            raise AssertionError("static diagram visualization module is missing")
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            scene = getattr(module, scene_name)()
+            scene.render()
+        return scene
+
+    @staticmethod
     def _mobjects(scene):
         def descendants(mobject):
             yield mobject
@@ -458,6 +479,176 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         comparison = self._text(scene, "움직임은다르지만센서값은같다")
 
         self.assertGreater(comparison.get_bottom()[1], 2.05)
+
+    def test_static_force_vectors_share_origin_and_encode_physical_relations(self) -> None:
+        import math
+
+        scene = self._rendered_static_scene("QuadcopterForceMotionStatic")
+        arrows = [
+            item for item in self._mobjects(scene) if type(item).__name__ == "Arrow"
+        ]
+        weight_arrows = [
+            item for item in arrows if str(item.get_color()) == "#FFD166"
+        ]
+        self.assertEqual(len(weight_arrows), 4)
+
+        state_colors = {
+            "상승": "#55D68B",
+            "호버링": "#5FE3F3",
+            "하강": "#FF9F43",
+            "수평이동": "#48A8FF",
+        }
+        vectors = {}
+        for state, color in state_colors.items():
+            self._text(scene, state)
+            thrust = next(item for item in arrows if str(item.get_color()) == color)
+            weight = min(
+                weight_arrows,
+                key=lambda item: math.dist(
+                    item.get_center()[:2], thrust.get_center()[:2]
+                ),
+            )
+            for axis in (0, 1):
+                self.assertAlmostEqual(
+                    thrust.get_start()[axis],
+                    weight.get_start()[axis],
+                    places=5,
+                    msg=f"{state}: thrust and weight need a common origin",
+                )
+            thrust_vector = thrust.get_end() - thrust.get_start()
+            weight_vector = weight.get_end() - weight.get_start()
+            self.assertAlmostEqual(float(weight_vector[0]), 0.0, places=5)
+            self.assertLess(float(weight_vector[1]), 0.0)
+            vectors[state] = (
+                thrust_vector,
+                math.hypot(float(thrust_vector[0]), float(thrust_vector[1])),
+                math.hypot(float(weight_vector[0]), float(weight_vector[1])),
+            )
+
+        self.assertGreater(vectors["상승"][1], vectors["상승"][2])
+        self.assertAlmostEqual(vectors["호버링"][1], vectors["호버링"][2], places=5)
+        self.assertGreater(vectors["하강"][1], 0.0)
+        self.assertLess(vectors["하강"][1], vectors["하강"][2])
+        horizontal_vector, _, horizontal_weight = vectors["수평이동"]
+        self.assertGreater(float(horizontal_vector[0]), 0.0)
+        self.assertAlmostEqual(
+            float(horizontal_vector[1]), horizontal_weight, places=5
+        )
+
+    def test_static_rotor_mapping_and_helicopter_torques_have_correct_signs(self) -> None:
+        import math
+
+        scene = self._rendered_static_scene("HelicopterQuadcopterTorqueStatic")
+        self._text(scene, "CW·CCW=로터회전방향")
+        rendered_text = [
+            item
+            for item in self._mobjects(scene)
+            if getattr(item, "text", None) is not None
+        ]
+        rotation_labels = [
+            item for item in rendered_text if item.text in {"CW", "CCW"}
+        ]
+        expected_mapping = {
+            "M1": (-1, 1, "CW"),
+            "M3": (1, 1, "CCW"),
+            "M4": (-1, -1, "CCW"),
+            "M2": (1, -1, "CW"),
+        }
+        motor_labels = {
+            name: self._text(scene, name) for name in expected_mapping
+        }
+        quad_center_x = (
+            sum(label.get_center()[0] for label in motor_labels.values()) / 4
+        )
+        quad_center_y = (
+            sum(label.get_center()[1] for label in motor_labels.values()) / 4
+        )
+        for name, (x_sign, y_sign, rotation) in expected_mapping.items():
+            motor = motor_labels[name]
+            self.assertGreater((motor.get_center()[0] - quad_center_x) * x_sign, 0)
+            self.assertGreater((motor.get_center()[1] - quad_center_y) * y_sign, 0)
+            nearest_rotation = min(
+                rotation_labels,
+                key=lambda item: math.dist(
+                    item.get_center()[:2], motor.get_center()[:2]
+                ),
+            )
+            self.assertEqual(nearest_rotation.text, rotation)
+
+        rotor_disk = max(
+            (
+                item
+                for item in self._mobjects(scene)
+                if type(item).__name__ == "Circle" and item.get_center()[0] < 0
+            ),
+            key=lambda item: item.width,
+        )
+        reaction = next(
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "CurvedArrow"
+            and str(item.get_color()) == "#FF9F43"
+            and item.get_center()[0] < 0
+        )
+        tail_force = next(
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "Arrow"
+            and str(item.get_color()) == "#5FE3F3"
+            and item.get_center()[0] < 0
+        )
+
+        def moment_sign(arrow) -> float:
+            radius = arrow.get_start() - rotor_disk.get_center()
+            force = arrow.get_end() - arrow.get_start()
+            return float(radius[0] * force[1] - radius[1] * force[0])
+
+        reaction_moment = moment_sign(reaction)
+        tail_force_moment = moment_sign(tail_force)
+        self.assertNotEqual(reaction_moment, 0.0)
+        self.assertNotEqual(tail_force_moment, 0.0)
+        self.assertLess(reaction_moment * tail_force_moment, 0.0)
+
+    def test_swarm_future_uses_caution_while_danger_stays_red(self) -> None:
+        scene = self._rendered_static_scene("SwarmSystemStatic")
+        boundary = self._text(scene, "후속목표·미구현·미검증")
+        boundary_glyph_colors = {
+            str(glyph.get_fill_color()) for glyph in boundary.submobjects
+        }
+        self.assertEqual(boundary_glyph_colors, {"#FFD166"})
+
+        takeaway_box = next(
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "RoundedRectangle"
+            and item.width > 14.0
+            and item.get_center()[1] < -3.0
+        )
+        self.assertEqual(str(takeaway_box.get_stroke_color()), "#FFD166")
+
+        danger_scene = self._rendered_static_scene("FailsafeTimelineStatic")
+        red_state_boxes = [
+            item
+            for item in self._mobjects(danger_scene)
+            if type(item).__name__ == "RoundedRectangle"
+            and str(item.get_stroke_color()) == "#FF6474"
+            and item.height > 0.9
+        ]
+        for dangerous_state in ("치명적고장", "즉시모터정지"):
+            danger_label = self._text(danger_scene, dangerous_state)
+            nearest_red_box = min(
+                red_state_boxes,
+                key=lambda item: sum(
+                    (item.get_center()[axis] - danger_label.get_center()[axis]) ** 2
+                    for axis in (0, 1)
+                ),
+            )
+            self.assertAlmostEqual(
+                nearest_red_box.get_center()[0], danger_label.get_center()[0], places=5
+            )
+            self.assertAlmostEqual(
+                nearest_red_box.get_center()[1], danger_label.get_center()[1], places=5
+            )
 
     def test_significance_scenes_render(self) -> None:
         from manim import tempconfig

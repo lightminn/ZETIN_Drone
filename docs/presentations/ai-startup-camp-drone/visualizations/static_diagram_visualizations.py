@@ -8,6 +8,8 @@ or takeaway line.
 
 from __future__ import annotations
 
+from math import cos
+
 from manim import *
 
 from audience_visualizations import (
@@ -375,18 +377,20 @@ def force_tile(
     drone = x_quadcopter_icon(0.42).rotate(tilt).move_to(
         panel.get_center() + LEFT * 2.25 + DOWN * 0.18
     )
+    force_origin = drone.get_center()
+    weight_vector = DOWN
     gravity = Arrow(
-        drone.get_center() + DOWN * 0.18,
-        drone.get_center() + DOWN * 1.18,
-        buff=0.28,
+        force_origin,
+        force_origin + weight_vector,
+        buff=0,
         color=YELLOW,
         stroke_width=6,
     )
     direction = rotate_vector(UP, tilt)
     thrust = Arrow(
-        drone.get_center() + direction * 0.15,
-        drone.get_center() + direction * thrust_length,
-        buff=0.28,
+        force_origin,
+        force_origin + direction * thrust_length,
+        buff=0,
         color=color,
         stroke_width=7,
     )
@@ -425,7 +429,7 @@ class QuadcopterForceMotionStatic(StaticDiagramScene):
                 "수평 성분 발생",
                 RIGHT * 3.82 + DOWN * 1.58,
                 BLUE,
-                1.15,
+                1 / cos(18 * DEGREES),
                 tilt=-18 * DEGREES,
             ),
         )
@@ -490,16 +494,19 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
         )
 
         quad = x_quadcopter_icon(0.93, CYAN).move_to(
-            right_panel.get_center() + UP * 0.25
+            right_panel.get_center() + UP * 0.1
         )
         quad_name = text("쿼드콥터", 30, CYAN, "BOLD").move_to(
             right_panel.get_center() + UP * 2.7
         )
+        rotation_legend = text(
+            "CW · CCW = 로터 회전 방향", 24, YELLOW, "BOLD"
+        ).move_to(right_panel.get_center() + UP * 2.1)
         offsets = (
-            (-1.75, 1.35, "M1", "CW", ORANGE),
-            (1.75, 1.35, "M3", "CCW", CYAN),
-            (-1.75, -1.35, "M4", "CCW", CYAN),
-            (1.75, -1.35, "M2", "CW", ORANGE),
+            (-1.75, 1.15, "M1", "CW", ORANGE),
+            (1.75, 1.15, "M3", "CCW", CYAN),
+            (-1.75, -1.15, "M4", "CCW", CYAN),
+            (1.75, -1.15, "M2", "CW", ORANGE),
         )
         rotor_labels = VGroup()
         for x, y, motor_name, rotation, color in offsets:
@@ -526,6 +533,7 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
             tail_label,
             quad,
             quad_name,
+            rotation_legend,
             rotor_labels,
             cancel,
             yaw,
@@ -535,7 +543,7 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
 
 class SwarmSystemStatic(StaticDiagramScene):
     def construct(self) -> None:
-        status = boundary_badge("후속 목표 · 미구현 · 미검증", RED)
+        status = boundary_badge("후속 목표 · 미구현 · 미검증", YELLOW)
         status.move_to(RIGHT * 4.28 + UP * 3.75)
         left_panel = card(4.2, 6.2, BLUE).move_to(LEFT * 5.55 + UP * 0.16)
         right_panel = card(10.15, 6.2, CYAN).move_to(RIGHT * 2.3 + UP * 0.16)
@@ -584,7 +592,7 @@ class SwarmSystemStatic(StaticDiagramScene):
         requirements = VGroup(requirement_top, requirement_bottom).arrange(
             DOWN, buff=0.18
         ).move_to(right_panel.get_center() + DOWN * 2.08)
-        note = takeaway("단일 기체 검증 + 좌표·통신·회피·집단 안전", RED)
+        note = takeaway("단일 기체 검증 + 좌표·통신·회피·집단 안전", YELLOW)
         self.add(
             status,
             left_panel,
