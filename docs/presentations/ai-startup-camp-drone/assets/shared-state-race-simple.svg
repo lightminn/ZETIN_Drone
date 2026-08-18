@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="450" viewBox="0 0 1180 450" role="img" aria-labelledby="race-title race-desc" data-visual="shared-state-race" data-status="possible-not-observed-accident">
+  <title id="race-title">공유 상태에 생길 수 있는 경쟁 조건</title>
+  <desc id="race-desc">통신 코어와 제어 태스크가 같은 공유 상태를 겹쳐 갱신하면 서로 다른 값을 볼 수 있는 가능한 경쟁 상태이며 관측된 비행 사고는 아님</desc>
+  <defs><style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.label{font-size:26px;font-weight:900}.sub{font-size:24px;font-weight:700;fill:#516074}.white{fill:#fff}</style><marker id="blue-arrow" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0 0L0 14L13 7Z" fill="#004094"/></marker><marker id="red-arrow" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0 0L0 14L13 7Z" fill="#b04a55"/></marker></defs>
+  <rect width="1180" height="450" fill="#fff"/>
+  <g data-writer="communication-core" aria-label="통신 코어가 상태 갱신">
+    <rect x="54" y="78" width="280" height="86" rx="4" fill="#eaf2fb"/><text x="194" y="113" text-anchor="middle" class="label"><tspan x="194">통신 코어</tspan><tspan x="194" dy="31" class="sub">상태 갱신</tspan></text>
+    <path d="M334 121C470 121 449 191 510 203" fill="none" stroke="#004094" stroke-width="7" marker-end="url(#blue-arrow)"/>
+  </g>
+  <g data-reader="control-task" aria-label="제어 태스크가 상태 사용">
+    <rect x="846" y="78" width="280" height="86" rx="4" fill="#eaf7f3"/><text x="986" y="113" text-anchor="middle" class="label"><tspan x="986">제어 태스크</tspan><tspan x="986" dy="31" class="sub">상태 사용</tspan></text>
+    <path d="M846 121C710 121 731 191 670 203" fill="none" stroke="#23836f" stroke-width="7" marker-end="url(#blue-arrow)"/>
+  </g>
+  <g data-shared-state="overlapping-access" aria-label="공유 상태에 겹친 접근">
+    <circle cx="590" cy="224" r="100" fill="#172334"/><text x="590" y="214" text-anchor="middle" class="label white"><tspan x="590">공유 상태</tspan><tspan x="590" dy="34">겹친 접근</tspan></text>
+    <path d="M530 281L650 167M530 167L650 281" stroke="#b04a55" stroke-width="5" stroke-dasharray="8 7"/>
+  </g>
+  <g data-risk="possible-mismatch" aria-label="값 불일치 가능">
+    <path d="M520 316L460 350M660 316L720 350" stroke="#b04a55" stroke-width="6" marker-end="url(#red-arrow)"/>
+    <rect x="355" y="350" width="470" height="65" rx="4" fill="#fff0f1"/><text x="590" y="392" text-anchor="middle" class="label" fill="#b04a55">값 불일치 가능</text>
+  </g>
+  <text x="590" y="444" text-anchor="middle" class="sub" data-evidence-boundary="not-observed-flight-accident">가능한 경쟁 상태 · 관측된 비행 사고 아님</text>
+</svg>

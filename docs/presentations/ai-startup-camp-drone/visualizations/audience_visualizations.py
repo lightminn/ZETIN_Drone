@@ -416,13 +416,13 @@ class PiErrorAudience(ExplainerScene):
 
 
 class CascadeTimingAudience(ExplainerScene):
-    """Four inner-loop corrections are grouped under each outer update."""
+    """Inner-loop corrections repeat more densely than outer updates."""
 
     def construct(self) -> None:
-        self.heading("캐스케이드 제어", "바깥 루프가 목표를 정하면 안쪽 루프가 네 배 빠르게 따라간다")
+        self.heading("캐스케이드 제어", "바깥 루프가 목표를 정하면 안쪽 루프가 더 촘촘하게 보정한다")
 
-        outer_label = text("각도 루프 · 250Hz", 28, RED, "BOLD").move_to(LEFT * 6.25 + UP * 1.2)
-        inner_label = text("각속도 루프 · 1kHz", 28, BLUE, "BOLD").move_to(LEFT * 6.25 + DOWN * 1.2)
+        outer_label = text("바깥 자세 루프", 28, RED, "BOLD").move_to(LEFT * 6.25 + UP * 1.2)
+        inner_label = text("안쪽 각속도 루프", 28, BLUE, "BOLD").move_to(LEFT * 6.25 + DOWN * 1.2)
         self.play(FadeIn(outer_label), FadeIn(inner_label), run_time=0.45)
 
         groups = VGroup()
@@ -435,8 +435,8 @@ class CascadeTimingAudience(ExplainerScene):
             for index in range(4):
                 box = RoundedRectangle(width=0.67, height=0.9, corner_radius=0.1, fill_color=BLUE, fill_opacity=0.22, stroke_color=BLUE, stroke_width=3)
                 box.move_to(np.array([x - 1.2 + index * 0.8, -1.15, 0]))
-                number = text(str(index + 1), 23, WHITE, "BOLD").move_to(box)
-                inners.add(VGroup(box, number))
+                pulse = text("보정" if index < 3 else "…", 20, WHITE, "BOLD").move_to(box)
+                inners.add(VGroup(box, pulse))
             connector = Arrow(outer.get_bottom(), inners.get_top(), buff=0.15, color=YELLOW, stroke_width=4)
             groups.add(VGroup(outer, outer_text, inners, connector))
 
@@ -447,7 +447,7 @@ class CascadeTimingAudience(ExplainerScene):
                 self.play(FadeIn(inner, scale=1.15), run_time=0.22)
 
         brace = Brace(groups[1][2], DOWN, color=CYAN)
-        note = text("바깥 1회 동안 안쪽 4회", 25, CYAN, "BOLD").next_to(brace, DOWN, buff=0.16)
+        note = text("자세 목표 사이에서 여러 번 보정", 25, CYAN, "BOLD").next_to(brace, DOWN, buff=0.16)
         self.play(GrowFromCenter(brace), FadeIn(note), run_time=0.45)
         self.conclusion("빠른 안쪽 루프가 모터를 먼저 안정시키고, 바깥 루프가 자세를 이끈다")
         self.hold_and_clear()

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="474" viewBox="0 0 1180 474" role="img" aria-labelledby="uam-title uam-desc" data-visual="aircraft-uam" data-context="vehicle-vertiport-operations-traffic-management">
+  <title id="uam-title">비행체별 장단점과 UAM</title>
+  <desc id="uam-desc">네 비행체의 대표 장점과 단점을 비교하고 UAM이 eVTOL 기체, 버티포트, 운항과 교통관리의 결합임을 보여 주는 그림</desc>
+  <defs><style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.name{font-size:25px;font-weight:800}.copy{font-size:24px}.muted{fill:#516074}.blue{fill:#004094}</style></defs>
+  <rect width="1180" height="474" fill="#fff"/>
+  <g data-aircraft="fixed-wing" aria-label="고정익, 긴 항속, 호버링 불가">
+    <path d="M38 100L103 86L121 49H136L153 86L219 100V113L153 106L141 136H117L104 106L38 113Z" fill="#516074"/>
+    <text x="129" y="174" text-anchor="middle" class="name"><tspan x="129">고정익</tspan><tspan x="129" dy="33" class="copy">+ 긴 항속</tspan><tspan x="129" dy="31" class="copy muted">− 호버링</tspan></text>
+  </g>
+  <g data-aircraft="helicopter" aria-label="헬리콥터, 탑재 성능, 복잡한 구조">
+    <path d="M286 67H480" stroke="#718096" stroke-width="7" stroke-linecap="round"/><circle cx="383" cy="67" r="7" fill="#172334"/><path d="M351 91C382 73 420 81 442 107C427 134 387 145 353 129C342 119 342 101 351 91Z" fill="#516074"/><path d="M355 109L294 122L284 112L283 141L296 131L362 127Z" fill="#516074"/><path d="M288 99V148" stroke="#718096" stroke-width="5"/>
+    <text x="383" y="174" text-anchor="middle" class="name"><tspan x="383">헬리콥터</tspan><tspan x="383" dy="33" class="copy">+ 탑재 성능</tspan><tspan x="383" dy="31" class="copy muted">− 복잡한 구조</tspan></text>
+  </g>
+  <g data-aircraft="multirotor" data-project-relevant="true" aria-label="멀티콥터, 정밀 호버링, 짧은 체공">
+    <circle cx="645" cy="97" r="66" fill="#eaf2fb"/>
+    <path d="M599 62L691 132M691 62L599 132" stroke="#004094" stroke-width="10" stroke-linecap="round"/><g fill="#fff" stroke="#004094" stroke-width="5"><circle cx="594" cy="58" r="22"/><circle cx="696" cy="58" r="22"/><circle cx="594" cy="136" r="22"/><circle cx="696" cy="136" r="22"/></g><path d="M645 77L665 97L645 117L625 97Z" fill="#004094"/>
+    <text x="645" y="174" text-anchor="middle" class="name blue"><tspan x="645">멀티콥터</tspan><tspan x="645" dy="33" class="copy">+ 정밀 호버링</tspan><tspan x="645" dy="31" class="copy muted">− 짧은 체공</tspan></text>
+  </g>
+  <g data-aircraft="evtol" aria-label="eVTOL, 수직이착륙과 순항, 인증 과제">
+    <path d="M810 100L875 86L893 49H908L925 86L991 100V113L925 106L913 136H889L876 106L810 113Z" fill="#172334"/><g fill="#fff" stroke="#d49b00" stroke-width="5"><circle cx="842" cy="80" r="18"/><circle cx="959" cy="80" r="18"/></g>
+    <text x="901" y="174" text-anchor="middle" class="name"><tspan x="901">eVTOL</tspan><tspan x="901" dy="33" class="copy">+ 수직이착륙 + 순항</tspan><tspan x="901" dy="31" class="copy muted">− 에너지 · 인증</tspan></text>
+  </g>
+  <path d="M50 278H1130" stroke="#d9e0e7" stroke-width="2"/>
+  <g data-uam-system="true" aria-label="UAM은 eVTOL 기체, 버티포트, 운항과 교통관리의 결합">
+    <text x="102" y="373" font-size="28" font-weight="900" class="blue">UAM</text>
+    <path d="M199 357H1010" stroke="#004094" stroke-width="4"/>
+    <circle cx="303" cy="357" r="52" fill="#004094"/><path d="M267 360L291 354L299 337H307L315 354L339 360V368L315 364L310 378H296L291 364L267 368Z" fill="#fff"/>
+    <circle cx="525" cy="357" r="52" fill="#f1f3f5" stroke="#23836f" stroke-width="4"/><circle cx="525" cy="357" r="28" fill="none" stroke="#23836f" stroke-width="4"/><text x="525" y="367" text-anchor="middle" font-size="29" font-weight="900" fill="#23836f">V</text>
+    <circle cx="747" cy="357" r="52" fill="#f1f3f5" stroke="#d49b00" stroke-width="4"/><path d="M720 360L740 379L776 337" fill="none" stroke="#d49b00" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="969" cy="357" r="52" fill="#f1f3f5" stroke="#004094" stroke-width="4"/><path d="M942 369C959 350 979 350 996 369M951 352C963 340 975 340 987 352" fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round"/><circle cx="969" cy="378" r="6" fill="#004094"/>
+    <text x="636" y="446" text-anchor="middle" font-size="26" font-weight="800">eVTOL 기체 + 버티포트 + 운항 · 교통관리</text>
+  </g>
+</svg>

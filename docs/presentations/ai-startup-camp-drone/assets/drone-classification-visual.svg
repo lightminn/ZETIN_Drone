@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="450" viewBox="0 0 1180 450" role="img" aria-labelledby="classification-title classification-desc" data-visual="drone-classification" data-highlight="team-x-quadrotor">
+  <title id="classification-title">드론의 법적 분류</title>
+  <desc id="classification-desc">무인동력비행장치의 네 가지 기체 형식 가운데 이번 기체가 무인멀티콥터인 X형 쿼드콥터임을 강조한 분류도</desc>
+  <defs>
+    <style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.label{font-size:25px;font-weight:800}.white{fill:#fff}</style>
+    <g id="quad"><path d="M-40-30L40 30M40-30L-40 30" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/><g fill="#fff" stroke="currentColor" stroke-width="5"><circle cx="-45" cy="-34" r="21"/><circle cx="45" cy="-34" r="21"/><circle cx="-45" cy="34" r="21"/><circle cx="45" cy="34" r="21"/></g><path d="M0-20L20 0L0 20L-20 0Z" fill="currentColor"/></g>
+  </defs>
+  <rect width="1180" height="450" fill="#fff"/>
+  <g data-node="unmanned-powered-aircraft" aria-label="상위 분류 무인동력비행장치">
+    <rect x="406" y="18" width="368" height="60" rx="4" fill="#172334"/>
+    <text x="590" y="58" text-anchor="middle" class="label white">무인동력비행장치</text>
+    <path d="M590 78V120M145 120H1035" fill="none" stroke="#718096" stroke-width="3"/>
+  </g>
+  <g data-aircraft="unmanned-airplane" aria-label="무인비행기">
+    <path d="M145 120V156" stroke="#718096" stroke-width="3"/>
+    <path d="M52 225L120 210L138 170H153L168 210L238 225V238L168 231L157 257H133L121 231L52 238Z" fill="#516074"/>
+    <text x="145" y="304" text-anchor="middle" class="label">무인비행기</text>
+  </g>
+  <g data-aircraft="unmanned-helicopter" aria-label="무인헬리콥터">
+    <path d="M420 120V156" stroke="#718096" stroke-width="3"/>
+    <path d="M320 184H520" stroke="#718096" stroke-width="7" stroke-linecap="round"/><circle cx="420" cy="184" r="7" fill="#172334"/>
+    <path d="M385 206C418 185 460 194 480 222C465 250 423 261 387 244C376 233 376 216 385 206Z" fill="#516074"/><path d="M391 224L322 238L311 228L310 258L324 247L396 243Z" fill="#516074"/><path d="M315 214V268" stroke="#718096" stroke-width="5"/>
+    <text x="420" y="304" text-anchor="middle" class="label">무인헬리콥터</text>
+  </g>
+  <g data-aircraft="unmanned-multirotor" data-selected="true" aria-label="무인멀티콥터, 이번 기체 X형 쿼드콥터">
+    <path d="M750 120V146" stroke="#004094" stroke-width="5"/>
+    <circle cx="750" cy="226" r="80" fill="#eaf2fb" stroke="#004094" stroke-width="4"/>
+    <g transform="translate(750 226) scale(.72)" color="#004094"><use href="#quad"/></g>
+    <rect x="613" y="320" width="274" height="88" rx="4" fill="#004094"/>
+    <circle cx="641" cy="364" r="9" fill="#d49b00"/>
+    <text x="667" y="356" class="label white">무인멀티콥터</text>
+    <text x="667" y="389" class="label white">이번 기체 · X형 쿼드콥터</text>
+  </g>
+  <g data-aircraft="unmanned-vtol" aria-label="무인수직이착륙기">
+    <path d="M1035 120V156" stroke="#718096" stroke-width="3"/>
+    <path d="M942 225L1010 210L1028 170H1043L1058 210L1128 225V238L1058 231L1047 257H1023L1011 231L942 238Z" fill="#516074"/>
+    <g fill="#fff" stroke="#d49b00" stroke-width="5"><circle cx="977" cy="204" r="18"/><circle cx="1093" cy="204" r="18"/></g>
+    <text x="1035" y="304" text-anchor="middle" class="label">무인수직이착륙기</text>
+  </g>
+</svg>

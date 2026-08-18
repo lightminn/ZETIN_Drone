@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import socket
 import subprocess
@@ -27,8 +28,8 @@ CHROME_BIN = shutil.which("google-chrome-stable") or shutil.which("google-chrome
 
 TEAM_VISUALIZATIONS = {
     30: "mixer-saturation.mp4",
+    33: "cascade-loop-timing.mp4",
     38: "accelerometer-confidence.mp4",
-    52: "cascade-loop-response.mp4",
     54: "gravity-yaw-observability.mp4",
 }
 
@@ -74,6 +75,22 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         self.assertEqual(len(parser.videos), 14)
         missing = [attrs.get("src", "<unknown>") for attrs in parser.videos if "muted" not in attrs]
         self.assertEqual(missing, [])
+
+    def test_simple_visuals_avoid_design_dependent_numbers_as_rules(self) -> None:
+        banned = re.compile(
+            r"1\s*kHz|250\s*Hz|50\s*Hz|20\s*Hz|500\s*ms|115200\s*bps|"
+            r"1250\s*µs|10\s*배|5\s*대\s*군집|다섯\s*대\s*군집|1\s*초에\s*1000\s*번",
+            re.I,
+        )
+        visual_paths = sorted((DECK_DIR / "assets").glob("*-visual.svg"))
+        visual_paths += sorted((DECK_DIR / "assets").glob("*-simple.svg"))
+
+        offenders = {
+            path.name: banned.findall(path.read_text(encoding="utf-8"))
+            for path in visual_paths
+            if banned.search(path.read_text(encoding="utf-8"))
+        }
+        self.assertEqual(offenders, {})
 
 
 @unittest.skipUnless(CHROME_BIN and websocket, "Chrome and websocket-client are required")
@@ -145,7 +162,14 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             cls.ws.close()
         cls._stop_processes()
         if hasattr(cls, "runtime"):
-            cls.runtime.cleanup()
+            for attempt in range(20):
+                try:
+                    cls.runtime.cleanup()
+                    break
+                except OSError:
+                    if attempt == 19:
+                        raise
+                    time.sleep(0.05)
 
     @classmethod
     def _stop_processes(cls) -> None:
@@ -194,7 +218,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
     def _video_state(cls, filename: str) -> dict | None:
         quoted = json.dumps(filename)
         return cls._evaluate(
-            """
+            r"""
             (() => {
               const filename = %s;
               const video = [...document.querySelectorAll('video')]
@@ -273,116 +297,292 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             raise AssertionError("presentation fonts did not finish loading")
 
     def test_significance_section_renders_professor_feedback_visuals(self) -> None:
-        self._call(
-            "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#4"},
+        self._open_deck()
+        visuals = self._evaluate(
+            """
+            (async () => {
+              const stage = document.querySelector('deck-stage');
+              const loadSvg = async number => {
+                const image = stage._slides[number - 1].querySelector(
+                  'img[data-visual-first]'
+                );
+                if (!image?.complete || !image.naturalWidth) return null;
+                const response = await fetch(image.src, {cache: 'no-store'});
+                return new DOMParser().parseFromString(
+                  await response.text(), 'image/svg+xml'
+                );
+              };
+              const [classification, qualification, comparison, missions,
+                force, swarm] = await Promise.all(
+                [4, 5, 6, 7, 9, 11].map(loadSvg)
+              );
+              const mixing = stage._slides[9].querySelector(
+                '[data-torque-comparison-art]'
+              );
+              const professorTitles = Object.fromEntries(
+                [4, 6, 7, 9].map(number => [
+                  number,
+                  stage._slides[number - 1].querySelector('.uos-content-slide__title')?.textContent || null,
+                ])
+              );
+              return {
+                classification: classification?.documentElement.dataset.visual || null,
+                qualificationAxis: qualification?.documentElement.dataset.axis || null,
+                qualificationBands: qualification?.querySelectorAll('[data-band]').length || 0,
+                classOneText: qualification?.querySelector('[data-band="class-1"]')?.textContent || null,
+                classOneAria: qualification?.querySelector('[data-band="class-1"]')?.getAttribute('aria-label') || null,
+                aircraftRows: comparison?.querySelectorAll('[data-aircraft]').length || 0,
+                missionRows: missions?.querySelectorAll('[data-mission]').length || 0,
+                forceStates: [...force?.querySelectorAll('[data-state]') || []]
+                  .map(item => item.dataset.state).sort(),
+                mixingLabel: mixing?.getAttribute('alt') || null,
+                professorTitles,
+                swarmLayers: swarm?.querySelectorAll('[data-layer]').length || 0,
+                swarmScope: swarm?.querySelector('[data-swarm]')?.dataset.swarm || null,
+                futureGoal: swarm?.documentElement.dataset.status || null,
+              };
+            })()
+            """,
+            await_promise=True,
         )
-        deadline = time.monotonic() + 4.0
-        visuals = None
-        while time.monotonic() < deadline:
-            visuals = self._evaluate(
-                """
-                (() => {
-                  if (document.readyState !== 'complete') return null;
-                  const classification = document.querySelector('[data-drone-classification]');
-                  const qualification = document.querySelector('[data-qualification-scale]');
-                  const comparison = document.querySelector('[data-aircraft-comparison]');
-                  const missions = document.querySelector('[data-mission-specs]');
-                  const forceSum = document.querySelector('svg[data-force-sum]');
-                  const mixing = document.querySelector('[data-torque-comparison-art]');
-                  const swarm = document.querySelector('[data-swarm-expansion]');
-                  return {
-                    classification: Boolean(classification),
-                    qualificationBands: qualification?.querySelectorAll('[data-band]').length || 0,
-                    aircraftRows: comparison?.querySelectorAll('[data-aircraft]').length || 0,
-                    missionRows: missions?.querySelectorAll('[data-mission]').length || 0,
-                    forceLabel: forceSum?.getAttribute('aria-label') || null,
-                    mixingLabel: mixing?.getAttribute('alt') || null,
-                    swarmLayers: swarm?.querySelectorAll('[data-swarm-layer]').length || 0,
-                    futureGoal: swarm?.dataset.status || null,
-                  };
-                })()
-                """
-            )
-            if visuals and visuals["classification"]:
-                break
-            time.sleep(0.05)
 
-        self.assertIsNotNone(visuals)
-        self.assertTrue(visuals["classification"], visuals)
+        self.assertEqual(visuals["classification"], "drone-classification", visuals)
+        self.assertEqual(visuals["qualificationAxis"], "qualification-weight-criteria", visuals)
         self.assertEqual(visuals["qualificationBands"], 5, visuals)
+        self.assertIn("25kg 초과", visuals["classOneText"], visuals)
+        self.assertIn("자체중량 150kg 이하", visuals["classOneText"], visuals)
+        self.assertNotIn("25–150kg", visuals["classOneText"], visuals)
+        self.assertIn("연료 제외 자체중량", visuals["classOneAria"], visuals)
         self.assertEqual(visuals["aircraftRows"], 4, visuals)
         self.assertEqual(visuals["missionRows"], 4, visuals)
-        self.assertIn("네 로터 추력의 벡터 합", visuals["forceLabel"])
+        self.assertEqual(
+            visuals["forceStates"],
+            ["climb", "descend", "hover", "translate"],
+            visuals,
+        )
         self.assertIsNotNone(visuals["mixingLabel"], visuals)
         self.assertIn("힘과 토크", visuals["mixingLabel"])
-        self.assertEqual(visuals["swarmLayers"], 6, visuals)
+        self.assertEqual(
+            visuals["professorTitles"],
+            {
+                "4": "드론의 법적 분류",
+                "6": "비행체별 장단점과 UAM",
+                "7": "사용 분야별 핵심 사양",
+                "9": "쿼드콥터의 힘과 운동",
+            },
+            visuals,
+        )
+        self.assertGreaterEqual(visuals["swarmLayers"], 2, visuals)
+        self.assertEqual(visuals["swarmScope"], "multi-drone", visuals)
         self.assertEqual(visuals["futureGoal"], "future-goal", visuals)
 
-    def test_slide_9_force_illustration_has_a_clear_vector_hierarchy(self) -> None:
-        self._call(
-            "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#9"},
+    def test_concept_slides_use_relative_physical_language(self) -> None:
+        self._open_deck()
+        offenders = self._evaluate(
+            r"""
+            (() => {
+              const stage = document.querySelector('deck-stage');
+              const conceptSlides = [11, 12, 13, 16, 19, 21, 33, 37, 38, 39,
+                47, 50, 51, 52, 53, 55, 56, 60, 61, 63, 67, 68, 69, 70,
+                71, 77, 80, 81, 82, 83];
+              const banned = /1\s*kHz|250\s*Hz|50\s*Hz|20\s*Hz|500\s*ms|115200\s*bps|1250\s*µs|10\s*배|5\s*대\s*군집|다섯\s*대\s*군집|1\s*초에\s*1000\s*번/i;
+              return conceptSlides.flatMap(number => {
+                const text = stage._slides[number - 1].textContent;
+                const match = text.match(banned);
+                return match ? [{number, phrase: match[0]}] : [];
+              });
+            })()
+            """
         )
-        deadline = time.monotonic() + 4.0
-        hierarchy = None
-        while time.monotonic() < deadline:
-            hierarchy = self._evaluate(
-                """
-                (() => {
-                  if (document.readyState !== 'complete') return null;
-                  const figure = document.querySelector('svg[data-force-sum]');
-                  if (!figure) return null;
-                  const rotorRects = [...figure.querySelectorAll('[data-force-rotor]')]
-                    .map(rotor => rotor.getBoundingClientRect());
-                  const slideScale = figure.closest('section').getBoundingClientRect().width / 1280;
-                  const centers = rotorRects.map(rect => ({
-                    x: (rect.left + rect.width / 2) / slideScale,
-                    y: (rect.top + rect.height / 2) / slideScale,
-                  }));
-                  return {
-                    layout: figure.closest('[data-force-layout]')?.dataset.forceLayout || null,
-                    logicalWidth: figure.getBoundingClientRect().width /
-                      (figure.closest('section').getBoundingClientRect().width / 1280),
-                    forceRotors: rotorRects.length,
-                    rotorHorizontalSpan: centers.length
-                      ? Math.max(...centers.map(center => center.x)) -
-                        Math.min(...centers.map(center => center.x))
-                      : 0,
-                    rotorVerticalSpan: centers.length
-                      ? Math.max(...centers.map(center => center.y)) -
-                        Math.min(...centers.map(center => center.y))
-                      : 0,
-                    rotorThrusts: figure.querySelectorAll(
-                      '[data-vector="rotor-thrust"]'
-                    ).length,
-                    aggregateThrusts: figure.querySelectorAll(
-                      '[data-vector="aggregate-thrust"]'
-                    ).length,
-                    weights: figure.querySelectorAll('[data-vector="weight"]').length,
-                    drags: figure.querySelectorAll('[data-vector="drag"]').length,
-                    forceLabels: figure.querySelectorAll('[data-force-label]').length,
-                    droneBodies: figure.querySelectorAll('[data-drone-body]').length,
-                  };
-                })()
-                """
-            )
-            if hierarchy:
-                break
-            time.sleep(0.05)
 
-        self.assertIsNotNone(hierarchy)
-        self.assertEqual(hierarchy["layout"], "direct-labels", hierarchy)
+        self.assertEqual(offenders, [])
+
+    def test_p_only_slide_uses_a_torque_balance_not_a_force_angle_equation(self) -> None:
+        self._open_deck()
+        text = self._evaluate(
+            "document.querySelector('deck-stage')._slides[48].textContent"
+        )
+
+        self.assertNotIn("바람이 미는 힘 = Kp × 남은 기울기", text)
+        self.assertIn("지속 외란 토크", text)
+        self.assertIn("P 제어 경로의 복원 토크", text)
+
+    def test_professor_feedback_slides_are_visual_first(self) -> None:
+        """Make the professor-emphasized concepts readable from diagrams first."""
+        self._open_deck()
+        result = self._evaluate(
+            """
+            (async () => {
+              const stage = document.querySelector('deck-stage');
+              const visualSlides = [4, 5, 6, 7, 11].map(number => {
+                const slide = stage._slides[number - 1];
+                const visual = slide.querySelector('img[data-visual-first]');
+                const slideScale = slide.getBoundingClientRect().width / 1280;
+                const rect = visual?.getBoundingClientRect();
+                return {
+                  number,
+                  source: visual?.getAttribute('src') || null,
+                  loaded: Boolean(visual?.complete && visual.naturalWidth),
+                  naturalWidth: visual?.naturalWidth || 0,
+                  logicalWidth: rect ? rect.width / slideScale : 0,
+                };
+              });
+              const forceImage = stage._slides[8].querySelector('[data-force-art]');
+              const forceResponse = await fetch(forceImage.src, {cache: 'no-store'});
+              const forceSvg = new DOMParser().parseFromString(
+                await forceResponse.text(), 'image/svg+xml'
+              );
+              const motionModes = [...forceSvg.querySelectorAll('[data-state]')]
+                .map(item => item.dataset.state).sort();
+              const torqueArt = stage._slides[9].querySelector(
+                'img[data-torque-comparison-art]'
+              );
+              return {
+                visualSlides,
+                motionModes,
+                torqueLoaded: Boolean(torqueArt?.complete && torqueArt.naturalWidth),
+              };
+            })()
+            """,
+            await_promise=True,
+        )
+
+        self.assertEqual(
+            [item["number"] for item in result["visualSlides"]],
+            [4, 5, 6, 7, 11],
+            result,
+        )
+        for visual in result["visualSlides"]:
+            self.assertTrue(visual["loaded"], visual)
+            self.assertGreaterEqual(visual["naturalWidth"], 1180, visual)
+            self.assertGreaterEqual(visual["logicalWidth"], 1040, visual)
+        self.assertEqual(
+            result["motionModes"],
+            ["climb", "descend", "hover", "translate"],
+            result,
+        )
+        self.assertTrue(result["torqueLoaded"], result)
+
+    def test_text_heavy_sections_use_evidence_or_simple_visuals(self) -> None:
+        """Use real evidence or one-purpose diagrams instead of dense card grids."""
+        self._open_deck()
+        result = self._evaluate(
+            """
+            (() => {
+              const stage = document.querySelector('deck-stage');
+              const expected = {
+                12: 'attitude-correction-simple.svg',
+                46: 'sil-closed-loop-simple.svg',
+                63: 'failsafe-timeline-simple.svg',
+                64: 'landing-observability-simple.svg',
+                71: 'shared-state-race-simple.svg',
+                81: 'telemetry-motor-balance-simple.svg',
+              };
+              const diagrams = Object.entries(expected).map(([rawNumber, filename]) => {
+                const number = Number(rawNumber);
+                const slide = stage._slides[number - 1];
+                const visual = slide.querySelector('img[data-simple-visual]');
+                const slideScale = slide.getBoundingClientRect().width / 1280;
+                const rect = visual?.getBoundingClientRect();
+                return {
+                  number,
+                  filename,
+                  source: visual?.getAttribute('src') || null,
+                  loaded: Boolean(visual?.complete && visual.naturalWidth),
+                  naturalWidth: visual?.naturalWidth || 0,
+                  logicalWidth: rect ? rect.width / slideScale : 0,
+                };
+              });
+              const collageSources = [...stage._slides[7].querySelectorAll(
+                '[data-evidence-collage] img'
+              )].map(image => image.getAttribute('src'));
+              const timingVideo = stage._slides[32].querySelector(
+                'video[src$="cascade-loop-timing.mp4"]'
+              );
+              const magChart = stage._slides[56].querySelector(
+                'img[src$="chart_mag.png"]'
+              );
+              return {
+                diagrams,
+                collageSources,
+                timingVideoLoaded: Boolean(
+                  timingVideo && timingVideo.readyState >= HTMLMediaElement.HAVE_METADATA
+                ),
+                magChartLoaded: Boolean(magChart?.complete && magChart.naturalWidth),
+              };
+            })()
+            """
+        )
+
+        for visual in result["diagrams"]:
+            self.assertTrue(visual["loaded"], visual)
+            self.assertGreaterEqual(visual["naturalWidth"], 1180, visual)
+            self.assertGreaterEqual(visual["logicalWidth"], 620, visual)
+            self.assertTrue(visual["source"].endswith(visual["filename"]), visual)
+        self.assertEqual(
+            sorted(Path(source).name for source in result["collageSources"]),
+            sorted(
+                [
+                    "image5.png",
+                    "image12.png",
+                    "chart_attitude.png",
+                    "mobile-lab-student.png",
+                ]
+            ),
+            result,
+        )
+        self.assertTrue(result["timingVideoLoaded"], result)
+        self.assertTrue(result["magChartLoaded"], result)
+
+    def test_slide_9_force_illustration_has_a_clear_vector_hierarchy(self) -> None:
+        self._open_deck()
+        hierarchy = self._evaluate(
+            """
+            (async () => {
+              const slide = document.querySelector('deck-stage')._slides[8];
+              const image = slide.querySelector('img[data-force-art]');
+              const response = await fetch(image.src, {cache: 'no-store'});
+              const svg = new DOMParser().parseFromString(
+                await response.text(), 'image/svg+xml'
+              );
+              const rotors = [...svg.querySelectorAll('#x-drone circle')]
+                .map(rotor => ({
+                  x: Number(rotor.getAttribute('cx')),
+                  y: Number(rotor.getAttribute('cy')),
+                }));
+              const slideScale = slide.getBoundingClientRect().width / 1280;
+              return {
+                layout: image.closest('[data-force-layout]')?.dataset.forceLayout || null,
+                logicalWidth: image.getBoundingClientRect().width / slideScale,
+                naturalWidth: image.naturalWidth,
+                naturalHeight: image.naturalHeight,
+                states: [...svg.querySelectorAll('[data-state]')]
+                  .map(item => item.dataset.state).sort(),
+                rotorCount: rotors.length,
+                rotorHorizontalSpan: Math.max(...rotors.map(item => item.x)) -
+                  Math.min(...rotors.map(item => item.x)),
+                rotorVerticalSpan: Math.max(...rotors.map(item => item.y)) -
+                  Math.min(...rotors.map(item => item.y)),
+                rules: svg.querySelectorAll('[data-rule="control-effects"]').length,
+              };
+            })()
+            """,
+            await_promise=True,
+        )
+
+        self.assertEqual(hierarchy["layout"], "four-states", hierarchy)
         self.assertGreaterEqual(hierarchy["logicalWidth"], 1040, hierarchy)
-        self.assertEqual(hierarchy["forceRotors"], 4, hierarchy)
-        self.assertGreaterEqual(hierarchy["rotorHorizontalSpan"], 500, hierarchy)
-        self.assertGreaterEqual(hierarchy["rotorVerticalSpan"], 120, hierarchy)
-        self.assertEqual(hierarchy["rotorThrusts"], 4, hierarchy)
-        self.assertEqual(hierarchy["aggregateThrusts"], 1, hierarchy)
-        self.assertEqual(hierarchy["weights"], 1, hierarchy)
-        self.assertEqual(hierarchy["drags"], 1, hierarchy)
-        self.assertGreaterEqual(hierarchy["forceLabels"], 4, hierarchy)
-        self.assertEqual(hierarchy["droneBodies"], 1, hierarchy)
+        self.assertEqual(hierarchy["naturalWidth"], 1180, hierarchy)
+        self.assertEqual(hierarchy["naturalHeight"], 450, hierarchy)
+        self.assertEqual(
+            hierarchy["states"],
+            ["climb", "descend", "hover", "translate"],
+            hierarchy,
+        )
+        self.assertEqual(hierarchy["rotorCount"], 4, hierarchy)
+        self.assertGreaterEqual(hierarchy["rotorHorizontalSpan"], 90, hierarchy)
+        self.assertGreaterEqual(hierarchy["rotorVerticalSpan"], 60, hierarchy)
+        self.assertEqual(hierarchy["rules"], 1, hierarchy)
 
     def test_slide_10_yaw_diagram_is_top_down_and_pair_driven(self) -> None:
         self._call(
@@ -768,10 +968,8 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertEqual(broken_tokens, [], json.dumps(broken_tokens, ensure_ascii=False))
 
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
-        self._call(
-            "Page.navigate",
-            {"url": f"http://127.0.0.1:{self.http_port}/#35"},
-        )
+        self._open_deck()
+        self._evaluate("document.querySelector('deck-stage').goTo(34)")
         self._wait_for_playback("accelerometer.mp4")
 
         self._evaluate("document.querySelector('deck-stage').goTo(35)")

@@ -223,11 +223,13 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
     def test_cascade_row_labels_clear_the_first_target_box(self) -> None:
         scene = self._rendered_scene("CascadeTimingAudience")
 
-        outer = self._text(scene, "각도루프·250Hz")
-        inner = self._text(scene, "각속도루프·1kHz")
+        outer = self._text(scene, "바깥자세루프")
+        inner = self._text(scene, "안쪽각속도루프")
+        cadence = self._text(scene, "자세목표사이에서여러번보정")
 
         self.assertLess(outer.get_right()[0], -4.4)
         self.assertLess(inner.get_right()[0], -4.4)
+        self.assertGreater(cadence.get_bottom()[1], -3.2)
 
     def test_gyro_bias_axis_label_is_horizontal_above_the_plot(self) -> None:
         scene = self._rendered_scene("GyroBiasAudience")

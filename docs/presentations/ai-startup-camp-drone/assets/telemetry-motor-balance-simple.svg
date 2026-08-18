@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="450" viewBox="0 0 1180 450" role="img" aria-labelledby="balance-title balance-desc" data-visual="telemetry-motor-balance" data-conclusion="cause-unknown">
+  <title id="balance-title">수평에 가까운데 달랐던 모터 출력</title>
+  <desc id="balance-desc">X형 쿼드콥터의 자세는 수평에 가깝지만 M3 출력이 M1보다 높게 관찰되었고 원인은 아직 확정되지 않음</desc>
+  <defs><style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.label{font-size:26px;font-weight:900}.sub{font-size:24px;font-weight:700;fill:#516074}.white{fill:#fff}</style></defs>
+  <rect width="1180" height="450" fill="#fff"/>
+  <g data-airframe="x-quadrotor" aria-label="X형 쿼드콥터 모터 배치">
+    <path d="M150 116L470 334M470 116L150 334" stroke="#172334" stroke-width="22" stroke-linecap="round"/><path d="M150 116L470 334M470 116L150 334" stroke="#718096" stroke-width="5" stroke-linecap="round"/>
+    <path d="M310 187L348 225L310 263L272 225Z" fill="#004094"/><path d="M310 197L322 216H298Z" fill="#fff"/>
+    <g data-motor="M1" data-output="lower"><circle cx="150" cy="116" r="51" fill="#fffaf0" stroke="#d49b00" stroke-width="6"/><text x="150" y="126" text-anchor="middle" class="label">M1</text></g>
+    <g data-motor="M3" data-output="higher"><circle cx="470" cy="116" r="51" fill="#eaf2fb" stroke="#004094" stroke-width="7"/><text x="470" y="126" text-anchor="middle" class="label">M3</text></g>
+    <g data-motor="M4"><circle cx="150" cy="334" r="44" fill="#fff" stroke="#718096" stroke-width="5"/><text x="150" y="344" text-anchor="middle" class="label">M4</text></g>
+    <g data-motor="M2"><circle cx="470" cy="334" r="44" fill="#fff" stroke="#718096" stroke-width="5"/><text x="470" y="344" text-anchor="middle" class="label">M2</text></g>
+  </g>
+  <g data-observation="m3-higher-than-m1" aria-label="M3 출력이 M1보다 높음">
+    <text x="680" y="70" class="label">텔레메트리 관찰</text>
+    <rect x="680" y="109" width="91" height="144" fill="#fffaf0" stroke="#d49b00" stroke-width="5"/><rect x="680" y="188" width="91" height="65" fill="#d49b00"/>
+    <rect x="822" y="109" width="91" height="144" fill="#eaf2fb" stroke="#004094" stroke-width="5"/><rect x="822" y="137" width="91" height="116" fill="#004094"/>
+    <text x="725" y="289" text-anchor="middle" class="label">M1</text><text x="867" y="289" text-anchor="middle" class="label">M3</text>
+    <text x="797" y="335" text-anchor="middle" class="label" fill="#004094">M3 출력 &gt; M1</text>
+  </g>
+  <g data-attitude="near-level" aria-label="자세는 수평에 가까움">
+    <path d="M975 154H1120" stroke="#718096" stroke-width="5"/><path d="M1000 145L1096 163" stroke="#23836f" stroke-width="8" stroke-linecap="round"/>
+    <text x="1048" y="205" text-anchor="middle" class="label"><tspan x="1048">자세</tspan><tspan x="1048" dy="32" class="sub">수평에 가까움</tspan></text>
+  </g>
+  <g data-result="cause-unknown" aria-label="원인 미확정">
+    <rect x="680" y="371" width="440" height="58" rx="4" fill="#fff0f1"/><text x="900" y="409" text-anchor="middle" class="label" fill="#b04a55">원인 미확정</text>
+  </g>
+</svg>

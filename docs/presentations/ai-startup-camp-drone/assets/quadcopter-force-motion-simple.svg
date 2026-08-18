@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="450" viewBox="0 0 1180 450" role="img" aria-labelledby="force-title force-desc" data-visual="quadcopter-force-motion" data-model="force-to-motion">
+  <title id="force-title">쿼드콥터의 힘과 운동</title>
+  <desc id="force-desc">합추력과 무게의 관계로 상승, 호버링, 하강을 구분하고 기울어진 추력으로 수평 이동하는 네 상태</desc>
+  <defs>
+    <style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.state{font-size:25px;font-weight:900}.eq{font-size:24px;font-weight:700;fill:#004094}.rule{font-size:24px;font-weight:700}</style>
+    <marker id="blue-arrow" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0 0L0 14L13 7Z" fill="#004094"/></marker>
+    <marker id="gray-arrow" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0 0L0 14L13 7Z" fill="#718096"/></marker>
+    <g id="x-drone"><path d="M-44-31L44 31M44-31L-44 31" fill="none" stroke="#172334" stroke-width="9" stroke-linecap="round"/><g fill="#fff" stroke="#004094" stroke-width="4"><circle cx="-49" cy="-35" r="18"/><circle cx="49" cy="-35" r="18"/><circle cx="-49" cy="35" r="18"/><circle cx="49" cy="35" r="18"/></g><path d="M0-17L17 0L0 17L-17 0Z" fill="#004094"/></g>
+  </defs>
+  <rect width="1180" height="450" fill="#fff"/>
+  <g data-state="climb" aria-label="상승, 합추력이 무게보다 큼">
+    <text x="145" y="42" text-anchor="middle" class="state"><tspan x="145">상승</tspan><tspan x="145" dy="32" class="eq">ΣT &gt; W</tspan></text>
+    <g transform="translate(145 198)"><use href="#x-drone"/></g>
+    <path d="M145 171V105" stroke="#004094" stroke-width="7" marker-end="url(#blue-arrow)"/><path d="M145 225V278" stroke="#718096" stroke-width="5" marker-end="url(#gray-arrow)"/>
+  </g>
+  <g data-state="hover" aria-label="호버링, 합추력과 무게가 같음">
+    <text x="425" y="42" text-anchor="middle" class="state"><tspan x="425">호버링</tspan><tspan x="425" dy="32" class="eq">ΣT = W</tspan></text>
+    <g transform="translate(425 198)"><use href="#x-drone"/></g>
+    <path d="M425 171V120" stroke="#004094" stroke-width="6" marker-end="url(#blue-arrow)"/><path d="M425 225V276" stroke="#718096" stroke-width="6" marker-end="url(#gray-arrow)"/>
+  </g>
+  <g data-state="descend" aria-label="하강, 합추력이 무게보다 작음">
+    <text x="705" y="42" text-anchor="middle" class="state"><tspan x="705">하강</tspan><tspan x="705" dy="32" class="eq">ΣT &lt; W</tspan></text>
+    <g transform="translate(705 198)"><use href="#x-drone"/></g>
+    <path d="M705 171V132" stroke="#004094" stroke-width="5" marker-end="url(#blue-arrow)"/><path d="M705 225V291" stroke="#718096" stroke-width="7" marker-end="url(#gray-arrow)"/>
+  </g>
+  <g data-state="translate" aria-label="수평 이동, 기울어진 추력">
+    <text x="1010" y="42" text-anchor="middle" class="state"><tspan x="1010">수평 이동</tspan><tspan x="1010" dy="32" class="eq">기울어진 T</tspan></text>
+    <g transform="translate(1004 202) rotate(18)"><use href="#x-drone"/></g>
+    <path d="M984 174L1031 116" stroke="#004094" stroke-width="7" marker-end="url(#blue-arrow)"/><path d="M1004 229V282" stroke="#718096" stroke-width="5" marker-end="url(#gray-arrow)"/><path d="M1034 198H1110" stroke="#23836f" stroke-width="6" marker-end="url(#blue-arrow)"/>
+  </g>
+  <g data-rule="control-effects" aria-label="힘의 합은 병진, 추력 차이와 암 길이는 롤 피치, 반작용 토크 차이는 요를 결정">
+    <rect x="40" y="330" width="1100" height="96" rx="4" fill="#f1f3f5"/>
+    <text x="590" y="365" text-anchor="middle" class="rule"><tspan x="590">힘의 합 → 병진 이동</tspan><tspan x="590" dy="30">추력 차이 × 암 길이 → Roll · Pitch　│　반작용 토크 차이 → Yaw</tspan></text>
+  </g>
+</svg>

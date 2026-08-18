@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="450" viewBox="0 0 1180 450" role="img" aria-labelledby="sil-title sil-desc" data-visual="sil-closed-loop" data-evidence="host-sil-not-flight">
+  <title id="sil-title">호스트 SIL 폐루프</title>
+  <desc id="sil-desc">가상 물리, 합성 센서, 실제 비행 코드, 모터 출력이 다시 가상 물리로 이어지는 호스트 시뮬레이션이며 비행 증거는 아님</desc>
+  <defs><style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.label{font-size:24px;font-weight:900}.white{fill:#fff}</style><marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0 0L0 14L13 7Z" fill="#004094"/></marker></defs>
+  <rect width="1180" height="450" fill="#fff"/>
+  <g data-evidence-label="host-sil-not-flight" aria-label="호스트 SIL, 비행 증거 아님">
+    <rect x="377" y="20" width="426" height="61" rx="4" fill="#172334"/>
+    <text x="590" y="59" text-anchor="middle" class="label white">HOST SIL · 비행 증거 아님</text>
+  </g>
+  <path d="M238 224H319" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/><path d="M471 224H552" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/><path d="M704 224H785" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/><path d="M937 224H1030" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/>
+  <path d="M1090 284C1090 397 132 397 132 284" fill="none" stroke="#004094" stroke-width="5" stroke-dasharray="11 8" marker-end="url(#arrow)"/>
+  <g data-stage="virtual-physics" aria-label="가상 물리">
+    <circle cx="166" cy="224" r="72" fill="#f1f3f5"/><path d="M126 244Q166 151 206 244" fill="none" stroke="#718096" stroke-width="7"/><circle cx="166" cy="205" r="13" fill="#004094"/><text x="166" y="329" text-anchor="middle" class="label">가상 물리</text>
+  </g>
+  <g data-stage="synthetic-sensors" aria-label="합성 센서">
+    <circle cx="399" cy="224" r="72" fill="#eaf2fb"/><rect x="363" y="188" width="72" height="72" rx="8" fill="#004094"/><path d="M375 224H387L396 207L407 241L417 220H427" fill="none" stroke="#fff" stroke-width="5"/><text x="399" y="329" text-anchor="middle" class="label">합성 센서</text>
+  </g>
+  <g data-stage="actual-flight-code" aria-label="실제 비행 코드">
+    <circle cx="632" cy="224" r="78" fill="#004094"/><path d="M597 198L576 224L597 250M667 198L688 224L667 250" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/><text x="632" y="329" text-anchor="middle" class="label">실제 비행 코드</text>
+  </g>
+  <g data-stage="motor-output" aria-label="모터 출력">
+    <circle cx="865" cy="224" r="72" fill="#eaf7f3"/><g fill="#fff" stroke="#23836f" stroke-width="5"><circle cx="837" cy="196" r="19"/><circle cx="893" cy="196" r="19"/><circle cx="837" cy="252" r="19"/><circle cx="893" cy="252" r="19"/></g><path d="M837 196L893 252M893 196L837 252" stroke="#172334" stroke-width="8"/><text x="865" y="329" text-anchor="middle" class="label">모터 출력</text>
+  </g>
+  <g data-stage="physics-return" aria-label="물리 상태 갱신"><circle cx="1070" cy="224" r="58" fill="#fff5d9"/><path d="M1045 224A25 25 0 1 1 1060 247" fill="none" stroke="#d49b00" stroke-width="6" marker-end="url(#arrow)"/><text x="1070" y="329" text-anchor="middle" class="label">물리 갱신</text></g>
+</svg>

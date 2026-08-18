@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="450" viewBox="0 0 1180 450" role="img" aria-labelledby="attitude-title attitude-desc" data-visual="attitude-correction" data-model="feedback-loop">
+  <title id="attitude-title">기울어지면 반대 방향으로 되돌리는 자세 제어</title>
+  <desc id="attitude-desc">외란, 기울어짐, 센서 피드백, 반대쪽 모터 보정이 순환하는 폐루프</desc>
+  <defs><style>text{font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif;fill:#172334}.label{font-size:26px;font-weight:900}.sub{font-size:24px;font-weight:700;fill:#516074}</style><marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0 0L0 14L13 7Z" fill="#004094"/></marker><g id="quad"><path d="M-39-28L39 28M39-28L-39 28" stroke="#172334" stroke-width="9" stroke-linecap="round"/><g fill="#fff" stroke="#004094" stroke-width="4"><circle cx="-44" cy="-32" r="17"/><circle cx="44" cy="-32" r="17"/><circle cx="-44" cy="32" r="17"/><circle cx="44" cy="32" r="17"/></g><path d="M0-16L16 0L0 16L-16 0Z" fill="#004094"/></g></defs>
+  <rect width="1180" height="450" fill="#fff"/>
+  <path d="M244 222H359" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/><path d="M514 222H629" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/><path d="M784 222H899" stroke="#004094" stroke-width="6" marker-end="url(#arrow)"/>
+  <path d="M1018 305C1018 405 164 405 164 305" fill="none" stroke="#004094" stroke-width="5" stroke-dasharray="10 8" marker-end="url(#arrow)"/>
+  <g data-stage="disturbance" aria-label="외란">
+    <circle cx="164" cy="222" r="80" fill="#fff5d9"/><path d="M92 222H140M100 195H134M107 249H138" stroke="#d49b00" stroke-width="7" stroke-linecap="round" marker-end="url(#arrow)"/>
+    <text x="164" y="92" text-anchor="middle" class="label"><tspan x="164">외란</tspan><tspan x="164" dy="32" class="sub">바람 · 무게 치우침</tspan></text>
+  </g>
+  <g data-stage="tilt" aria-label="기체 기울어짐">
+    <circle cx="434" cy="222" r="80" fill="#f1f3f5"/><g transform="translate(434 222) rotate(18)"><use href="#quad"/></g>
+    <text x="434" y="92" text-anchor="middle" class="label"><tspan x="434">기체 기울어짐</tspan><tspan x="434" dy="32" class="sub">자세 오차</tspan></text>
+  </g>
+  <g data-stage="sensor-feedback" aria-label="센서 피드백">
+    <circle cx="704" cy="222" r="80" fill="#eaf2fb"/><path d="M670 191H738V253H670Z" fill="#004094"/><path d="M684 240L699 220L715 231L729 202" fill="none" stroke="#fff" stroke-width="5"/>
+    <text x="704" y="92" text-anchor="middle" class="label"><tspan x="704">센서 피드백</tspan><tspan x="704" dy="32" class="sub">기울기 감지</tspan></text>
+  </g>
+  <g data-stage="opposite-motor-correction" aria-label="반대쪽 모터 보정">
+    <circle cx="974" cy="222" r="80" fill="#eaf7f3"/><g transform="translate(974 222)"><use href="#quad"/></g><path d="M927 175V135M1021 269V309" stroke="#23836f" stroke-width="7" marker-end="url(#arrow)"/>
+    <text x="974" y="92" text-anchor="middle" class="label"><tspan x="974">반대쪽 모터 보정</tspan><tspan x="974" dy="32" class="sub">오차 반대 토크</tspan></text>
+  </g>
+</svg>
