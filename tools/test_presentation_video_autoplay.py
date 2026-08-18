@@ -188,6 +188,14 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         ):
             self.assertIn(phrase, slide22_notes)
 
+        slide23 = parser.sections[22]
+        slide23_text = _slide_text(slide23)
+        slide23_notes = str(slide23["attrs"].get("data-speaker-notes", ""))
+        self.assertEqual(_slide_title(slide23), "트러스 암 설계")
+        self.assertIn("형상을 수정해 다시 출력·비교", slide23_text)
+        for unsupported_detail in ("세 번", "하루 안에"):
+            self.assertNotIn(unsupported_detail, slide23_text + slide23_notes)
+
         slide25 = parser.sections[24]
         slide25_text = _slide_text(slide25)
         self.assertEqual(_slide_title(slide25), "3D 프린팅 래피드 프로토타이핑")

@@ -7,21 +7,22 @@
 화면에 쓰는 값의 기계 판독 원본은
 [`production_estimate.json`](production_estimate.json)이다.
 
-## 저장소에서 확인한 구성
+## 저장소에서 확인한 사양 범위
 
 - ESP32-S3-N16R8 1개
 - ICM-42670-P 2개, BMM350 1개
-- EMAX BLHeli 30A ESC 4개
+- PWM 30A ESC 4개
 - 1750KV급 모터 4개
-- T-MOTOR T4944-3 프로펠러 1세트
-- ECOFLUX 4S 3000mAh 배터리 1개
+- 4S 3000mAh 배터리 1개
 - 3D 프린팅 암 4개와 상·하판
 - 선택 장착 예정인 3901-L0X 1개
 
-근거는 [`index.html`](index.html)의 부품 구성 장표와
+위 범위는 [`index.html`](index.html)의 `하드웨어 구성` 장표와
 [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino)의
-현행 모터·센서 객체이다. 실물 모터 표기와 발표자료의 모델명이 일치하는지는 구매
-기록이 없어 확인하지 못했다. 자체 PCB의 정확한 리비전별 BOM도 저장소에 없다.
+현행 모터·센서 객체에서 확인했다. 정확한 모터·ESC·배터리·프로펠러 구매 SKU와
+자체 PCB의 리비전별 BOM은 저장소에 없다. 아래 EMAX ESC, T-MOTOR 프로펠러,
+ECOFLUX 배터리와 두 1750KV급 모터는 설치 부품을 확정한 목록이 아니라, 위 사양과
+비교 가능한 제품 중 현재 가격을 확인할 수 있어 예비 산정에 사용한 참고 품목이다.
 
 ## 제작시간
 

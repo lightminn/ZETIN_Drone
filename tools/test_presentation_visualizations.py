@@ -34,6 +34,9 @@ PRODUCTION_ESTIMATE_PATH = (
     / "ai-startup-camp-drone"
     / "production_estimate.json"
 )
+PRODUCTION_ESTIMATE_DOC_PATH = PRODUCTION_ESTIMATE_PATH.with_name(
+    "PRODUCTION_ESTIMATE.md"
+)
 VISUALIZATION_FILES = (
     "accelerometer.mp4",
     "gyro.mp4",
@@ -468,6 +471,14 @@ class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
         self.assertIn("first_print_success", basis["assumptions"])
         self.assertIn("assembled_fc_pcb_available", basis["assumptions"])
         self.assertFalse(basis["includes_free_flight_validation"])
+
+    def test_reference_products_are_not_claimed_as_confirmed_installed_parts(self) -> None:
+        document = PRODUCTION_ESTIMATE_DOC_PATH.read_text(encoding="utf-8")
+        self.assertIn("저장소에서 확인한 사양 범위", document)
+        self.assertIn("구매 SKU", document)
+        self.assertIn("설치 부품을 확정한 목록이 아니라", document)
+        self.assertIn("예비 산정에 사용한 참고 품목", document)
+        self.assertNotIn("근거는 [`index.html`](index.html)의 부품 구성 장표", document)
 
 
 class PresentationVisualizationLayoutTests(unittest.TestCase):
