@@ -1194,7 +1194,7 @@ class ProductionEstimateStatic(StaticDiagramScene):
             LEFT * 3.82 + UP * 1.43,
             "1대",
             self._range(one_time["printer_hours"], "시간"),
-            self._range(one_time["hands_on_hours"], "인시"),
+            self._range(one_time["hands_on_hours"], "시간"),
             "프린터 1대 · 약 2~3일",
             1,
         )
@@ -1202,7 +1202,7 @@ class ProductionEstimateStatic(StaticDiagramScene):
             RIGHT * 3.82 + UP * 1.43,
             "10대",
             self._range(ten_time["printer_hours_one_printer"], "시간"),
-            self._range(ten_time["hands_on_hours"], "인시"),
+            self._range(ten_time["hands_on_hours"], "시간"),
             "프린터 1대 · 약 10~20일",
             10,
         )
