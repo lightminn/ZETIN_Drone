@@ -225,36 +225,39 @@
 
           <path d="M590 34 V445" fill="none" stroke="#dfe5ec" stroke-width="1.5" stroke-dasharray="5 9"/>
 
-          <g data-drone-body aria-label="옆에서 본 쿼드콥터">
-            <path d="M232 277 H948" fill="none" stroke="#253448" stroke-width="20" stroke-linecap="round"/>
-            <path d="M232 277 H948" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round" opacity=".62"/>
-            <g fill="#f7f9fc" stroke="#004094" stroke-width="5">
-              <ellipse cx="250" cy="260" rx="92" ry="17"/>
-              <ellipse cx="445" cy="260" rx="92" ry="17"/>
-              <ellipse cx="735" cy="260" rx="92" ry="17"/>
-              <ellipse cx="930" cy="260" rx="92" ry="17"/>
+          <g data-drone-body aria-label="사시도로 본 X형 쿼드콥터">
+            <g fill="none" stroke-linecap="round">
+              <path d="M590 285 L330 210 M590 285 L850 210 M590 285 L420 360 M590 285 L760 360" stroke="#253448" stroke-width="21"/>
+              <path d="M590 285 L330 210 M590 285 L850 210 M590 285 L420 360 M590 285 L760 360" stroke="#718096" stroke-width="4" opacity=".66"/>
             </g>
-            <g fill="none" stroke="#3a78c2" stroke-width="3" opacity=".7">
-              <path d="M169 260 H331 M364 260 H526 M654 260 H816 M849 260 H1011"/>
+            <g fill="#f7f9fc" stroke="#004094" stroke-width="5">
+              <ellipse data-force-rotor data-position="front-left" cx="330" cy="210" rx="85" ry="19"/>
+              <ellipse data-force-rotor data-position="front-right" cx="850" cy="210" rx="85" ry="19"/>
+              <ellipse data-force-rotor data-position="rear-left" cx="420" cy="360" rx="85" ry="19"/>
+              <ellipse data-force-rotor data-position="rear-right" cx="760" cy="360" rx="85" ry="19"/>
+            </g>
+            <g fill="none" stroke="#3a78c2" stroke-width="3" opacity=".72">
+              <path d="M255 210 H405 M775 210 H925 M345 360 H495 M685 360 H835"/>
             </g>
             <g fill="#004094">
-              <circle cx="250" cy="260" r="8"/><circle cx="445" cy="260" r="8"/>
-              <circle cx="735" cy="260" r="8"/><circle cx="930" cy="260" r="8"/>
+              <circle cx="330" cy="210" r="8"/><circle cx="850" cy="210" r="8"/>
+              <circle cx="420" cy="360" r="8"/><circle cx="760" cy="360" r="8"/>
             </g>
-            <path d="M510 246 H670 L643 323 H537 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
-            <path d="M552 262 H628 L615 294 H565 Z" fill="#004094"/>
-            <circle cx="590" cy="284" r="7" fill="#fff"/>
+            <path d="M590 232 L658 265 L646 326 L590 352 L534 326 L522 265 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
+            <path d="M558 269 L590 251 L622 269 L616 305 L590 320 L564 305 Z" fill="#004094"/>
+            <path d="M590 245 L604 269 H576 Z" fill="#fff"/>
+            <circle cx="590" cy="285" r="7" fill="#fff"/>
           </g>
 
           <g fill="none" stroke="#3a78c2" stroke-width="5" stroke-linecap="round" marker-end="url(#force9-small-blue)">
-            <path data-vector="rotor-thrust" d="M250 241 V167"/>
-            <path data-vector="rotor-thrust" d="M445 241 V167"/>
-            <path data-vector="rotor-thrust" d="M735 241 V167"/>
-            <path data-vector="rotor-thrust" d="M930 241 V167"/>
+            <path data-vector="rotor-thrust" d="M330 190 V116"/>
+            <path data-vector="rotor-thrust" d="M850 190 V116"/>
+            <path data-vector="rotor-thrust" d="M420 340 V266"/>
+            <path data-vector="rotor-thrust" d="M760 340 V266"/>
           </g>
           <g data-force-label fill="#3a78c2" font-size="22" font-weight="900" text-anchor="middle">
-            <text x="250" y="151">T₁</text><text x="445" y="151">T₂</text>
-            <text x="735" y="151">T₃</text><text x="930" y="151">T₄</text>
+            <text x="350" y="137">T₁</text><text x="870" y="137">T₃</text>
+            <text x="440" y="287">T₄</text><text x="780" y="287">T₂</text>
           </g>
 
           <path data-vector="aggregate-thrust" d="M590 226 V46" fill="none" stroke="#004094" stroke-width="10" stroke-linecap="round" marker-end="url(#force9-large-blue)"/>

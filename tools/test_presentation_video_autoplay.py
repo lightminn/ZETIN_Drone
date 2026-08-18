@@ -333,10 +333,26 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                   if (document.readyState !== 'complete') return null;
                   const figure = document.querySelector('svg[data-force-sum]');
                   if (!figure) return null;
+                  const rotorRects = [...figure.querySelectorAll('[data-force-rotor]')]
+                    .map(rotor => rotor.getBoundingClientRect());
+                  const slideScale = figure.closest('section').getBoundingClientRect().width / 1280;
+                  const centers = rotorRects.map(rect => ({
+                    x: (rect.left + rect.width / 2) / slideScale,
+                    y: (rect.top + rect.height / 2) / slideScale,
+                  }));
                   return {
                     layout: figure.closest('[data-force-layout]')?.dataset.forceLayout || null,
                     logicalWidth: figure.getBoundingClientRect().width /
                       (figure.closest('section').getBoundingClientRect().width / 1280),
+                    forceRotors: rotorRects.length,
+                    rotorHorizontalSpan: centers.length
+                      ? Math.max(...centers.map(center => center.x)) -
+                        Math.min(...centers.map(center => center.x))
+                      : 0,
+                    rotorVerticalSpan: centers.length
+                      ? Math.max(...centers.map(center => center.y)) -
+                        Math.min(...centers.map(center => center.y))
+                      : 0,
                     rotorThrusts: figure.querySelectorAll(
                       '[data-vector="rotor-thrust"]'
                     ).length,
@@ -358,6 +374,9 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertIsNotNone(hierarchy)
         self.assertEqual(hierarchy["layout"], "direct-labels", hierarchy)
         self.assertGreaterEqual(hierarchy["logicalWidth"], 1040, hierarchy)
+        self.assertEqual(hierarchy["forceRotors"], 4, hierarchy)
+        self.assertGreaterEqual(hierarchy["rotorHorizontalSpan"], 500, hierarchy)
+        self.assertGreaterEqual(hierarchy["rotorVerticalSpan"], 120, hierarchy)
         self.assertEqual(hierarchy["rotorThrusts"], 4, hierarchy)
         self.assertEqual(hierarchy["aggregateThrusts"], 1, hierarchy)
         self.assertEqual(hierarchy["weights"], 1, hierarchy)
