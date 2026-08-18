@@ -289,7 +289,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                   const comparison = document.querySelector('[data-aircraft-comparison]');
                   const missions = document.querySelector('[data-mission-specs]');
                   const forceSum = document.querySelector('svg[data-force-sum]');
-                  const mixing = document.querySelector('svg[data-control-mixing]');
+                  const mixing = document.querySelector('[data-torque-comparison-art]');
                   const swarm = document.querySelector('[data-swarm-expansion]');
                   return {
                     classification: Boolean(classification),
@@ -297,7 +297,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                     aircraftRows: comparison?.querySelectorAll('[data-aircraft]').length || 0,
                     missionRows: missions?.querySelectorAll('[data-mission]').length || 0,
                     forceLabel: forceSum?.getAttribute('aria-label') || null,
-                    mixingLabel: mixing?.getAttribute('aria-label') || null,
+                    mixingLabel: mixing?.getAttribute('alt') || null,
                     swarmLayers: swarm?.querySelectorAll('[data-swarm-layer]').length || 0,
                     futureGoal: swarm?.dataset.status || null,
                   };
@@ -314,6 +314,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertEqual(visuals["aircraftRows"], 4, visuals)
         self.assertEqual(visuals["missionRows"], 4, visuals)
         self.assertIn("네 로터 추력의 벡터 합", visuals["forceLabel"])
+        self.assertIsNotNone(visuals["mixingLabel"], visuals)
         self.assertIn("힘과 토크", visuals["mixingLabel"])
         self.assertEqual(visuals["swarmLayers"], 6, visuals)
         self.assertEqual(visuals["futureGoal"], "future-goal", visuals)
@@ -374,68 +375,76 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         while time.monotonic() < deadline:
             yaw = self._evaluate(
                 """
-                (() => {
+                (async () => {
                   if (document.readyState !== 'complete') return null;
-                  const comparison = document.querySelector('[data-torque-comparison]');
-                  const helicopter = comparison?.querySelector('svg[data-helicopter-torque]');
-                  const figure = comparison?.querySelector('svg[data-control-mixing]');
-                  if (!comparison || !helicopter || !figure) return null;
-                  const rotors = [...figure.querySelectorAll('[data-yaw-rotor]')];
+                  const slide = document.querySelector('deck-stage')?._slides?.[9];
+                  const art = slide?.querySelector('img[data-torque-comparison-art]');
+                  if (!slide || !art || !art.complete || !art.naturalWidth) return null;
+                  const response = await fetch(art.src, {cache: 'no-store'});
+                  if (!response.ok) return null;
+                  const svg = new DOMParser().parseFromString(
+                    await response.text(),
+                    'image/svg+xml'
+                  );
+                  const rotors = [...svg.querySelectorAll('[data-motor]')];
                   const motors = Object.fromEntries(rotors.map(rotor => [
                     rotor.dataset.motor,
                     {
                       spin: rotor.dataset.spin,
-                      command: rotor.dataset.pairCommand,
+                      command: rotor.dataset.command,
                     },
                   ]));
-                  const helicopterRect = helicopter.getBoundingClientRect();
-                  const droneRect = figure.getBoundingClientRect();
+                  const artRect = art.getBoundingClientRect();
+                  const slideScale = slide.getBoundingClientRect().width / 1280;
                   return {
-                    comparison: comparison.dataset.layout || null,
-                    helicopterMainTorque: helicopter.querySelectorAll(
-                      '[data-heli-torque="main"]'
+                    loaded: art.complete,
+                    naturalWidth: art.naturalWidth,
+                    naturalHeight: art.naturalHeight,
+                    logicalWidth: artRect.width / slideScale,
+                    logicalHeight: artRect.height / slideScale,
+                    source: new URL(art.src).pathname,
+                    helicopterMainTorque: svg.querySelectorAll(
+                      '[data-heli-main-torque]'
                     ).length,
-                    helicopterReactionTorque: helicopter.querySelectorAll(
-                      '[data-heli-torque="reaction"]'
+                    helicopterReactionTorque: svg.querySelectorAll(
+                      '[data-heli-reaction]'
                     ).length,
-                    helicopterTailCounterTorque: helicopter.querySelectorAll(
-                      '[data-heli-torque="tail-counter"]'
+                    helicopterTailForce: svg.querySelectorAll(
+                      '[data-heli-tail-force]'
                     ).length,
-                    diagramsSideBySide:
-                      helicopterRect.right < droneRect.left &&
-                      Math.abs(helicopterRect.top - droneRect.top) < 4,
-                    view: figure.dataset.view || null,
+                    helicopterTailCounterTorque: svg.querySelectorAll(
+                      '[data-heli-counter-torque]'
+                    ).length,
                     rotors: rotors.length,
                     motors,
-                    circularRotors: rotors.filter(rotor => {
-                      const rect = rotor.getBoundingClientRect();
-                      return Math.abs(rect.width - rect.height) < 2;
-                    }).length,
-                    cw: figure.querySelectorAll('[data-spin="cw"]').length,
-                    ccw: figure.querySelectorAll('[data-spin="ccw"]').length,
-                    increase: figure.querySelectorAll(
-                      '[data-pair-command="increase"]'
+                    cw: svg.querySelectorAll('[data-spin="cw"]').length,
+                    ccw: svg.querySelectorAll('[data-spin="ccw"]').length,
+                    increase: svg.querySelectorAll('[data-command="increase"]').length,
+                    decrease: svg.querySelectorAll('[data-command="decrease"]').length,
+                    yawResult: svg.querySelector('[data-body-yaw]')?.dataset.bodyYaw || null,
+                    inlineDiagrams: slide.querySelectorAll(
+                      'svg[data-control-mixing], svg[data-helicopter-torque]'
                     ).length,
-                    decrease: figure.querySelectorAll(
-                      '[data-pair-command="decrease"]'
-                    ).length,
-                    yawResult: figure.querySelector('[data-yaw-result]')?.dataset.direction || null,
-                    body: figure.querySelectorAll('[data-yaw-body]').length,
                   };
                 })()
-                """
+                """,
+                await_promise=True,
             )
             if (yaw):
                 break
             time.sleep(0.05)
 
         self.assertIsNotNone(yaw)
-        self.assertEqual(yaw["comparison"], "side-by-side", yaw)
+        self.assertTrue(yaw["loaded"], yaw)
+        self.assertEqual(yaw["naturalWidth"], 1180, yaw)
+        self.assertEqual(yaw["naturalHeight"], 450, yaw)
+        self.assertGreaterEqual(yaw["logicalWidth"], 1120, yaw)
+        self.assertGreaterEqual(yaw["logicalHeight"], 425, yaw)
+        self.assertTrue(yaw["source"].endswith("helicopter-quadcopter-torque.svg"), yaw)
         self.assertEqual(yaw["helicopterMainTorque"], 1, yaw)
         self.assertEqual(yaw["helicopterReactionTorque"], 1, yaw)
+        self.assertEqual(yaw["helicopterTailForce"], 1, yaw)
         self.assertEqual(yaw["helicopterTailCounterTorque"], 1, yaw)
-        self.assertTrue(yaw["diagramsSideBySide"], yaw)
-        self.assertEqual(yaw["view"], "top", yaw)
         self.assertEqual(yaw["rotors"], 4, yaw)
         self.assertEqual(
             yaw["motors"],
@@ -447,13 +456,12 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             },
             yaw,
         )
-        self.assertEqual(yaw["circularRotors"], 4, yaw)
         self.assertEqual(yaw["cw"], 2, yaw)
         self.assertEqual(yaw["ccw"], 2, yaw)
         self.assertEqual(yaw["increase"], 2, yaw)
         self.assertEqual(yaw["decrease"], 2, yaw)
         self.assertEqual(yaw["yawResult"], "cw", yaw)
-        self.assertEqual(yaw["body"], 1, yaw)
+        self.assertEqual(yaw["inlineDiagrams"], 0, yaw)
 
     def test_slide_type_scale_is_ten_percent_larger(self) -> None:
         self._open_deck()

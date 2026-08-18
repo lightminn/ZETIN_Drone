@@ -283,90 +283,9 @@
 
   <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="헬리콥터는 메인로터를 돌릴 때 동체에 반대 방향의 반작용 토크가 생긴다. 꼬리로터는 긴 꼬리 끝에서 옆 방향 추력을 만들어 그 토크를 상쇄한다. 쿼드콥터에는 별도의 꼬리로터가 없다. 현재 기체에서는 M1과 M2가 CW, M3와 M4가 CCW이다. 평상시에는 두 쌍의 반작용 토크가 상쇄된다. 기체를 CW로 돌리는 예에서는 M3와 M4의 출력을 키우고 M1과 M2를 줄여 합추력을 거의 유지하면서 CW 반작용 토크를 우세하게 만든다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="헬기와 드론은 반작용 토크를 다르게 다룬다">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:10px;min-height:0">
-        <div data-torque-comparison data-layout="side-by-side" style="display:grid;grid-template-columns:.92fr 1.08fr;gap:30px;flex:1;min-height:0">
-          <div style="border-top:2px solid var(--uos-ink);display:flex;flex-direction:column;min-width:0;min-height:0;padding-top:9px">
-            <div style="font-size:24.2px;font-weight:900;color:var(--uos-ink);padding-left:4px">헬리콥터</div>
-            <div style="font-size:20.5337px;color:var(--uos-ink-muted);padding:2px 0 2px 4px">꼬리로터의 힘으로 반작용 토크 상쇄</div>
-            <svg data-helicopter-torque data-view="top" role="img" aria-label="메인로터의 반작용 토크를 꼬리로터 추력이 상쇄하는 헬리콥터의 위쪽 도식" viewBox="0 0 520 390" style="width:100%;flex:1;min-height:0;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif">
-              <defs>
-                <marker id="heli10-gold" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="15" refX="13" refY="7.5" orient="auto"><path d="M0,0 L0,15 L14,7.5 z" fill="#b47b00"/></marker>
-                <marker id="heli10-red" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="17" refX="15" refY="8.5" orient="auto"><path d="M0,0 L0,17 L16,8.5 z" fill="#b04a55"/></marker>
-                <marker id="heli10-blue" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="17" refX="15" refY="8.5" orient="auto"><path d="M0,0 L0,17 L16,8.5 z" fill="#004094"/></marker>
-              </defs>
-
-              <path d="M233 206 H56" fill="none" stroke="#253448" stroke-width="20" stroke-linecap="round"/>
-              <path d="M233 206 H56" fill="none" stroke="#718096" stroke-width="4" opacity=".65"/>
-              <path d="M222 154 C290 140 337 165 350 205 C337 245 290 270 222 256 C198 233 198 177 222 154 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
-              <path d="M343 193 L396 205 L343 217 Z" fill="#004094"/>
-              <circle cx="248" cy="205" r="8" fill="#fff"/>
-              <circle cx="56" cy="206" r="30" fill="#f7f9fc" stroke="#004094" stroke-width="5"/>
-              <path d="M56 180 V232 M30 206 H82" stroke="#3a78c2" stroke-width="5" stroke-linecap="round"/>
-
-              <ellipse cx="248" cy="205" rx="176" ry="48" fill="none" stroke="#aab5c2" stroke-width="4"/>
-              <path data-heli-torque="main" d="M111 174 A176 48 0 0 1 378 181" fill="none" stroke="#b47b00" stroke-width="6" stroke-linecap="round" marker-end="url(#heli10-gold)"/>
-              <text x="260" y="124" fill="#815900" font-size="22" font-weight="900" text-anchor="middle">메인로터 CW</text>
-
-              <path data-heli-torque="reaction" d="M300 225 A74 74 0 1 1 286 151" fill="none" stroke="#b04a55" stroke-width="7" stroke-linecap="round" marker-end="url(#heli10-red)"/>
-              <text x="326" y="294" fill="#9b3f49" font-size="22" font-weight="900" text-anchor="middle">동체 반작용 CCW</text>
-
-              <path d="M55 254 V112" fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round" marker-end="url(#heli10-blue)"/>
-              <text x="72" y="104" fill="#004094" font-size="20.5337px" font-weight="900">꼬리로터 추력</text>
-              <path data-heli-torque="tail-counter" d="M161 232 A103 103 0 0 0 173 154" fill="none" stroke="#004094" stroke-width="7" stroke-linecap="round" marker-end="url(#heli10-blue)"/>
-              <text x="112" y="342" fill="#004094" font-size="22" font-weight="900">상쇄 토크 CW</text>
-            </svg>
-          </div>
-
-          <div style="border-top:2px solid var(--uos-ink);border-left:1px solid var(--uos-rule);display:flex;flex-direction:column;min-width:0;min-height:0;padding:9px 0 0 28px">
-            <div style="font-size:24.2px;font-weight:900;color:var(--uos-ink);padding-left:4px">쿼드콥터 · CW Yaw 예시</div>
-            <div style="font-size:20.5337px;color:var(--uos-ink-muted);padding:2px 0 2px 4px">CW·CCW 로터 쌍의 출력 차이로 회전 토크 생성</div>
-            <svg data-control-mixing data-view="top" role="img" aria-label="네 로터의 힘과 토크 배분에서 M3와 M4 출력을 키우고 M1과 M2 출력을 줄여 기체에 CW Yaw를 만드는 쿼드콥터의 위쪽 도식" viewBox="0 0 610 390" style="width:100%;flex:1;min-height:0;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif">
-              <defs>
-                <marker id="drone10-cw" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0,0 L0,14 L13,7 z" fill="#b47b00"/></marker>
-                <marker id="drone10-ccw" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0,0 L0,14 L13,7 z" fill="#004094"/></marker>
-                <marker id="drone10-body" markerUnits="userSpaceOnUse" markerWidth="19" markerHeight="19" refX="17" refY="9.5" orient="auto"><path d="M0,0 L0,19 L18,9.5 z" fill="#004094"/></marker>
-              </defs>
-
-              <path d="M135 105 L475 285 M475 105 L135 285" fill="none" stroke="#253448" stroke-width="21" stroke-linecap="round"/>
-              <path d="M135 105 L475 285 M475 105 L135 285" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round" opacity=".62"/>
-
-              <g aria-label="M1과 M2는 CW 로터이며 이 예시에서는 출력을 줄인다">
-                <circle data-yaw-rotor data-motor="M1" data-spin="cw" data-pair-command="decrease" cx="135" cy="105" r="48" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
-                <circle data-yaw-rotor data-motor="M2" data-spin="cw" data-pair-command="decrease" cx="475" cy="285" r="48" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
-                <g fill="none" stroke="#b47b00" stroke-width="5" stroke-linecap="round" marker-end="url(#drone10-cw)">
-                  <path d="M135 46 A59 59 0 0 1 194 105"/>
-                  <path d="M475 226 A59 59 0 0 1 534 285"/>
-                </g>
-                <g fill="#815900" font-size="20.5337px" text-anchor="middle">
-                  <text x="135" y="100" font-weight="900">M1 · CW</text><text x="135" y="126" font-weight="900">출력 ↓</text>
-                  <text x="475" y="280" font-weight="900">M2 · CW</text><text x="475" y="306" font-weight="900">출력 ↓</text>
-                </g>
-              </g>
-
-              <g aria-label="M3와 M4는 CCW 로터이며 이 예시에서는 출력을 키운다">
-                <circle data-yaw-rotor data-motor="M3" data-spin="ccw" data-pair-command="increase" cx="475" cy="105" r="48" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
-                <circle data-yaw-rotor data-motor="M4" data-spin="ccw" data-pair-command="increase" cx="135" cy="285" r="48" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
-                <g fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round" marker-end="url(#drone10-ccw)">
-                  <path d="M475 46 A59 59 0 0 0 416 105"/>
-                  <path d="M135 226 A59 59 0 0 0 76 285"/>
-                </g>
-                <g fill="#004094" font-size="20.5337px" text-anchor="middle">
-                  <text x="475" y="100" font-weight="900">M3 · CCW</text><text x="475" y="126" font-weight="900">출력 ↑</text>
-                  <text x="135" y="280" font-weight="900">M4 · CCW</text><text x="135" y="306" font-weight="900">출력 ↑</text>
-                </g>
-              </g>
-
-              <path data-yaw-body d="M305 143 L347 167 L356 207 L329 239 L281 239 L254 207 L263 167 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
-              <path d="M305 155 L321 184 H289 Z" fill="#fff"/>
-              <circle cx="305" cy="198" r="9" fill="#004094" stroke="#fff" stroke-width="3"/>
-              <path d="M305 128 A79 79 0 1 1 247 251" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round"/>
-              <path data-yaw-result data-direction="cw" d="M305 128 A79 79 0 1 1 247 251" fill="none" stroke="#004094" stroke-width="8" stroke-linecap="round" marker-end="url(#drone10-body)"/>
-              <text x="305" y="373" fill="#004094" font-size="22" font-weight="900" text-anchor="middle">M3·M4 ↑ + M1·M2 ↓ → 기체 CW</text>
-            </svg>
-          </div>
-        </div>
-        <div style="border-top:1px solid var(--uos-rule);padding:11px 2px 0;font-size:22px;line-height:1.35;text-align:center"><strong style="color:var(--uos-ink)">헬기</strong><span style="color:var(--uos-ink-muted)"> · 꼬리로터로 상쇄</span><span style="display:inline-block;width:42px"></span><strong style="color:var(--uos-ink)">쿼드콥터</strong><span style="color:var(--uos-ink-muted)"> · 두 로터 쌍의 출력 차이로 Yaw 생성</span></div>
-      </div>
+      <figure style="width:100%;height:100%;margin:0;display:grid;place-items:center;min-height:0">
+        <img data-torque-comparison-art src="assets/helicopter-quadcopter-torque.svg" alt="헬리콥터와 쿼드콥터의 힘과 토크 비교: 헬기는 꼬리로터 힘으로 반작용 토크를 상쇄하고, 쿼드콥터는 CW·CCW 로터 쌍의 출력 차이로 Yaw를 만든다" style="display:block;width:100%;height:auto;max-height:100%;object-fit:contain" />
+      </figure>
     </x-import>
   </section>
 
