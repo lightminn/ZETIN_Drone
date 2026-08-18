@@ -33,7 +33,7 @@ PDF_PATH = Path(
     os.environ.get("ZETIN_PRESENTATION_PDF", str(DEFAULT_PDF_PATH))
 )
 EXPECTED_SLIDES = 84
-EXPECTED_VIDEO_SLIDES = 14
+EXPECTED_VIDEO_SLIDES = 27
 SLIDE_NAME = re.compile(r"ppt/slides/slide\d+\.xml$")
 NOTE_NAME = re.compile(r"ppt/notesSlides/notesSlide\d+\.xml$")
 PRESENTATION_NS = {
