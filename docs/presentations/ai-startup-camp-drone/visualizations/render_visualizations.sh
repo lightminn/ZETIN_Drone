@@ -44,6 +44,12 @@ SCENES=(
   "significance_visualizations.py:QuadcopterForceMotionAudience:quadcopter-force-motion.mp4"
   "significance_visualizations.py:HelicopterQuadcopterTorqueAudience:helicopter-quadcopter-torque.mp4"
   "significance_visualizations.py:SwarmSystemAudience:swarm-system.mp4"
+  "engineering_visualizations.py:AttitudeCorrectionAudience:attitude-correction.mp4"
+  "engineering_visualizations.py:SilClosedLoopAudience:sil-closed-loop.mp4"
+  "engineering_visualizations.py:FailsafeTimelineAudience:failsafe-timeline.mp4"
+  "engineering_visualizations.py:LandingObservabilityAudience:landing-observability.mp4"
+  "engineering_visualizations.py:SharedStateRaceAudience:shared-state-race.mp4"
+  "engineering_visualizations.py:TelemetryMotorBalanceAudience:telemetry-motor-balance.mp4"
 )
 
 for entry in "${SCENES[@]}"; do

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,7 @@ GEOMETRY_PATH = (
 )
 VISUALIZATION_SOURCE_PATH = GEOMETRY_PATH.with_name("audience_visualizations.py")
 SIGNIFICANCE_SOURCE_PATH = GEOMETRY_PATH.with_name("significance_visualizations.py")
+ENGINEERING_SOURCE_PATH = GEOMETRY_PATH.with_name("engineering_visualizations.py")
 VISUALIZATION_FILES = (
     "accelerometer.mp4",
     "gyro.mp4",
@@ -43,6 +45,14 @@ SIGNIFICANCE_SCENES = {
     "QuadcopterForceMotionAudience": "quadcopter-force-motion.mp4",
     "HelicopterQuadcopterTorqueAudience": "helicopter-quadcopter-torque.mp4",
     "SwarmSystemAudience": "swarm-system.mp4",
+}
+ENGINEERING_SCENES = {
+    "AttitudeCorrectionAudience": "attitude-correction.mp4",
+    "SilClosedLoopAudience": "sil-closed-loop.mp4",
+    "FailsafeTimelineAudience": "failsafe-timeline.mp4",
+    "LandingObservabilityAudience": "landing-observability.mp4",
+    "SharedStateRaceAudience": "shared-state-race.mp4",
+    "TelemetryMotorBalanceAudience": "telemetry-motor-balance.mp4",
 }
 
 
@@ -83,6 +93,22 @@ def load_significance_module():
         sys.path.insert(0, source_dir)
     spec = importlib.util.spec_from_file_location(
         "presentation_significance_visualizations", SIGNIFICANCE_SOURCE_PATH
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_engineering_module():
+    if not ENGINEERING_SOURCE_PATH.is_file():
+        return None
+    source_dir = str(ENGINEERING_SOURCE_PATH.parent)
+    if source_dir not in sys.path:
+        sys.path.insert(0, source_dir)
+    spec = importlib.util.spec_from_file_location(
+        "presentation_engineering_visualizations", ENGINEERING_SOURCE_PATH
     )
     if spec is None or spec.loader is None:
         return None
@@ -294,6 +320,99 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                     scene.hold_and_clear = lambda *args, **kwargs: None
                     scene.render()
 
+    def test_engineering_scenes_render(self) -> None:
+        from manim import tempconfig
+
+        module = load_engineering_module()
+        self.assertIsNotNone(module, "engineering visualization module is missing")
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            for scene_name in ENGINEERING_SCENES:
+                with self.subTest(scene_name=scene_name):
+                    scene_class = getattr(module, scene_name, None)
+                    self.assertIsNotNone(scene_class)
+                    scene = scene_class()
+                    scene.hold_and_clear = lambda *args, **kwargs: None
+                    scene.render()
+
+    def test_engineering_scene_text_omits_dates_and_commit_hashes(self) -> None:
+        from manim import tempconfig
+
+        module = load_engineering_module()
+        self.assertIsNotNone(module)
+        forbidden = re.compile(
+            r"(?<!\d)(?:19|20)\d{2}-\d{2}-\d{2}(?!\d)"
+            r"|(?<![0-9a-fA-F])[0-9a-fA-F]{7,40}(?![0-9a-fA-F])"
+        )
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            for scene_name in ENGINEERING_SCENES:
+                with self.subTest(scene_name=scene_name):
+                    scene = getattr(module, scene_name)()
+                    scene.hold_and_clear = lambda *args, **kwargs: None
+                    scene.render()
+                    rendered_text = [
+                        item.text
+                        for item in self._mobjects(scene)
+                        if getattr(item, "text", None) is not None
+                    ]
+                    self.assertFalse(
+                        any(forbidden.search(value) for value in rendered_text),
+                        rendered_text,
+                    )
+
+    def test_telemetry_evidence_badge_clears_content_panels(self) -> None:
+        from manim import tempconfig
+
+        module = load_engineering_module()
+        self.assertIsNotNone(module)
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            scene = module.TelemetryMotorBalanceAudience()
+            scene.hold_and_clear = lambda *args, **kwargs: None
+            scene.render()
+
+        rounded_rectangles = [
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "RoundedRectangle"
+        ]
+        badge = next(
+            item
+            for item in rounded_rectangles
+            if item.width < 8.0 and item.height < 0.7
+        )
+        panels = [
+            item
+            for item in rounded_rectangles
+            if 6.0 < item.width < 8.0 and 4.0 < item.height < 5.0
+        ]
+
+        self.assertEqual(len(panels), 2)
+        for panel in panels:
+            self.assertGreater(badge.get_bottom()[1], panel.get_top()[1])
+
     def test_helicopter_tail_force_opposes_main_rotor_reaction_torque(self) -> None:
         from manim import tempconfig
 
@@ -476,7 +595,8 @@ class PresentationVisualizationDeliveryTests(unittest.TestCase):
                 self.assertLessEqual(duration, 12.0)
 
     def test_new_python_diagram_videos_use_delivery_profile(self) -> None:
-        for filename in SIGNIFICANCE_SCENES.values():
+        filenames = (*SIGNIFICANCE_SCENES.values(), *ENGINEERING_SCENES.values())
+        for filename in filenames:
             with self.subTest(filename=filename):
                 completed = subprocess.run(
                     [
