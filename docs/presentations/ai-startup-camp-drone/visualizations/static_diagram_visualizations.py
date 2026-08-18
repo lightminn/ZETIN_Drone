@@ -8,7 +8,9 @@ or takeaway line.
 
 from __future__ import annotations
 
+import json
 from math import cos
+from pathlib import Path
 
 from manim import *
 
@@ -26,6 +28,7 @@ from audience_visualizations import (
     WHITE,
     YELLOW,
     ExplainerScene,
+    drone_icon,
     text,
 )
 from engineering_visualizations import front_view_drone, motor_layout
@@ -1113,5 +1116,149 @@ class TelemetryMotorBalanceStatic(StaticDiagramScene):
             qualitative,
             candidates,
             unresolved,
+            note,
+        )
+
+
+class ProductionEstimateStatic(StaticDiagramScene):
+    """Compare one-unit and ten-unit planning ranges in one static frame."""
+
+    DATA_PATH = Path(__file__).resolve().parents[1] / "production_estimate.json"
+
+    @staticmethod
+    def _range(values, suffix: str) -> str:
+        return f"{values[0]:g}~{values[1]:g}{suffix}"
+
+    @staticmethod
+    def _money_range(values, scale: int, rounded_to: int = 1) -> str:
+        low = values[0] / scale
+        high = values[1] / scale
+        if rounded_to == 1:
+            return f"약 {low:.0f}~{high:.0f}만원"
+        return f"약 {round(low / rounded_to) * rounded_to:.0f}~{round(high / rounded_to) * rounded_to:.0f}만원"
+
+    def _time_panel(
+        self,
+        center,
+        title: str,
+        printer_label: str,
+        hands_on_label: str,
+        elapsed_label: str,
+        drone_count: int,
+    ) -> VGroup:
+        panel = card(7.25, 3.35, BLUE if drone_count == 1 else CYAN).move_to(center)
+        heading = text(title, 31, BLUE if drone_count == 1 else CYAN, "BOLD")
+        heading.move_to(panel.get_center() + LEFT * 2.55 + UP * 1.12)
+        icons = VGroup(
+            drone_icon(0.27, CYAN).move_to(
+                panel.get_center() + LEFT * 2.82 + UP * 0.35
+            )
+        )
+        multiplier = VGroup()
+        if drone_count > 1:
+            multiplier = text(f"×{drone_count}", 27, WHITE, "BOLD").move_to(
+                panel.get_center() + LEFT * 2.25 + UP * 0.35
+            )
+
+        printer_name = text("프린터 점유", 24, BLUE, "BOLD")
+        printer_name.move_to(panel.get_center() + LEFT * 0.68 + UP * 0.72)
+        printer_value = label_pill(printer_label, BLUE, 2.35)
+        printer_value.move_to(panel.get_center() + RIGHT * 2.15 + UP * 0.72)
+        hands_name = text("직접 작업", 24, GREEN, "BOLD")
+        hands_name.move_to(panel.get_center() + LEFT * 0.78 + DOWN * 0.12)
+        hands_value = label_pill(hands_on_label, GREEN, 2.35)
+        hands_value.move_to(panel.get_center() + RIGHT * 2.15 + DOWN * 0.12)
+        elapsed = text(elapsed_label, 24, WHITE, "BOLD")
+        elapsed.move_to(panel.get_center() + RIGHT * 0.78 + DOWN * 1.03)
+        return VGroup(
+            panel,
+            heading,
+            icons,
+            multiplier,
+            printer_name,
+            printer_value,
+            hands_name,
+            hands_value,
+            elapsed,
+        )
+
+    def construct(self) -> None:
+        data = json.loads(self.DATA_PATH.read_text(encoding="utf-8"))
+        one_time = data["time"]["one_unit"]
+        ten_time = data["time"]["ten_units"]
+        cost = data["cost"]
+
+        badge = boundary_badge("예비 산정 · 실측 기록 아님", YELLOW)
+        badge.move_to(RIGHT * 4.55 + UP * 3.72)
+        one_panel = self._time_panel(
+            LEFT * 3.82 + UP * 1.43,
+            "1대",
+            self._range(one_time["printer_hours"], "시간"),
+            self._range(one_time["hands_on_hours"], "인시"),
+            "프린터 1대 · 약 2~3일",
+            1,
+        )
+        ten_panel = self._time_panel(
+            RIGHT * 3.82 + UP * 1.43,
+            "10대",
+            self._range(ten_time["printer_hours_one_printer"], "시간"),
+            self._range(ten_time["hands_on_hours"], "인시"),
+            "프린터 1대 · 약 10~20일",
+            10,
+        )
+
+        cost_panel = card(15.1, 2.75, ORANGE).move_to(DOWN * 1.67)
+        cost_heading = text("핵심 부품비", 28, ORANGE, "BOLD")
+        cost_heading.move_to(cost_panel.get_center() + LEFT * 6.15 + UP * 0.82)
+        one_cost = text(
+            "1대 " + self._money_range(cost["one_unit_core_subtotal_krw"], 10000),
+            27,
+            WHITE,
+            "BOLD",
+        ).move_to(cost_panel.get_center() + LEFT * 5.15 + UP * 0.05)
+        ten_cost = text(
+            "10대 "
+            + self._money_range(
+                cost["ten_units_core_subtotal_krw"], 10000, rounded_to=10
+            ),
+            27,
+            WHITE,
+            "BOLD",
+        ).move_to(cost_panel.get_center() + LEFT * 5.0 + DOWN * 0.74)
+
+        category_names = (
+            ("모터 4개", BLUE),
+            ("ESC 4개", CYAN),
+            ("제어·센서 칩", GREEN),
+            ("프레임 재료", ORANGE),
+            ("배터리·프로펠러", YELLOW),
+        )
+        categories = VGroup(
+            *[
+                label_pill(name, color, 2.35 if index < 4 else 2.9)
+                for index, (name, color) in enumerate(category_names)
+            ]
+        ).arrange_in_grid(rows=2, cols=3, buff=(0.26, 0.22))
+        categories.move_to(cost_panel.get_center() + RIGHT * 1.6 + DOWN * 0.08)
+        optional = label_pill("3901-L0X 선택 · +4.8~4.9만원/대", CYAN, 5.15)
+        optional.move_to(cost_panel.get_center() + RIGHT * 4.45 + UP * 1.02)
+        excluded = text(
+            "PCB·배선·체결·배송·인건비·비행 튜닝 제외",
+            24,
+            YELLOW,
+            "BOLD",
+        ).move_to(cost_panel.get_center() + RIGHT * 1.45 + DOWN * 1.0)
+        note = takeaway("부품 보유 · 프린터 1대 · 첫 형상 성공 가정", YELLOW)
+        self.add(
+            badge,
+            one_panel,
+            ten_panel,
+            cost_panel,
+            cost_heading,
+            one_cost,
+            ten_cost,
+            categories,
+            optional,
+            excluded,
             note,
         )

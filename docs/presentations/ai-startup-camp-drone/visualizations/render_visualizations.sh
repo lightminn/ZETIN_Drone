@@ -53,6 +53,7 @@ STATIC_SCENES=(
   "static_diagram_visualizations.py:LandingObservabilityStatic:landing-observability.png"
   "static_diagram_visualizations.py:SharedStateRaceStatic:shared-state-race.png"
   "static_diagram_visualizations.py:TelemetryMotorBalanceStatic:telemetry-motor-balance.png"
+  "static_diagram_visualizations.py:ProductionEstimateStatic:production-estimate.png"
 )
 
 for entry in "${VIDEO_SCENES[@]}"; do

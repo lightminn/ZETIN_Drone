@@ -27,6 +27,13 @@ VISUALIZATION_SOURCE_PATH = GEOMETRY_PATH.with_name("audience_visualizations.py"
 SIGNIFICANCE_SOURCE_PATH = GEOMETRY_PATH.with_name("significance_visualizations.py")
 ENGINEERING_SOURCE_PATH = GEOMETRY_PATH.with_name("engineering_visualizations.py")
 STATIC_SOURCE_PATH = GEOMETRY_PATH.with_name("static_diagram_visualizations.py")
+PRODUCTION_ESTIMATE_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "presentations"
+    / "ai-startup-camp-drone"
+    / "production_estimate.json"
+)
 VISUALIZATION_FILES = (
     "accelerometer.mp4",
     "gyro.mp4",
@@ -69,6 +76,7 @@ STATIC_SCENES = {
     "LandingObservabilityStatic": "landing-observability.png",
     "SharedStateRaceStatic": "shared-state-race.png",
     "TelemetryMotorBalanceStatic": "telemetry-motor-balance.png",
+    "ProductionEstimateStatic": "production-estimate.png",
 }
 STATIC_REQUIRED_TEXT = {
     "DroneClassificationStatic": {
@@ -182,6 +190,21 @@ STATIC_REQUIRED_TEXT = {
         "M3평균>M1평균",
         "테더구간·집계방향",
         "원인미확정",
+    },
+    "ProductionEstimateStatic": {
+        "1대",
+        "10대",
+        "프린터점유",
+        "직접작업",
+        "핵심부품비",
+        "모터4개",
+        "ESC4개",
+        "제어·센서칩",
+        "프레임재료",
+        "배터리·프로펠러",
+        "3901-L0X선택·+4.8~4.9만원/대",
+        "부품보유·프린터1대·첫형상성공가정",
+        "PCB·배선·체결·배송·인건비·비행튜닝제외",
     },
 }
 STATIC_FORBIDDEN_TEXT = {
@@ -349,6 +372,69 @@ class PresentationVisualizationGeometryTests(unittest.TestCase):
         self.assertAlmostEqual(
             module.referenced_heading_deg(82.0, offset), 45.0, places=6
         )
+
+
+class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.assertTrue(
+            PRODUCTION_ESTIMATE_PATH.is_file(),
+            f"missing production estimate: {PRODUCTION_ESTIMATE_PATH}",
+        )
+        self.data = json.loads(PRODUCTION_ESTIMATE_PATH.read_text(encoding="utf-8"))
+
+    def test_time_estimate_separates_machine_hands_on_and_elapsed_time(self) -> None:
+        one = self.data["time"]["one_unit"]
+        ten = self.data["time"]["ten_units"]
+
+        self.assertEqual(one["printer_hours"], [24, 48])
+        self.assertEqual(one["hands_on_hours"], [6, 10])
+        self.assertEqual(one["elapsed_days_one_printer"], [2, 3])
+        self.assertEqual(ten["printer_hours_one_printer"], [240, 480])
+        self.assertEqual(ten["hands_on_hours"], [47, 74])
+        self.assertEqual(ten["elapsed_days_one_printer"], [10, 20])
+        self.assertEqual(
+            ten["printer_hours_one_printer"],
+            [value * 10 for value in one["printer_hours"]],
+        )
+
+    def test_cost_estimate_keeps_required_categories_and_unknowns_visible(self) -> None:
+        cost = self.data["cost"]
+        categories = cost["one_unit_categories_krw"]
+        self.assertEqual(
+            set(categories),
+            {
+                "motors_4",
+                "escs_4",
+                "control_sensor_chips",
+                "frame_material",
+                "battery_propellers",
+            },
+        )
+        calculated = [
+            sum(bounds[index] for bounds in categories.values()) for index in (0, 1)
+        ]
+        self.assertEqual(calculated, cost["one_unit_core_subtotal_krw"])
+        self.assertEqual(
+            cost["ten_units_core_subtotal_krw"],
+            [value * 10 for value in cost["one_unit_core_subtotal_krw"]],
+        )
+        self.assertEqual(cost["optional_3901_l0x_per_unit_krw"], [48000, 49000])
+        for required_exclusion in (
+            "custom_fc_pcb_power",
+            "wiring_fasteners",
+            "shipping_tax",
+            "labor",
+            "flight_tuning",
+        ):
+            self.assertIn(required_exclusion, cost["excluded_from_subtotal"])
+
+    def test_estimate_declares_planning_assumptions_not_measured_history(self) -> None:
+        basis = self.data["basis"]
+        self.assertEqual(basis["evidence_level"], "planning_estimate")
+        self.assertIn("parts_in_stock", basis["assumptions"])
+        self.assertIn("one_printer", basis["assumptions"])
+        self.assertIn("first_print_success", basis["assumptions"])
+        self.assertFalse(basis["includes_free_flight_validation"])
 
 
 class PresentationVisualizationLayoutTests(unittest.TestCase):
@@ -797,6 +883,72 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                         self.assertLessEqual(mobject.get_right()[0], 7.96)
                         self.assertGreaterEqual(mobject.get_bottom()[1], -4.46)
                         self.assertLessEqual(mobject.get_top()[1], 4.46)
+
+    def test_production_estimate_keeps_scale_and_caveat_zones_separate(self) -> None:
+        scene = self._rendered_static_scene("ProductionEstimateStatic")
+        texts = [
+            item
+            for item in self._mobjects(scene)
+            if getattr(item, "text", None) is not None
+        ]
+
+        multiplier = next(item for item in texts if item.text == "×10")
+        printer_labels = sorted(
+            (item for item in texts if item.text == "프린터점유"),
+            key=lambda item: item.get_center()[0],
+        )
+        self.assertEqual(len(printer_labels), 2)
+        self.assertLess(
+            multiplier.get_right()[0] + 0.18,
+            printer_labels[1].get_left()[0],
+        )
+
+        excluded = next(
+            item
+            for item in texts
+            if item.text == "PCB·배선·체결·배송·인건비·비행튜닝제외"
+        )
+        optional = next(
+            item
+            for item in texts
+            if item.text == "3901-L0X선택·+4.8~4.9만원/대"
+        )
+        horizontal_overlap = (
+            excluded.get_left()[0] < optional.get_right()[0]
+            and excluded.get_right()[0] > optional.get_left()[0]
+        )
+        vertical_overlap = (
+            excluded.get_bottom()[1] < optional.get_top()[1]
+            and excluded.get_top()[1] > optional.get_bottom()[1]
+        )
+        self.assertFalse(horizontal_overlap and vertical_overlap)
+
+        for category_text in (
+            "모터4개",
+            "ESC4개",
+            "제어·센서칩",
+            "프레임재료",
+            "배터리·프로펠러",
+        ):
+            category = next(item for item in texts if item.text == category_text)
+            horizontal_overlap = (
+                category.get_left()[0] < optional.get_right()[0]
+                and category.get_right()[0] > optional.get_left()[0]
+            )
+            vertical_overlap = (
+                category.get_bottom()[1] < optional.get_top()[1]
+                and category.get_top()[1] > optional.get_bottom()[1]
+            )
+            self.assertFalse(
+                horizontal_overlap and vertical_overlap,
+                f"optional sensor badge overlaps {category_text}",
+            )
+            if horizontal_overlap:
+                self.assertGreater(
+                    optional.get_bottom()[1],
+                    category.get_top()[1] + 0.18,
+                    f"optional sensor badge crowds {category_text}",
+                )
 
     def test_telemetry_evidence_badge_clears_content_panels(self) -> None:
         from manim import tempconfig
