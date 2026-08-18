@@ -215,14 +215,14 @@ def aircraft_tradeoff(
     color: str,
 ) -> VGroup:
     panel = card(3.55, 3.55, color).move_to(position)
-    name_label = text(name, 28, color, "BOLD").move_to(panel.get_center() + UP * 1.18)
-    icon.move_to(panel.get_center() + UP * 0.28)
-    icon.scale(0.68)
+    name_label = text(name, 28, color, "BOLD").move_to(panel.get_center() + UP * 1.22)
+    icon.move_to(panel.get_center() + UP * 0.25)
+    icon.scale(0.58)
     strength_label = text(strength, 24, WHITE, "BOLD").move_to(
-        panel.get_center() + DOWN * 0.68
+        panel.get_center() + DOWN * 0.72
     )
     tradeoff_label = text(tradeoff, 24, MUTED, "BOLD").move_to(
-        panel.get_center() + DOWN * 1.25
+        panel.get_center() + DOWN * 1.27
     )
     return VGroup(panel, name_label, icon, strength_label, tradeoff_label)
 
@@ -250,7 +250,7 @@ class AircraftUamStatic(StaticDiagramScene):
                 x_quadcopter_icon(0.72),
                 "멀티콥터",
                 "강점 · 정밀 호버",
-                "교환 · 체공·탑재 제한",
+                "한계 · 체공·탑재",
                 RIGHT * 1.92 + UP * 1.75,
                 CYAN,
             ),
@@ -291,7 +291,7 @@ def mission_tile(
     name_label = text(name, 29, color, "BOLD").move_to(
         panel.get_center() + LEFT * 2.55 + UP * 1.0
     )
-    motif.move_to(panel.get_center() + LEFT * 2.45 + DOWN * 0.25)
+    motif.scale(0.76).move_to(panel.get_center() + LEFT * 2.45 + DOWN * 0.38)
     connector = Arrow(
         panel.get_center() + LEFT * 1.15,
         panel.get_center() + RIGHT * 0.25,
@@ -378,11 +378,11 @@ def force_tile(
     name_label = text(name, 29, color, "BOLD").move_to(
         panel.get_center() + LEFT * 2.55 + UP * 1.0
     )
-    drone = x_quadcopter_icon(0.42).rotate(tilt).move_to(
-        panel.get_center() + LEFT * 2.25 + DOWN * 0.18
+    drone = x_quadcopter_icon(0.34).rotate(tilt).move_to(
+        panel.get_center() + LEFT * 1.85 + DOWN * 0.55
     )
     force_origin = drone.get_center()
-    weight_vector = DOWN
+    weight_vector = DOWN * 0.78
     gravity = Arrow(
         force_origin,
         force_origin + weight_vector,
@@ -398,10 +398,46 @@ def force_tile(
         color=color,
         stroke_width=7,
     )
+    thrust_label = (
+        text("합추력 T", 24, color, "BOLD")
+        .next_to(thrust, LEFT, buff=0.12)
+        .align_to(thrust, UP)
+        .shift(UP * 0.12)
+    )
+    label_clearance = drone.get_top()[1] + 0.08 - thrust_label.get_bottom()[1]
+    if label_clearance > 0:
+        thrust_label.shift(UP * label_clearance)
+    weight_label = text("무게 W", 24, YELLOW, "BOLD").move_to(
+        gravity.get_center() + RIGHT * 1.35 + UP * 0.2
+    )
     relation_label = text(relation, 28, WHITE, "BOLD").move_to(
         panel.get_center() + RIGHT * 1.85
     )
-    return VGroup(panel, name_label, drone, gravity, thrust, relation_label)
+    component = VGroup()
+    component_label = VGroup()
+    if tilt:
+        component = Arrow(
+            force_origin + DOWN * 0.65,
+            force_origin + RIGHT * 1.0 + DOWN * 0.65,
+            buff=0,
+            color=CYAN,
+            stroke_width=6,
+        )
+        component_label = text("수평 성분", 24, CYAN, "BOLD").next_to(
+            component, RIGHT, buff=0.18
+        )
+    return VGroup(
+        panel,
+        name_label,
+        drone,
+        gravity,
+        thrust,
+        thrust_label,
+        weight_label,
+        relation_label,
+        component,
+        component_label,
+    )
 
 
 class QuadcopterForceMotionStatic(StaticDiagramScene):
@@ -412,28 +448,28 @@ class QuadcopterForceMotionStatic(StaticDiagramScene):
                 "합추력 > 무게",
                 LEFT * 3.82 + UP * 1.74,
                 GREEN,
-                1.34,
+                1.0,
             ),
             force_tile(
                 "호버링",
                 "합추력 = 무게",
                 RIGHT * 3.82 + UP * 1.74,
                 CYAN,
-                1.0,
+                0.78,
             ),
             force_tile(
                 "하강",
                 "합추력 < 무게",
                 LEFT * 3.82 + DOWN * 1.58,
                 ORANGE,
-                0.72,
+                0.56,
             ),
             force_tile(
                 "수평 이동",
-                "수평 성분 발생",
+                "기울여 전진",
                 RIGHT * 3.82 + DOWN * 1.58,
                 BLUE,
-                1 / cos(18 * DEGREES),
+                0.78 / cos(18 * DEGREES),
                 tilt=-18 * DEGREES,
             ),
         )
@@ -490,11 +526,17 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
         heli_name = text("헬리콥터", 30, BLUE, "BOLD").move_to(
             left_panel.get_center() + UP * 2.7
         )
-        reaction_label = label_pill("메인로터 반작용 토크", ORANGE, 3.75).move_to(
-            left_panel.get_center() + LEFT * 1.35 + DOWN * 2.42
+        rotor_label = text("메인로터 회전", 24, BLUE, "BOLD").move_to(
+            left_panel.get_center() + LEFT * 1.96 + UP * 1.57
         )
-        tail_label = label_pill("꼬리로터 힘", CYAN, 2.45).move_to(
-            left_panel.get_center() + RIGHT * 1.85 + DOWN * 2.42
+        reaction_label = text("동체 반작용 토크", 24, ORANGE, "BOLD").move_to(
+            left_panel.get_center() + RIGHT * 1.45 + UP * 0.15
+        )
+        tail_label = text("꼬리로터 힘", 24, CYAN, "BOLD").move_to(
+            left_panel.get_center() + RIGHT * 1.47 + DOWN * 1.2
+        )
+        heli_cancel = text("토크 상쇄", 28, WHITE, "BOLD").move_to(
+            left_panel.get_center() + DOWN * 2.38
         )
 
         quad = x_quadcopter_icon(0.93, CYAN).move_to(
@@ -509,8 +551,8 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
         offsets = (
             (-1.75, 1.15, "M1", "CW", ORANGE),
             (1.75, 1.15, "M3", "CCW", CYAN),
-            (-1.75, -1.15, "M4", "CCW", CYAN),
-            (1.75, -1.15, "M2", "CW", ORANGE),
+            (-1.75, -0.85, "M4", "CCW", CYAN),
+            (1.75, -0.85, "M2", "CW", ORANGE),
         )
         rotor_labels = VGroup()
         for x, y, motor_name, rotation, color in offsets:
@@ -522,9 +564,15 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
             )
             rotor_labels.add(motor_label, rotation_label)
         cancel = text("평상시 토크 상쇄", 27, WHITE, "BOLD").move_to(
+            right_panel.get_center() + DOWN * 1.75
+        )
+        yaw_pair = VGroup(
+            text("M3·M4 출력 ↑", 24, CYAN, "BOLD"),
+            text("M1·M2 출력 ↓", 24, ORANGE, "BOLD"),
+        ).arrange(RIGHT, buff=0.42).move_to(
             right_panel.get_center() + DOWN * 2.25
         )
-        yaw = text("로터 쌍의 출력 차이 → Yaw", 25, YELLOW, "BOLD").move_to(
+        yaw = text("기체 Yaw CW", 25, YELLOW, "BOLD").move_to(
             right_panel.get_center() + DOWN * 2.78
         )
         note = takeaway("헬기 · 꼬리 힘 / 쿼드 · CW·CCW 반작용 토크", YELLOW)
@@ -533,13 +581,16 @@ class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
             right_panel,
             helicopter_diagram,
             heli_name,
+            rotor_label,
             reaction_label,
             tail_label,
+            heli_cancel,
             quad,
             quad_name,
             rotation_legend,
             rotor_labels,
             cancel,
+            yaw_pair,
             yaw,
             note,
         )
@@ -746,8 +797,6 @@ class AttitudeCorrectionStatic(StaticDiagramScene):
 
 class SilClosedLoopStatic(StaticDiagramScene):
     def construct(self) -> None:
-        badge = boundary_badge("HOST SIL · 실제 비행 증거 아님", YELLOW)
-        badge.move_to(RIGHT * 4.3 + UP * 3.73)
         stage = card(15.1, 5.95, BLUE).move_to(UP * 0.12)
         labels = ("가상 물리", "센서 합성", "실제 비행 코드", "모터 출력")
         colors = (BLUE, CYAN, GREEN, YELLOW)
@@ -785,7 +834,7 @@ class SilClosedLoopStatic(StaticDiagramScene):
             label_pill("실물 센서·모터·비행 미확인", YELLOW, 4.15),
         ).arrange(RIGHT, buff=0.62).move_to(DOWN * 2.7)
         note = takeaway("확인 범위 · host 안의 코드와 가상 기체 폐루프", YELLOW)
-        self.add(badge, stage, blocks, forward, sketch, return_path, return_label, evidence, note)
+        self.add(stage, blocks, forward, sketch, return_path, return_label, evidence, note)
 
 
 class FailsafeTimelineStatic(StaticDiagramScene):
@@ -939,10 +988,107 @@ class LandingObservabilityStatic(StaticDiagramScene):
         )
 
 
+class LandingProbeEvidenceStatic(StaticDiagramScene):
+    """Separate measured ground ranges from the missing airborne comparison."""
+
+    def construct(self) -> None:
+        stage = card(15.1, 5.85, BLUE).move_to(UP * 0.15)
+        heading = text("측정된 |a|−1g 범위", 29, WHITE, "BOLD").move_to(
+            UP * 2.55
+        )
+
+        def measured_row(
+            name: str,
+            value: str,
+            y: float,
+            color: str,
+            start_x: float,
+            end_x: float,
+        ) -> VGroup:
+            name_label = text(name, 25, color, "BOLD").move_to([-5.35, y, 0])
+            baseline = Line(
+                [-2.75, y, 0],
+                [3.1, y, 0],
+                color=GRID,
+                stroke_width=5,
+            )
+            measured = Line(
+                [start_x, y, 0],
+                [end_x, y, 0],
+                color=color,
+                stroke_width=12,
+            )
+            left_cap = Line(
+                [start_x, y - 0.18, 0],
+                [start_x, y + 0.18, 0],
+                color=color,
+                stroke_width=5,
+            )
+            right_cap = Line(
+                [end_x, y - 0.18, 0],
+                [end_x, y + 0.18, 0],
+                color=color,
+                stroke_width=5,
+            )
+            value_label = text(value, 25, WHITE, "BOLD").move_to([5.25, y, 0])
+            return VGroup(
+                name_label,
+                baseline,
+                measured,
+                left_cap,
+                right_cap,
+                value_label,
+            )
+
+        ground_a = measured_row(
+            "지상 데이터셋 A",
+            "0.0070~0.1340g",
+            1.25,
+            GREEN,
+            -2.55,
+            0.75,
+        )
+        ground_b = measured_row(
+            "지상 데이터셋 B",
+            "0.0590~0.1930g",
+            0.05,
+            CYAN,
+            -1.25,
+            2.3,
+        )
+        airborne_name = text("공중", 25, ORANGE, "BOLD").move_to(
+            [-5.35, -1.15, 0]
+        )
+        airborne_line = DashedLine(
+            [-2.75, -1.15, 0],
+            [3.1, -1.15, 0],
+            color=MUTED,
+            stroke_width=5,
+        )
+        airborne_value = text("미측정", 27, ORANGE, "BOLD").move_to(
+            [5.25, -1.15, 0]
+        )
+        boundary = VGroup(
+            text("공중 비교 없음", 25, ORANGE, "BOLD"),
+            label_pill("로깅 전용", BLUE, 2.2),
+            label_pill("착지 판정 아님", YELLOW, 2.8),
+        ).arrange(RIGHT, buff=0.45).move_to(DOWN * 2.35)
+        note = takeaway("공중 데이터가 없어 probe는 착지 결정에 사용하지 않음", YELLOW)
+        self.add(
+            stage,
+            heading,
+            ground_a,
+            ground_b,
+            airborne_name,
+            airborne_line,
+            airborne_value,
+            boundary,
+            note,
+        )
+
+
 class SharedStateRaceStatic(StaticDiagramScene):
     def construct(self) -> None:
-        badge = boundary_badge("가능한 race · 관측 사고 아님", YELLOW)
-        badge.move_to(RIGHT * 4.35 + UP * 3.72)
         stage = card(15.1, 6.05, BLUE).move_to(UP * 0.08)
         time_axis = Arrow(
             LEFT * 4.8 + UP * 2.45,
@@ -1019,7 +1165,6 @@ class SharedStateRaceStatic(StaticDiagramScene):
         )
         note = takeaway("겹친 읽기–수정–쓰기 → 최신 상태 손실 가능", YELLOW)
         self.add(
-            badge,
             stage,
             time_axis,
             time_label,
@@ -1044,8 +1189,8 @@ class SharedStateRaceStatic(StaticDiagramScene):
 
 class TelemetryMotorBalanceStatic(StaticDiagramScene):
     def construct(self) -> None:
-        badge = boundary_badge("테더 구간 · 집계 방향", BLUE)
-        badge.move_to(RIGHT * 4.75 + UP * 3.72)
+        badge = boundary_badge("추정", YELLOW)
+        badge.move_to(RIGHT * 6.25 + UP * 3.72)
         left_panel = card(6.75, 6.15, BLUE).move_to(LEFT * 4.15 + UP * 0.12)
         right_panel = card(7.7, 6.15, CYAN).move_to(RIGHT * 3.55 + UP * 0.12)
         layout_label = text("X형 모터 배치", 29, BLUE, "BOLD").move_to(
@@ -1053,6 +1198,15 @@ class TelemetryMotorBalanceStatic(StaticDiagramScene):
         )
         airframe, motors = motor_layout()
         airframe.move_to(left_panel.get_center() + UP * 0.05)
+        tether = Line(
+            motors["M3"].get_top(),
+            motors["M3"].get_top() + RIGHT * 0.72 + UP * 1.0,
+            color=YELLOW,
+            stroke_width=6,
+        )
+        tether_label = text("M3 근처 테더", 24, YELLOW, "BOLD").move_to(
+            left_panel.get_center() + RIGHT * 2.15 + UP * 0.53
+        )
         front = text("전방", 24, YELLOW, "BOLD").move_to(
             left_panel.get_center() + UP * 2.0
         )
@@ -1060,7 +1214,7 @@ class TelemetryMotorBalanceStatic(StaticDiagramScene):
         direction = text("M3 평균 > M1 평균", 31, WHITE, "BOLD").move_to(
             right_panel.get_center() + UP * 2.45
         )
-        baseline_y = right_panel.get_center()[1] - 1.3
+        baseline_y = right_panel.get_center()[1] - 0.95
         baseline = Line(
             [1.7, baseline_y, 0],
             [5.55, baseline_y, 0],
@@ -1091,22 +1245,31 @@ class TelemetryMotorBalanceStatic(StaticDiagramScene):
         )
         qualitative = text("개념 막대 · 크기 비례 아님", 24, MUTED, "BOLD")
         qualitative.move_to(right_panel.get_center() + UP * 1.65)
-        candidates = text(
-            "질량 배분 · 추력 차이 · 테더 · 프레임 · 공력",
-            24,
-            MUTED,
-            "BOLD",
-        ).move_to(right_panel.get_center() + DOWN * 2.15)
-        unresolved = label_pill("원인 미확정", YELLOW, 2.35).move_to(
-            right_panel.get_center() + DOWN * 2.72
+        tether_hypothesis = label_pill("M3 근처 테더", YELLOW, 2.55).move_to(
+            right_panel.get_center() + LEFT * 2.4 + DOWN * 2.1
         )
-        note = takeaway("관측된 집계 방향은 분명함 · 원인 분리는 추가 실험", YELLOW)
+        load_hypothesis = label_pill("M3의 테더 하중 지지 가능성", BLUE, 4.5).move_to(
+            right_panel.get_center() + RIGHT * 1.35 + DOWN * 2.1
+        )
+        inference_arrow = Arrow(
+            tether_hypothesis.get_right(),
+            load_hypothesis.get_left(),
+            buff=0.1,
+            color=YELLOW,
+            stroke_width=5,
+        )
+        unresolved = label_pill("원인 확정 아님", YELLOW, 2.75).move_to(
+            right_panel.get_center() + DOWN * 2.68
+        )
+        note = takeaway("테더 하중 설명은 추정 · 추가 실험 전에는 원인 확정 아님", YELLOW)
         self.add(
             badge,
             left_panel,
             right_panel,
             layout_label,
             airframe,
+            tether,
+            tether_label,
             front,
             direction,
             baseline,
@@ -1115,7 +1278,9 @@ class TelemetryMotorBalanceStatic(StaticDiagramScene):
             m1_label,
             m3_label,
             qualitative,
-            candidates,
+            tether_hypothesis,
+            inference_arrow,
+            load_hypothesis,
             unresolved,
             note,
         )
@@ -1154,10 +1319,15 @@ class ProductionEstimateStatic(StaticDiagramScene):
         return f"{low:.1f}~{high:.1f}만원"
 
     @staticmethod
-    def _cost_item(name: str, value: str, color: str) -> VGroup:
+    def _cost_item(
+        name: str,
+        value: str,
+        color: str,
+        evidence: str | None = None,
+    ) -> VGroup:
         panel = RoundedRectangle(
             width=2.68,
-            height=0.9,
+            height=1.2,
             corner_radius=0.13,
             fill_color=PANEL_2,
             fill_opacity=1,
@@ -1165,12 +1335,17 @@ class ProductionEstimateStatic(StaticDiagramScene):
             stroke_width=2,
         )
         name_label = text(name, 24, color, "BOLD").move_to(
-            panel.get_center() + UP * 0.2
+            panel.get_center() + UP * (0.36 if evidence else 0.23)
         )
         value_label = text(value, 24, WHITE, "BOLD").move_to(
-            panel.get_center() + DOWN * 0.2
+            panel.get_center() + (ORIGIN if evidence else DOWN * 0.23)
         )
-        return VGroup(panel, name_label, value_label)
+        evidence_label = VGroup()
+        if evidence:
+            evidence_label = text(evidence, 24, YELLOW, "BOLD").move_to(
+                panel.get_center() + DOWN * 0.38
+            )
+        return VGroup(panel, name_label, value_label, evidence_label)
 
     def _time_panel(
         self,
@@ -1226,7 +1401,7 @@ class ProductionEstimateStatic(StaticDiagramScene):
         badge = boundary_badge("예비 산정 · 실측 기록 아님", YELLOW)
         badge.move_to(RIGHT * 4.55 + UP * 3.72)
         one_panel = self._time_panel(
-            LEFT * 3.82 + UP * 1.43,
+            LEFT * 3.82 + UP * 1.55,
             "1대",
             self._range(one_time["printer_hours"], "시간"),
             self._range(one_time["hands_on_hours"], "시간"),
@@ -1234,7 +1409,7 @@ class ProductionEstimateStatic(StaticDiagramScene):
             1,
         )
         ten_panel = self._time_panel(
-            RIGHT * 3.82 + UP * 1.43,
+            RIGHT * 3.82 + UP * 1.55,
             "10대",
             self._range(ten_time["printer_hours_one_printer"], "시간"),
             self._range(ten_time["hands_on_hours"], "시간"),
@@ -1242,9 +1417,9 @@ class ProductionEstimateStatic(StaticDiagramScene):
             10,
         )
 
-        cost_panel = card(15.1, 2.75, ORANGE).move_to(DOWN * 1.67)
-        cost_heading = text("가격 확인 품목", 28, ORANGE, "BOLD")
-        cost_heading.move_to(cost_panel.get_center() + LEFT * 6.0 + UP * 0.88)
+        cost_panel = card(15.1, 3.0, ORANGE).move_to(DOWN * 1.55)
+        cost_heading = text("부품비 예비 합계", 28, ORANGE, "BOLD")
+        cost_heading.move_to(cost_panel.get_center() + LEFT * 5.7 + UP * 1.05)
         one_cost = text(
             "1대 " + self._money_range(cost["one_unit_core_subtotal_krw"], 10000),
             25,
@@ -1274,19 +1449,23 @@ class ProductionEstimateStatic(StaticDiagramScene):
                     name,
                     self._single_money(cost["one_unit_categories_krw"][key]),
                     color,
+                    "프로젝트 추정"
+                    if cost["category_evidence"][key]
+                    == "user_confirmed_project_estimate"
+                    else None,
                 )
                 for name, key, color in category_specs
             ]
         ).arrange(RIGHT, buff=0.14)
-        categories.move_to(cost_panel.get_center() + RIGHT * 0.25 + DOWN * 0.02)
+        categories.move_to(cost_panel.get_center() + RIGHT * 0.25 + UP * 0.02)
         optional = label_pill("3901-L0X 선택 · +4.8~4.9만원/대", CYAN, 5.15)
-        optional.move_to(cost_panel.get_center() + RIGHT * 4.25 + DOWN * 0.96)
+        optional.move_to(cost_panel.get_center() + RIGHT * 4.25 + DOWN * 1.12)
         excluded = text(
             "배송·인건비·재출력·비행 튜닝 제외",
             24,
             YELLOW,
             "BOLD",
-        ).move_to(cost_panel.get_center() + LEFT * 2.4 + DOWN * 0.96)
+        ).move_to(cost_panel.get_center() + LEFT * 2.4 + DOWN * 1.12)
         note = takeaway(
             "시간: PCB 조립 완료·첫 출력 성공 · 비용: FC PCB·전원·배선 등 별도",
             YELLOW,

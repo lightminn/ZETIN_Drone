@@ -77,6 +77,7 @@ STATIC_SCENES = {
     "SilClosedLoopStatic": "sil-closed-loop.png",
     "FailsafeTimelineStatic": "failsafe-timeline.png",
     "LandingObservabilityStatic": "landing-observability.png",
+    "LandingProbeEvidenceStatic": "landing-probe-evidence.png",
     "SharedStateRaceStatic": "shared-state-race.png",
     "TelemetryMotorBalanceStatic": "telemetry-motor-balance.png",
     "ProductionEstimateStatic": "production-estimate.png",
@@ -122,20 +123,26 @@ STATIC_REQUIRED_TEXT = {
     "QuadcopterForceMotionStatic": {
         "상승",
         "합추력>무게",
+        "합추력T",
+        "무게W",
         "호버링",
         "합추력=무게",
         "하강",
         "합추력<무게",
         "수평이동",
-        "수평성분발생",
+        "수평성분",
     },
     "HelicopterQuadcopterTorqueStatic": {
-        "메인로터반작용토크",
+        "메인로터회전",
+        "동체반작용토크",
         "꼬리로터힘",
         "CW",
         "CCW",
         "CW·CCW=로터회전방향",
         "평상시토크상쇄",
+        "M3·M4출력↑",
+        "M1·M2출력↓",
+        "기체YawCW",
     },
     "SwarmSystemStatic": {
         "단일기체",
@@ -159,7 +166,7 @@ STATIC_REQUIRED_TEXT = {
         "센서합성",
         "실제비행코드",
         "모터출력",
-        "HOSTSIL·실제비행증거아님",
+        "실물센서·모터·비행미확인",
     },
     "FailsafeTimelineStatic": {
         "상태판단",
@@ -176,6 +183,17 @@ STATIC_REQUIRED_TEXT = {
         "거리센서추가단서",
         "폐루프착지판정미검증",
     },
+    "LandingProbeEvidenceStatic": {
+        "지상데이터셋A",
+        "0.0070~0.1340g",
+        "지상데이터셋B",
+        "0.0590~0.1930g",
+        "공중",
+        "미측정",
+        "공중비교없음",
+        "로깅전용",
+        "착지판정아님",
+    },
     "SharedStateRaceStatic": {
         "통신코어",
         "제어태스크",
@@ -184,15 +202,16 @@ STATIC_REQUIRED_TEXT = {
         "B쓰기",
         "옛A기반C쓰기",
         "B갱신손실가능",
-        "가능한race·관측사고아님",
     },
     "TelemetryMotorBalanceStatic": {
         "X형모터배치",
         "M1",
         "M3",
         "M3평균>M1평균",
-        "테더구간·집계방향",
-        "원인미확정",
+        "추정",
+        "M3근처테더",
+        "M3의테더하중지지가능성",
+        "원인확정아님",
     },
     "ProductionEstimateStatic": {
         "1대",
@@ -201,13 +220,14 @@ STATIC_REQUIRED_TEXT = {
         "직접작업",
         "6~10시간",
         "60~100시간",
-        "가격확인품목",
-        "1대약35.5~37.1만원",
-        "10대약355~371만원",
+        "부품비예비합계",
+        "1대약22.2~23.3만원",
+        "10대약222~233만원",
         "모터4개",
-        "7.8~8.2만원",
+        "약8.0만원",
         "ESC4개",
-        "약17.5만원",
+        "약4.0만원",
+        "프로젝트추정",
         "MCU·센서IC",
         "약2.3만원",
         "프레임재료",
@@ -234,6 +254,8 @@ STATIC_FORBIDDEN_TEXT = {
     "공유상태경쟁",
     "모터출력균형",
     "고정시간·보편출력값없음",
+    "HOSTSIL·실제비행증거아님",
+    "가능한race·관측사고아님",
 }
 
 
@@ -447,13 +469,33 @@ class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
             cost["ten_units_core_subtotal_krw"],
             [value * 10 for value in cost["one_unit_core_subtotal_krw"]],
         )
-        self.assertEqual(categories["motors_4"], [78000, 82000])
-        self.assertEqual(categories["escs_4"], [175400, 175400])
-        self.assertEqual(cost["one_unit_core_subtotal_krw"], [355300, 370500])
-        self.assertEqual(cost["ten_units_core_subtotal_krw"], [3553000, 3705000])
+        self.assertEqual(categories["motors_4"], [80000, 80000])
+        self.assertEqual(categories["escs_4"], [40000, 40000])
+        self.assertEqual(cost["one_unit_core_subtotal_krw"], [221900, 233100])
+        self.assertEqual(cost["ten_units_core_subtotal_krw"], [2219000, 2331000])
+        evidence = cost["category_evidence"]
+        self.assertEqual(
+            evidence["motors_4"], "user_confirmed_project_estimate"
+        )
+        self.assertEqual(
+            evidence["escs_4"], "user_confirmed_project_estimate"
+        )
+        self.assertEqual(
+            {
+                evidence[key]
+                for key in (
+                    "control_sensor_chips",
+                    "frame_material",
+                    "battery_propellers",
+                )
+            },
+            {"vendor_reference_price"},
+        )
         self.assertEqual(cost["optional_3901_l0x_per_unit_krw"], [48000, 49000])
         self.assertFalse(cost["verified_bom"])
-        self.assertEqual(cost["scope"], "reference_components_only")
+        self.assertEqual(
+            cost["scope"], "project_estimates_and_reference_components"
+        )
         for required_exclusion in (
             "custom_fc_pcb_power",
             "wiring_fasteners",
@@ -478,6 +520,8 @@ class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
         self.assertIn("구매 SKU", document)
         self.assertIn("설치 부품을 확정한 목록이 아니라", document)
         self.assertIn("예비 산정에 사용한 참고 품목", document)
+        self.assertIn("사용자가 확인한 프로젝트 예상값", document)
+        self.assertIn("현재 판매가 근거가 아니다", document)
         self.assertNotIn("근거는 [`index.html`](index.html)의 부품 구성 장표", document)
 
 
@@ -510,6 +554,9 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         module = load_static_module()
         if module is None:
             raise AssertionError("static diagram visualization module is missing")
+        scene_class = getattr(module, scene_name, None)
+        if scene_class is None:
+            raise AssertionError(f"missing static scene: {scene_name}")
         with tempconfig(
             {
                 "dry_run": True,
@@ -519,7 +566,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                 "progress_bar": "none",
             }
         ):
-            scene = getattr(module, scene_name)()
+            scene = scene_class()
             scene.render()
         return scene
 
@@ -539,6 +586,21 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
             if getattr(mobject, "text", None) == normalized_text:
                 return mobject
         raise AssertionError(f"missing rendered text: {normalized_text}")
+
+    @staticmethod
+    def _bbox_overlaps(first, second, gap: float = 0.0) -> bool:
+        return not (
+            first.get_right()[0] + gap <= second.get_left()[0]
+            or second.get_right()[0] + gap <= first.get_left()[0]
+            or first.get_top()[1] + gap <= second.get_bottom()[1]
+            or second.get_top()[1] + gap <= first.get_bottom()[1]
+        )
+
+    def _assert_contained(self, outer, inner, inset: float = 0.0) -> None:
+        self.assertGreaterEqual(inner.get_left()[0], outer.get_left()[0] + inset)
+        self.assertLessEqual(inner.get_right()[0], outer.get_right()[0] - inset)
+        self.assertGreaterEqual(inner.get_bottom()[1], outer.get_bottom()[1] + inset)
+        self.assertLessEqual(inner.get_top()[1], outer.get_top()[1] - inset)
 
     def test_accelerometer_component_labels_use_the_explanation_zone(self) -> None:
         scene = self._rendered_scene("AccelerometerAudience")
@@ -609,6 +671,130 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         comparison = self._text(scene, "움직임은다르지만센서값은같다")
 
         self.assertGreater(comparison.get_bottom()[1], 2.05)
+
+    def test_landing_velocity_label_stays_inside_right_panel_and_frame(self) -> None:
+        scene = self._rendered_scene("LandingAmbiguityAudience")
+        velocity = self._text(scene, "속도는아래로")
+        right_panel = max(
+            (
+                item
+                for item in self._mobjects(scene)
+                if type(item).__name__ == "RoundedRectangle"
+                and 6.7 < item.width < 6.9
+                and 4.4 < item.height < 4.7
+            ),
+            key=lambda item: item.get_center()[0],
+        )
+
+        self._assert_contained(right_panel, velocity, inset=0.12)
+        self.assertLessEqual(velocity.get_right()[0], 7.96)
+
+    def test_static_aircraft_roles_separate_title_icon_and_tradeoff_rows(self) -> None:
+        scene = self._rendered_static_scene("AircraftUamStatic")
+        roles = scene.mobjects[0]
+
+        self.assertEqual(len(roles), 4)
+        for role in roles:
+            panel, title, icon, strength, tradeoff = role
+            for item in (title, icon, strength, tradeoff):
+                self._assert_contained(panel, item, inset=0.08)
+            for upper, lower in (
+                (title, icon),
+                (icon, strength),
+                (strength, tradeoff),
+            ):
+                self.assertFalse(self._bbox_overlaps(upper, lower, gap=0.10))
+                self.assertGreater(upper.get_bottom()[1], lower.get_top()[1])
+
+    def test_static_mission_motifs_stay_inside_cards_and_clear_titles(self) -> None:
+        scene = self._rendered_static_scene("MissionSpecsStatic")
+        tiles = scene.mobjects[0]
+
+        self.assertEqual(len(tiles), 4)
+        for tile in tiles:
+            panel, _connector, title, motif, requirement = tile
+            for item in (title, motif, requirement):
+                self._assert_contained(panel, item, inset=0.10)
+            self.assertFalse(self._bbox_overlaps(title, motif, gap=0.14))
+
+    def test_static_force_arrows_clear_titles_and_have_direct_labels(self) -> None:
+        import math
+
+        scene = self._rendered_static_scene("QuadcopterForceMotionStatic")
+        tiles = scene.mobjects[0]
+
+        self.assertEqual(len(tiles), 4)
+        for tile in tiles:
+            panel = tile[0]
+            title = next(
+                item
+                for item in tile.submobjects
+                if getattr(item, "text", None)
+                in {"상승", "호버링", "하강", "수평이동"}
+            )
+            arrows = [
+                item for item in tile.submobjects if type(item).__name__ == "Arrow"
+            ]
+            tile_text = {
+                item.text: item
+                for item in tile.submobjects
+                if getattr(item, "text", None) is not None
+            }
+            self.assertIn("합추력T", tile_text)
+            self.assertIn("무게W", tile_text)
+            thrust_label = tile_text["합추력T"]
+            weight_label = tile_text["무게W"]
+            drone = next(
+                item for item in tile.submobjects if type(item).__name__ == "VGroup"
+            )
+            self.assertGreaterEqual(len(arrows), 2)
+            for label in (thrust_label, weight_label):
+                self._assert_contained(panel, label, inset=0.08)
+                self.assertFalse(self._bbox_overlaps(label, drone, gap=0.04))
+            for arrow in arrows:
+                self._assert_contained(panel, arrow, inset=0.08)
+                self.assertLessEqual(arrow.get_top()[1] + 0.08, title.get_bottom()[1])
+                for label in (thrust_label, weight_label):
+                    self.assertFalse(self._bbox_overlaps(label, arrow, gap=0.04))
+            self.assertFalse(
+                self._bbox_overlaps(thrust_label, weight_label, gap=0.08)
+            )
+            self.assertLess(
+                min(
+                    math.dist(thrust_label.get_center()[:2], arrow.get_center()[:2])
+                    for arrow in arrows
+                    if str(arrow.get_color()) != "#FFD166"
+                ),
+                1.15,
+            )
+            weight_arrow = next(
+                arrow for arrow in arrows if str(arrow.get_color()) == "#FFD166"
+            )
+            self.assertLess(
+                math.dist(weight_label.get_center()[:2], weight_arrow.get_center()[:2]),
+                1.5,
+            )
+
+        horizontal = tiles[3]
+        component = next(
+            item
+            for item in horizontal.submobjects
+            if getattr(item, "text", None) == "수평성분"
+        )
+        self.assertGreater(component.width, component.height)
+        horizontal_text = {
+            item.text: item
+            for item in horizontal.submobjects
+            if getattr(item, "text", None) is not None
+        }
+        horizontal_drone = next(
+            item for item in horizontal.submobjects if type(item).__name__ == "VGroup"
+        )
+        self._assert_contained(horizontal[0], component, inset=0.08)
+        self.assertFalse(self._bbox_overlaps(component, horizontal_drone, gap=0.04))
+        self.assertFalse(
+            self._bbox_overlaps(component, horizontal_text["무게W"], gap=0.08)
+        )
 
     def test_static_force_vectors_share_origin_and_encode_physical_relations(self) -> None:
         import math
@@ -738,6 +924,131 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         self.assertNotEqual(reaction_moment, 0.0)
         self.assertNotEqual(tail_force_moment, 0.0)
         self.assertLess(reaction_moment * tail_force_moment, 0.0)
+
+    def test_static_helicopter_arrows_have_adjacent_labels_and_yaw_example(self) -> None:
+        import math
+
+        scene = self._rendered_static_scene("HelicopterQuadcopterTorqueStatic")
+        objects = list(self._mobjects(scene))
+        labeled_arrows = (
+            ("메인로터회전", "CurvedArrow", "#48A8FF"),
+            ("동체반작용토크", "CurvedArrow", "#FF9F43"),
+            ("꼬리로터힘", "Arrow", "#5FE3F3"),
+        )
+        for label_text, arrow_type, color in labeled_arrows:
+            label = self._text(scene, label_text)
+            arrow = next(
+                item
+                for item in objects
+                if type(item).__name__ == arrow_type
+                and str(item.get_color()) == color
+                and item.get_center()[0] < 0
+            )
+            self.assertLess(
+                math.dist(label.get_center()[:2], arrow.get_center()[:2]), 2.05
+            )
+            self.assertFalse(self._bbox_overlaps(label, arrow, gap=0.04))
+
+        for required_example in (
+            "M3·M4출력↑",
+            "M1·M2출력↓",
+            "기체YawCW",
+            "평상시토크상쇄",
+        ):
+            self._text(scene, required_example)
+
+    def test_static_removed_top_badges_keep_in_diagram_evidence(self) -> None:
+        sil = self._rendered_static_scene("SilClosedLoopStatic")
+        sil_text = {
+            item.text
+            for item in self._mobjects(sil)
+            if getattr(item, "text", None) is not None
+        }
+        self.assertNotIn("HOSTSIL·실제비행증거아님", sil_text)
+        self.assertIn("실물센서·모터·비행미확인", sil_text)
+
+        race = self._rendered_static_scene("SharedStateRaceStatic")
+        race_text = {
+            item.text
+            for item in self._mobjects(race)
+            if getattr(item, "text", None) is not None
+        }
+        self.assertNotIn("가능한race·관측사고아님", race_text)
+        for mechanism in ("A읽기", "B쓰기", "옛A기반C쓰기", "B갱신손실가능"):
+            self.assertIn(mechanism, race_text)
+
+    def test_static_landing_probe_separates_ground_ranges_from_airborne_unknown(self) -> None:
+        scene = self._rendered_static_scene("LandingProbeEvidenceStatic")
+        rows = (
+            ("지상데이터셋A", "0.0070~0.1340g"),
+            ("지상데이터셋B", "0.0590~0.1930g"),
+            ("공중", "미측정"),
+        )
+        row_y = []
+        for name_text, value_text in rows:
+            name = self._text(scene, name_text)
+            value = self._text(scene, value_text)
+            self.assertLess(name.get_right()[0] + 0.5, value.get_left()[0])
+            self.assertAlmostEqual(name.get_center()[1], value.get_center()[1], delta=0.12)
+            row_y.append(name.get_center()[1])
+        self.assertGreater(row_y[0], row_y[1])
+        self.assertGreater(row_y[1], row_y[2])
+        for boundary in ("공중비교없음", "로깅전용", "착지판정아님"):
+            self._text(scene, boundary)
+
+    def test_static_tether_inference_is_explicit_and_bounded(self) -> None:
+        import math
+
+        scene = self._rendered_static_scene("TelemetryMotorBalanceStatic")
+        rendered_text = {
+            item.text
+            for item in self._mobjects(scene)
+            if getattr(item, "text", None) is not None
+        }
+        for required in (
+            "추정",
+            "M3근처테더",
+            "M3의테더하중지지가능성",
+            "원인확정아님",
+        ):
+            self.assertIn(required, rendered_text)
+        self.assertNotIn("질량배분·추력차이·테더·프레임·공력", rendered_text)
+
+        m3 = self._text(scene, "M3")
+        tether_lines = [
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ in {"Line", "DashedLine"}
+            and str(item.get_color()) == "#FFD166"
+        ]
+        self.assertTrue(tether_lines)
+        self.assertLess(
+            min(
+                math.dist(endpoint[:2], m3.get_center()[:2])
+                for line in tether_lines
+                for endpoint in (line.get_start(), line.get_end())
+            ),
+            0.85,
+        )
+        tether_label = self._text(scene, "M3근처테더")
+        left_panel = next(
+            item
+            for item in scene.mobjects
+            if type(item).__name__ == "RoundedRectangle"
+            and item.get_center()[0] < 0
+            and item.width > 6.0
+        )
+        self._assert_contained(left_panel, tether_label, inset=0.10)
+        for obstacle_text in ("X형모터배치", "전방", "M1", "M2", "M3", "M4"):
+            obstacle = self._text(scene, obstacle_text)
+            self.assertFalse(
+                self._bbox_overlaps(tether_label, obstacle, gap=0.08),
+                f"tether label overlaps {obstacle_text}",
+            )
+        for tether_line in tether_lines:
+            self.assertFalse(
+                self._bbox_overlaps(tether_label, tether_line, gap=0.06)
+            )
 
     def test_swarm_future_uses_caution_while_danger_stays_red(self) -> None:
         scene = self._rendered_static_scene("SwarmSystemStatic")
@@ -999,8 +1310,8 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                 )
 
         paired_cost_text = {
-            "모터4개": "7.8~8.2만원",
-            "ESC4개": "약17.5만원",
+            "모터4개": "약8.0만원",
+            "ESC4개": "약4.0만원",
             "MCU·센서IC": "약2.3만원",
             "프레임재료": "1.1~2.2만원",
             "배터리·프로펠러": "약6.8만원",
@@ -1010,7 +1321,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
             for item in self._mobjects(scene)
             if type(item).__name__ == "RoundedRectangle"
             and 2.6 < item.width < 2.8
-            and 0.8 < item.height < 1.0
+            and 1.1 < item.height < 1.3
         ]
         self.assertEqual(len(category_cards), 5)
         for name_text, value_text in paired_cost_text.items():
@@ -1032,6 +1343,21 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                     label.get_bottom()[1], card.get_bottom()[1] + 0.04
                 )
                 self.assertLessEqual(label.get_top()[1], card.get_top()[1] - 0.04)
+
+        project_estimate_labels = [
+            item for item in texts if item.text == "프로젝트추정"
+        ]
+        self.assertEqual(len(project_estimate_labels), 2)
+        for category_text in ("모터4개", "ESC4개"):
+            category = next(item for item in texts if item.text == category_text)
+            evidence = min(
+                project_estimate_labels,
+                key=lambda item: abs(item.get_center()[0] - category.get_center()[0]),
+            )
+            self.assertAlmostEqual(
+                evidence.get_center()[0], category.get_center()[0], delta=0.08
+            )
+            self.assertLess(evidence.get_center()[1], category.get_center()[1])
 
     def test_telemetry_evidence_badge_clears_content_panels(self) -> None:
         from manim import tempconfig

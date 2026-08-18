@@ -552,7 +552,9 @@ class LandingAmbiguityAudience(ExplainerScene):
         self.play(Create(ground_left), FadeIn(left_drone), FadeIn(right_drone), GrowArrow(left_accel), GrowArrow(right_accel), FadeIn(left_value), FadeIn(right_value), run_time=0.8)
 
         down_arrow = Arrow(right_drone.get_center() + RIGHT * 2.0 + UP * 0.7, right_drone.get_center() + RIGHT * 2.0 + DOWN * 0.7, color=CYAN, stroke_width=7)
-        velocity = text("속도는 아래로", 24, CYAN, "BOLD").next_to(down_arrow, RIGHT, buff=0.15)
+        velocity = text("속도는 아래로", 24, CYAN, "BOLD").next_to(
+            down_arrow, LEFT, buff=0.15
+        )
         self.play(GrowArrow(down_arrow), FadeIn(velocity), right_drone.animate.shift(DOWN * 1.55), right_accel.animate.shift(DOWN * 1.55), run_time=1.8, rate_func=linear)
 
         same = text("움직임은 다르지만 센서값은 같다", 29, RED, "BOLD").move_to(UP * 2.45)

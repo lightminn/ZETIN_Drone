@@ -44,7 +44,7 @@ PYTHON_STATIC_IMAGES = {
     12: "attitude-correction.png",
     46: "sil-closed-loop.png",
     63: "failsafe-timeline.png",
-    64: "landing-observability.png",
+    69: "landing-probe-evidence.png",
     71: "shared-state-race.png",
     81: "telemetry-motor-balance.png",
 }
@@ -125,6 +125,115 @@ def _slide_title(section: dict[str, object]) -> str | None:
 
 
 class PresentationVideoMarkupTests(unittest.TestCase):
+    def test_corrected_evidence_slides_keep_measurement_and_inference_boundaries(self) -> None:
+        parser = _DeckParser()
+        source = (DECK_DIR / "index.html").read_text(encoding="utf-8")
+        parser.feed(source)
+
+        self.assertEqual(len(parser.sections), 84)
+        self.assertNotIn(
+            "현재 실행 상태 · 차기 PCB는 주문 진행 중이다. 납땜 작업과 알리 부품 납기는 일정 위험으로 관리하고 있다.",
+            source,
+        )
+        slide29 = parser.sections[28]
+        self.assertNotIn("차기 PCB는 주문 진행 중", _slide_text(slide29))
+        self.assertNotIn(
+            "차기 PCB는 주문 진행 중",
+            str(slide29["attrs"].get("data-speaker-notes", "")),
+        )
+
+        slide57 = parser.sections[56]
+        slide57_text = _slide_text(slide57)
+        slide57_notes = str(slide57["attrs"].get("data-speaker-notes", ""))
+        for phrase in (
+            "점 = 고정 벤치 실측 샘플",
+            "실선 = 회귀 추세선",
+            "과거 모터 전류 보상 벤치 기준",
+            "지자기 융합 ON/OFF 비교가 아니다",
+        ):
+            self.assertIn(phrase, slide57_text)
+        self.assertIn("현행 타원체 보정과 구분", slide57_notes)
+
+        slide59 = parser.sections[58]
+        slide59_text = _slide_text(slide59)
+        slide59_notes = str(slide59["attrs"].get("data-speaker-notes", ""))
+        for phrase in (
+            "첫 실비행 무장 구간",
+            "명령이 실제로 수락",
+            "초기화 실패",
+            "지자기 보정 중",
+            "드리프트 감소를 단독으로 입증하지 않는다",
+            "다음 장의 ON/OFF host SIL",
+        ):
+            self.assertIn(phrase, slide59_text)
+            self.assertIn(phrase, slide59_notes)
+        self.assertNotIn("별도 ON/OFF 벤치·SIL 비교", slide59_text + slide59_notes)
+        self.assertNotIn("Yaw와 MagHeading이 함께 움직였다", slide59_text + slide59_notes)
+
+        slide64 = parser.sections[63]
+        self.assertEqual(
+            [video.get("src") for video in slide64["videos"]],
+            ["assets/landing-ambiguity.mp4"],
+        )
+        self.assertEqual(slide64["images"], [])
+        slide64_video = slide64["videos"][0]
+        for required in ("controls", "loop", "muted", "playsinline"):
+            self.assertIn(required, slide64_video)
+        self.assertEqual(slide64_video.get("preload"), "metadata")
+        slide64_text_and_notes = _slide_text(slide64) + " " + str(
+            slide64["attrs"].get("data-speaker-notes", "")
+        )
+        for phrase in ("지면 정지", "등속 하강", "같은 1g", "IMU"):
+            self.assertIn(phrase, slide64_text_and_notes)
+
+        slide69 = parser.sections[68]
+        self.assertEqual(slide69["videos"], [])
+        landing_images = [
+            image
+            for image in slide69["images"]
+            if image.get("src") == "assets/landing-probe-evidence.png"
+        ]
+        self.assertEqual(len(landing_images), 1)
+        slide69_text_and_notes = _slide_text(slide69) + " " + str(
+            slide69["attrs"].get("data-speaker-notes", "")
+        )
+        for phrase in (
+            "두 분포 모두 지면 데이터",
+            "공중 분포는 미측정",
+            "기록 전용",
+            "착지 결정에 사용하지 않는다",
+        ):
+            self.assertIn(phrase, slide69_text_and_notes)
+
+        slide71 = parser.sections[70]
+        slide71_boundary = _slide_text(slide71) + " " + str(
+            slide71["attrs"].get("data-speaker-notes", "")
+        )
+        self.assertIn("가능한 경쟁", slide71_boundary)
+        self.assertIn("관측된 비행사고는 아니다", slide71_boundary)
+
+        slide81 = parser.sections[80]
+        slide81_text = _slide_text(slide81)
+        slide81_notes = str(slide81["attrs"].get("data-speaker-notes", ""))
+        slide81_alt = " ".join(str(image.get("alt", "")) for image in slide81["images"])
+        slide81_boundary = " ".join((slide81_text, slide81_notes, slide81_alt))
+        for phrase in (
+            "M3>M1",
+            "M3 근처",
+            "테더 하중을 지지했을 가능성이 높다",
+            "추정",
+            "한 구간",
+            "추력·프레임·공력 차이",
+        ):
+            self.assertIn(phrase, slide81_boundary)
+        self.assertNotIn("테더가 원인임을 증명", slide81_boundary)
+
+        sources = (DECK_DIR / "SOURCES.md").read_text(encoding="utf-8")
+        self.assertNotIn("PCB 주문·납땜·부품 납기 상태", sources)
+        self.assertIn("사용자 확인 프로젝트 추정", sources)
+        self.assertIn("지자기 융합 ON/OFF 비교가 아님", sources)
+        self.assertIn("테더 줄이 M3 근처에 연결", sources)
+
     def test_professor_feedback_slides_preserve_the_required_evidence_boundaries(self) -> None:
         parser = _DeckParser()
         parser.feed((DECK_DIR / "index.html").read_text(encoding="utf-8"))
@@ -170,8 +279,12 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             "240~480시간",
             "60~100인시",
             "약 10~20일",
-            "355,300~370,500원",
-            "3,553,000~3,705,000원",
+            "모터 4개 80,000원",
+            "ESC 4개 40,000원",
+            "221,900~233,100원",
+            "2,219,000~2,331,000원",
+            "사용자 확인 프로젝트 추정",
+            "판매처 가격 증빙",
             "부품 재고",
             "프린터 한 대",
             "조립된 FC PCB",
@@ -640,12 +753,16 @@ class PresentationVideoBrowserTests(unittest.TestCase):
               const magChart = stage._slides[56].querySelector(
                 'img[src$="chart_mag.png"]'
               );
+              const magSlide = stage._slides[56];
+              const magScale = magSlide.getBoundingClientRect().width / 1280;
               return {
                 collageSources,
                 timingVideoLoaded: Boolean(
                   timingVideo && timingVideo.readyState >= HTMLMediaElement.HAVE_METADATA
                 ),
                 magChartLoaded: Boolean(magChart?.complete && magChart.naturalWidth),
+                magChartLogicalWidth:
+                  magChart ? magChart.getBoundingClientRect().width / magScale : 0,
               };
             })()
             """
@@ -665,6 +782,80 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         )
         self.assertTrue(result["timingVideoLoaded"], result)
         self.assertTrue(result["magChartLoaded"], result)
+        self.assertGreaterEqual(result["magChartLogicalWidth"], 1000, result)
+
+    def test_torque_comparison_fits_and_mag_command_does_not_split(self) -> None:
+        self._open_deck()
+        result = self._evaluate(
+            r"""
+            (async () => {
+              const stage = document.querySelector('deck-stage');
+              const inspect = async number => {
+                stage.goTo(number - 1);
+                stage._fit();
+                await new Promise(resolve => requestAnimationFrame(
+                  () => requestAnimationFrame(resolve)
+                ));
+                return stage._slides[number - 1];
+              };
+
+              const torqueSlide = await inspect(10);
+              const torqueSlideRect = torqueSlide.getBoundingClientRect();
+              const torqueFigure = torqueSlide.querySelector(
+                'img[data-torque-comparison-art]'
+              )?.parentElement;
+              const torqueFigureRect = torqueFigure?.getBoundingClientRect();
+              const torqueImage = torqueSlide.querySelector(
+                'img[data-torque-comparison-art]'
+              );
+              const torqueRect = torqueImage?.getBoundingClientRect();
+
+              const magSlide = await inspect(59);
+              const magCommand = magSlide.querySelector('[data-command="mag-1"]');
+              return {
+                torqueLoaded: Boolean(
+                  torqueImage?.complete && torqueImage.naturalWidth
+                ),
+                torqueInside: Boolean(
+                  torqueRect
+                  && torqueRect.left >= torqueSlideRect.left - 1
+                  && torqueRect.top >= torqueSlideRect.top - 1
+                  && torqueRect.right <= torqueSlideRect.right + 1
+                  && torqueRect.bottom <= torqueSlideRect.bottom + 1
+                ),
+                torqueBottomOverflow: torqueRect
+                  ? torqueRect.bottom - torqueSlideRect.bottom : null,
+                torqueSlideRect: torqueSlideRect
+                  ? [torqueSlideRect.left, torqueSlideRect.top,
+                     torqueSlideRect.width, torqueSlideRect.height] : null,
+                torqueFigureRect: torqueFigureRect
+                  ? [torqueFigureRect.left, torqueFigureRect.top,
+                     torqueFigureRect.width, torqueFigureRect.height] : null,
+                torqueImageRect: torqueRect
+                  ? [torqueRect.left, torqueRect.top,
+                     torqueRect.width, torqueRect.height] : null,
+                torqueImageStyle: torqueImage
+                  ? {
+                      width: getComputedStyle(torqueImage).width,
+                      height: getComputedStyle(torqueImage).height,
+                      maxWidth: getComputedStyle(torqueImage).maxWidth,
+                      maxHeight: getComputedStyle(torqueImage).maxHeight,
+                    } : null,
+                magCommandCount: magSlide.querySelectorAll(
+                  '[data-command="mag-1"]'
+                ).length,
+                magCommandWhiteSpace: magCommand
+                  ? getComputedStyle(magCommand).whiteSpace : null,
+              };
+            })()
+            """,
+            await_promise=True,
+        )
+
+        self.assertTrue(result["torqueLoaded"], result)
+        self.assertTrue(result["torqueInside"], result)
+        self.assertEqual(result["magCommandCount"], 1, result)
+        self.assertEqual(result["magCommandWhiteSpace"], "nowrap", result)
 
     def test_professor_feedback_slides_render_visual_first_without_overflow(self) -> None:
         self._open_deck()
@@ -1075,6 +1266,15 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertIsNotNone(previous)
         self.assertTrue(previous["paused"])
         self.assertLess(previous["currentTime"], 0.05)
+
+        self._evaluate("document.querySelector('deck-stage').goTo(63)")
+        self._wait_for_playback("landing-ambiguity.mp4")
+        self._evaluate("document.querySelector('deck-stage').goTo(68)")
+        landing_previous = self._video_state("landing-ambiguity.mp4")
+
+        self.assertIsNotNone(landing_previous)
+        self.assertTrue(landing_previous["paused"])
+        self.assertLess(landing_previous["currentTime"], 0.05)
 
     def test_active_video_restores_runtime_playback_properties(self) -> None:
         self._call(

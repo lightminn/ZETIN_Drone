@@ -15,7 +15,6 @@ import time
 import unittest
 import urllib.request
 import zipfile
-from decimal import Decimal, ROUND_HALF_UP
 from fractions import Fraction
 from html.parser import HTMLParser
 from pathlib import Path
@@ -222,9 +221,11 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "첫 출력 성공",
             "프린터 1대 기준",
             "직접 작업 6–10시간",
-            "35.5–37.1만 원",
+            "모터 8.0만 원",
+            "ESC 4.0만 원",
+            "22.2–23.3만 원",
             "직접 작업 60–100시간",
-            "355–371만 원",
+            "222–233만 원",
             "참고 품목 합계",
             "완성기 총액·확정 BOM 아님",
             "FC PCB·전원·배선·배송·인건비",
@@ -236,46 +237,37 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         visible_markup = slide.split(">", 1)[1]
         self.assertNotIn("인시", visible_markup)
 
-    def test_slide_04_cost_and_time_values_follow_production_estimate_json(self) -> None:
+    def test_slide_04_uses_user_confirmed_cost_estimate(self) -> None:
+        slide = self.slide_source("04")
+        rendered = slide.split(">", 1)[1]
+        for expected in (
+            "모터 8.0만 원",
+            "ESC 4.0만 원",
+            "MCU·센서 2.3만 원",
+            "프레임 1.1–2.2만 원",
+            "배터리·프로펠러 6.8만 원",
+            "1대 합계 22.2–23.3만 원",
+            "10대 환산 222–233만 원",
+        ):
+            self.assertIn(expected, rendered)
+        for stale in (
+            "7.8–8.2만 원",
+            "17.5만 원",
+            "35.5–37.1만 원",
+            "355–371만 원",
+        ):
+            self.assertNotIn(stale, slide)
+
+        notes = re.search(r'data-speaker-notes="([^"]+)"', slide)
+        self.assertIsNotNone(notes)
+        self.assertIn("사용자 확인 프로젝트 추정", notes.group(1))
+        self.assertIn("221,900~233,100원", notes.group(1))
+        self.assertIn("2,219,000~2,331,000원", notes.group(1))
+
+    def test_slide_04_time_values_follow_production_estimate_json(self) -> None:
         estimate = json.loads(PRODUCTION_ESTIMATE_PATH.read_text(encoding="utf-8"))
         slide = self.slide_source("04")
         rendered = slide.split(">", 1)[1]
-
-        def in_manwon(value: int, digits: int) -> str:
-            quantum = Decimal(1).scaleb(-digits)
-            converted = (Decimal(value) / Decimal(10_000)).quantize(
-                quantum,
-                rounding=ROUND_HALF_UP,
-            )
-            return f"{converted:.{digits}f}"
-
-        def range_in_manwon(values: list[int], digits: int = 1) -> str:
-            low = in_manwon(values[0], digits)
-            high = in_manwon(values[1], digits)
-            return low if low == high else f"{low}–{high}"
-
-        category_labels = {
-            "motors_4": "모터",
-            "escs_4": "ESC",
-            "control_sensor_chips": "MCU·센서",
-            "frame_material": "프레임",
-            "battery_propellers": "배터리·프로펠러",
-        }
-        category_costs = estimate["cost"]["one_unit_categories_krw"]
-        for key, label in category_labels.items():
-            with self.subTest(category=key):
-                expected = f"{label} {range_in_manwon(category_costs[key])}만 원"
-                self.assertIn(expected, rendered)
-
-        one_unit_total = range_in_manwon(
-            estimate["cost"]["one_unit_core_subtotal_krw"]
-        )
-        ten_unit_total = range_in_manwon(
-            estimate["cost"]["ten_units_core_subtotal_krw"],
-            digits=0,
-        )
-        self.assertIn(f"1대 합계 {one_unit_total}만 원", rendered)
-        self.assertIn(f"10대 환산 {ten_unit_total}만 원", rendered)
 
         one_unit_time = estimate["time"]["one_unit"]
         ten_unit_time = estimate["time"]["ten_units"]

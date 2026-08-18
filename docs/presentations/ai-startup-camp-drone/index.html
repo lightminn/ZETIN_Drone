@@ -136,7 +136,7 @@
   <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="헬리콥터는 메인로터를 돌릴 때 동체에 반대 방향의 반작용 토크가 생긴다. 꼬리로터는 긴 꼬리 끝에서 옆 방향 추력을 만들어 그 토크를 상쇄한다. 쿼드콥터에는 별도의 꼬리로터가 없다. 현재 기체에서는 M1과 M2가 CW, M3와 M4가 CCW이다. 평상시에는 두 쌍의 반작용 토크가 상쇄된다. 기체를 CW로 돌리는 예에서는 M3와 M4의 출력을 키우고 M1과 M2를 줄여 합추력을 거의 유지하면서 CW 반작용 토크를 우세하게 만든다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="헬리콥터와 쿼드콥터의 Yaw 제어">
       <figure style="width:100%;height:100%;margin:0;display:grid;place-items:center;min-height:0">
-        <img data-torque-comparison-art data-python-static="helicopter-quadcopter-torque" src="assets/helicopter-quadcopter-torque.png" alt="헬리콥터는 꼬리로터 힘으로 반작용 토크를 상쇄하고 쿼드콥터는 CW·CCW 로터 쌍의 출력 차이로 Yaw를 만드는 비교 시각화" aria-label="헬리콥터는 꼬리로터 힘으로 반작용 토크를 상쇄하고 쿼드콥터는 CW·CCW 로터 쌍의 출력 차이로 Yaw를 만드는 비교 시각화" style="display:block;width:100%;aspect-ratio:16/9;max-height:100%;object-fit:contain;background:#06152f;border-radius:4px">
+        <img data-torque-comparison-art data-python-static="helicopter-quadcopter-torque" src="assets/helicopter-quadcopter-torque.png" alt="헬리콥터는 꼬리로터 힘으로 반작용 토크를 상쇄하고 쿼드콥터는 CW·CCW 로터 쌍의 출력 차이로 Yaw를 만드는 비교 시각화" aria-label="헬리콥터는 꼬리로터 힘으로 반작용 토크를 상쇄하고 쿼드콥터는 CW·CCW 로터 쌍의 출력 차이로 Yaw를 만드는 비교 시각화" style="display:block;width:100%;height:578px;max-width:100%;max-height:578px;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px">
       </figure>
     </x-import>
   </section>
@@ -426,11 +426,11 @@
     </x-import>
   </section>
 
-  <section data-label="1대와 10대 제작 규모" data-screen-label="22" data-speaker-notes="조립된 FC PCB가 있고 부품 재고를 확보한 상태에서 프린터 한 대로 순차 출력하며 첫 출력 성공을 가정한 예비 산정이다. 1대는 프린터 점유 24~48시간, 직접 작업 6~10인시, 전체 경과 약 2~3일이다. 10대는 프린터 점유 240~480시간, 직접 작업 60~100인시, 출력과 조립을 병행할 때 프린터 최소 약 10~20일이다. 가격이 확인되는 참고 부품은 1대 355,300~370,500원, 10대 3,553,000~3,705,000원이다. 모터는 대체 참고가이고 실제 구매 SKU가 확정되지 않아 검증된 BOM이 아니다. 이 값은 완성 기체 총원가가 아니다. FC PCB·전원·배선·체결부품·배송·관부가세·인건비·재출력·비행 튜닝은 제외하며 실제 제작 전 다시 견적한다." style="background:#fff">
+  <section data-label="1대와 10대 제작 규모" data-screen-label="22" data-speaker-notes="조립된 FC PCB가 있고 부품 재고를 확보한 상태에서 프린터 한 대로 순차 출력하며 첫 출력 성공을 가정한 예비 산정이다. 1대는 프린터 점유 24~48시간, 직접 작업 6~10인시, 전체 경과 약 2~3일이다. 10대는 프린터 점유 240~480시간, 직접 작업 60~100인시, 출력과 조립을 병행할 때 프린터 최소 약 10~20일이다. 사용자 확인 프로젝트 추정은 모터 4개 80,000원, ESC 4개 40,000원이며 다른 항목은 유지했다. 참고 부품 합계는 1대 221,900~233,100원, 10대 2,219,000~2,331,000원이다. 판매처 가격 증빙이 아니다. 검증된 BOM이 아니다. 완성 기체 총원가도 아니다. FC PCB·전원·배선·체결부품·배송·관부가세·인건비·재출력·비행 튜닝은 제외하며 실제 제작 전 다시 견적한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="1대와 10대 제작 규모">
       <figure data-professor-feedback="22" data-production-estimate style="width:100%;height:100%;margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
         <img src="assets/production-estimate.png" alt="조립된 FC PCB와 부품 재고, 첫 출력 성공을 가정해 1대와 10대의 프린터 점유시간, 직접 작업시간, 가격 확인 참고 부품비를 비교한 예비 산정" style="display:block;width:100%;height:100%;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px" />
-        <figcaption style="font-size:19.8px;line-height:1.4;border-left:6px solid #d49b00;background:#fff5d9;padding:10px 16px"><strong>예비 산정이다. 완성 기체 총원가가 아니다. 검증된 BOM도 아니다.</strong> 조립된 FC PCB · 부품 재고 · 첫 출력 성공 가정, FC PCB · 전원 · 배선 · 배송 · 관부가세 · 인건비 · 재출력 · 비행 튜닝 제외</figcaption>
+        <figcaption style="font-size:19.8px;line-height:1.4;border-left:6px solid #d49b00;background:#fff5d9;padding:10px 16px"><strong>사용자 확인 프로젝트 추정에 따른 예비 산정이다. 판매처 가격 증빙이나 완성 기체 총원가가 아니다.</strong> 조립된 FC PCB · 부품 재고 · 첫 출력 성공 가정, FC PCB · 전원 · 배선 · 배송 · 관부가세 · 인건비 · 재출력 · 비행 튜닝 제외</figcaption>
       </figure>
     </x-import>
   </section>
@@ -584,7 +584,7 @@
     </x-import>
   </section>
 
-  <section data-label="1차 보드의 교훈" data-screen-label="29" data-speaker-notes="첫 보드는 신호선 배치가 빽빽했고 디버깅 접근이 나빴다. 지금 보드는 그걸 고친 결과이다. 차기 PCB는 주문 진행 중이며, 납땜 작업과 알리 부품 납기는 실제 제작 일정의 위험으로 관리하고 있다." style="background:#fff">
+  <section data-label="1차 보드의 교훈" data-screen-label="29" data-speaker-notes="첫 보드는 신호선 배치가 빽빽했고 디버깅 접근이 나빴다. 지금 보드는 측정 패드를 노출하고 모터 커넥터를 정렬하며 센서를 직접 실장해 그 문제를 고친 결과이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="1차 PCB의 문제점">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.2fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
@@ -617,7 +617,6 @@
             </tbody>
           </table>
           <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:22px;line-height:1.5">그래서 현재 보드는 <strong>전원·신호 측정 패드를 표면에 노출</strong>했다. 문제 발생 시 부품 다리에 직접 프로브를 대지 않아도 된다.</div>
-          <div style="background:#eaf2fb;border-radius:4px;padding:18px 20px;font-size:20.5337px;line-height:1.45"><strong>현재 실행 상태</strong> · 차기 PCB는 주문 진행 중이다. 납땜 작업과 알리 부품 납기는 일정 위험으로 관리하고 있다.</div>
         </div>
       </div>
     </x-import>
@@ -1302,25 +1301,16 @@
     </x-import>
   </section>
 
-  <section data-label="전류 간섭" data-screen-label="57" data-speaker-notes="새 센서를 달자 스로틀 변화와 함께 헤딩이 움직였다. 기체가 실제로 회전한 것이 아니라 모터 전류가 만든 자기장이 센서에 섞인 현상이었다. 화면의 그래프는 이 벤치 기록을 보여 준다. 후속 재보정에서는 센서 오프셋과 축별 크기 차이를 함께 다루는 타원체 보정으로 교체했다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 전류에 의한 자기장 간섭">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.42fr .78fr;gap:30px;align-items:center;min-height:0">
-        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
-          <img src="assets/chart_mag.png" alt="모터 출력 변화와 함께 커지는 지자기 헤딩 오차를 보정 전후로 비교한 벤치 그래프" style="display:block;width:100%;height:100%;max-height:430px;object-fit:contain;background:#fff;border-top:6px solid var(--uos-blue)" />
-          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">별도 벤치 기록 · 스로틀 변화에 따른 헤딩 오차 비교</figcaption>
-        </figure>
-        <div style="display:flex;flex-direction:column;justify-content:center;gap:22px">
-          <div style="border-top:6px solid var(--uos-blue);padding-top:18px">
-            <div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">관측</div>
-            <div style="font-size:24.2px;line-height:1.45;margin-top:10px">기체가 돌지 않아도 출력 변화와 함께 헤딩이 움직임</div>
-          </div>
-          <div style="border-top:1px solid var(--uos-rule);padding-top:18px">
-            <div style="font-size:24.2px;font-weight:800;color:var(--uos-blue)">원인</div>
-            <div style="font-size:24.2px;line-height:1.45;margin-top:10px">전원선과 모터 전류가 센서 주변 자기장을 바꿈</div>
-          </div>
-          <div style="background:var(--uos-surface);border-left:6px solid var(--uos-blue);padding:18px 20px;font-size:20.5337px;line-height:1.45"><strong>대응</strong> · 원시 자기장을 기록해 출력 연동 오염을 분리하고, 후속 보정은 타원체 모델로 갱신</div>
-        </div>
-      </div>
+  <section data-label="전류 간섭" data-screen-label="57" data-speaker-notes="화면의 점은 고정 벤치에서 얻은 실제 측정 샘플이고 실선은 그 샘플의 회귀 추세선이다. 이 그래프는 과거 min/max 보정 시기의 모터 전류 보상 벤치 기준이며 지자기 융합 ON/OFF 비교가 아니다. 후속 재보정에서 센서 오프셋과 축별 크기 차이를 함께 다루는 타원체 보정으로 교체했으므로 현행 타원체 보정과 구분해 읽는다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.Slide" hint-size="100%,100%">
+      <figure style="width:100%;height:100%;margin:0;display:flex;flex-direction:column;background:#fff;min-height:0">
+        <img src="assets/chart_mag.png" alt="고정 벤치 실측 샘플 점과 회귀 추세선으로 모터 전류 보상 전후를 비교한 과거 벤치 그래프" style="display:block;width:100%;flex:1;min-height:0;object-fit:contain;background:#fff" />
+        <figcaption style="height:64px;flex:none;display:grid;grid-template-columns:1fr 1fr 1.55fr;align-items:center;gap:18px;border-top:6px solid var(--uos-blue);padding:0 28px;font-size:20.5337px;line-height:1.25;background:var(--uos-surface)">
+          <span><strong>● 점</strong> = 고정 벤치 실측 샘플</span>
+          <span><strong>━ 실선</strong> = 회귀 추세선</span>
+          <span><strong>과거 모터 전류 보상 벤치 기준</strong> · 지자기 융합 ON/OFF 비교가 아니다.</span>
+        </figcaption>
+      </figure>
     </x-import>
   </section>
 
@@ -1389,18 +1379,18 @@
     </x-import>
   </section>
 
-  <section data-label="운용 기본값 ON" data-screen-label="59" data-speaker-notes="펌웨어 변수는 안전하게 OFF로 시작하지만, 현재 지상국은 시동 전에 검증된 기본 선택인 ON을 보낸다. 끄는 선택도 조종자에게 남겨둔다." style="background:#fff">
+  <section data-label="운용 기본값 ON" data-screen-label="59" data-speaker-notes="펌웨어 변수는 부팅 때 OFF로 시작하고, 지상 제어 프로그램은 기본 선택이 ON이면 시동 전에 mag 1을 보낸다. 첫 실비행 무장 구간의 Mag_Enabled=1은 mag 1 명령이 실제로 수락되어 지자기 융합 분기가 켜졌다는 확인값이다. 지자기 보정 중이거나 초기화 실패 시에는 1이 되지 않을 수 있으므로 명령 전송만으로 대신할 수 없다. 이 값은 드리프트 감소를 단독으로 입증하지 않는다. 효과는 다음 장의 ON/OFF host SIL에서 별도로 확인한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지자기 보정 운용 상태">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center">
         <div style="display:flex;flex-direction:column;gap:22px">
           <div style="font-size:35.2px;font-weight:700;line-height:1.3">부팅 안전값과 실제 운용 기본값을 분리했다.</div>
           <ul style="margin:0;padding-left:28px;font-size:22px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
             <li>펌웨어 내부 변수는 재부팅 직후 <strong>OFF</strong>로 시작한다</li>
-            <li>지상국은 시동 전에 조종자의 기본 선택인 <strong>mag 1</strong>을 보내며, 현재 검증된 운용값은 ON이다</li>
-            <li>비교 시험이 필요할 때만 <strong>--no-mag</strong> 또는 <strong>mag off</strong>로 끈다</li>
+            <li>지상 제어 프로그램은 기본 선택이 ON이면 시동 전에 <span data-command="mag-1" style="white-space:nowrap"><strong>mag 1</strong></span>을 보낸다</li>
+            <li>지자기 보정 중이거나 초기화 실패 시에는 명령이 수락되지 않을 수 있다</li>
           </ul>
         </div>
-        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:32px;font-size:26.4px;line-height:1.5">첫 실비행 무장 구간에서 <strong>Mag_Enabled=1이 100%</strong>였고 Yaw와 MagHeading이 함께 움직였다. 그래서 ON을 정상 경로로 유지한다.</div>
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:30px;font-size:24.2px;line-height:1.5">첫 실비행 무장 구간의 <strong>Mag_Enabled=1</strong>은 <strong>mag 1 명령이 실제로 수락</strong>되어 융합 분기가 켜졌다는 확인값이다. 명령 전송과 실제 활성 상태를 구분할 수 있지만, 드리프트 감소를 단독으로 입증하지 않는다. 효과는 <strong>다음 장의 ON/OFF host SIL</strong>에서 별도로 확인한다.</div>
       </div>
     </x-import>
   </section>
@@ -1494,11 +1484,11 @@
     </x-import>
   </section>
 
-  <section data-label="착지 판정 한계" data-screen-label="64" data-speaker-notes="가속도만으로 정지와 등속 하강을 구분할 수 없다. 거리·광류의 수신·기록 경로는 구현됐지만 실물 장착과 판정 연결은 아직 남아 있다." style="background:#fff">
+  <section data-label="착지 판정 한계" data-screen-label="64" data-speaker-notes="IMU가 보는 중력 방향 가속도는 지면 정지와 등속 하강에서 모두 같은 1g이다. 따라서 IMU 측정만으로 두 상태를 구분할 수 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="IMU 착지 판정의 한계">
       <figure style="width:100%;height:100%;margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
-        <img data-simple-visual data-python-static="landing-observability" src="assets/landing-observability.png" alt="정지와 등속 하강은 IMU만으로 구분하기 어렵고 거리 센서가 구분에 도움을 줄 수 있는 착지 관측 한계 시각화" aria-label="정지와 등속 하강은 IMU만으로 구분하기 어렵고 거리 센서가 구분에 도움을 줄 수 있는 착지 관측 한계 시각화" style="display:block;width:100%;aspect-ratio:16/9;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px">
-        <figcaption style="background:#fff5d9;border-left:6px solid #d49b00;padding:14px 20px;font-size:20.5337px;line-height:1.4"><strong>판정을 보류한다.</strong> 거리·광류는 먼저 기록만 하고, 실물 검증 전에는 착지 결정이나 모터 정지에 사용하지 않는다.</figcaption>
+        <video src="assets/landing-ambiguity.mp4" controls loop muted playsinline preload="metadata" aria-label="IMU에서 같은 1g로 보이는 지면 정지와 등속 하강의 착지 판정 모호성" style="display:block;width:100%;aspect-ratio:16/9;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px"></video>
+        <figcaption style="background:#fff5d9;border-left:6px solid #d49b00;padding:14px 20px;font-size:22px;line-height:1.4"><strong>같은 1g</strong> · 지면 정지와 등속 하강은 IMU 측정만으로 구분되지 않는다.</figcaption>
       </figure>
     </x-import>
   </section>
@@ -1689,20 +1679,12 @@
     </x-import>
   </section>
 
-  <section data-label="프로브 가설과 반증" data-screen-label="69" data-speaker-notes="프로브는 좋은 실험 아이디어였지만 아직 판정기가 아니다. 지면에서도 반응이 사라지지 않았고 공중 비교군은 없다." style="background:#fff">
+  <section data-label="프로브 가설과 반증" data-screen-label="69" data-speaker-notes="라벨을 다시 확인한 결과 비교한 두 분포 모두 지면 데이터였다. 공중 분포는 미측정이므로 분리 성능을 말할 수 없다. 프로브는 기록 전용이며 착지 결정에 사용하지 않는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="능동 프로브 가설 검증">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.13fr 1fr;gap:32px">
-        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
-          <video src="assets/landing-ambiguity.mp4" controls loop muted playsinline preload="metadata" aria-label="가속도만으로 지면 정지와 등속 하강을 구분하기 어려운 착지 판정 모호성 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
-          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">같은 1g가 지면 정지와 등속 하강 두 상태를 모두 설명</figcaption>
-        </figure>
-        <div style="display:flex;flex-direction:column;gap:14px;justify-content:center">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:20px;font-size:22px;line-height:1.45"><strong style="color:var(--uos-blue)">가설</strong> · 짧게 출력을 낮춰 공중과 지면의 반응을 구분</div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:20px;font-size:22px;line-height:1.45"><strong style="color:var(--uos-blue)">라벨 정정</strong> · 비교한 두 분포는 모두 지면, <strong>공중 분포는 미측정</strong></div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px;font-size:22px;line-height:1.45"><strong>실제 관측</strong> · 지면에서도 반응이 남았고, 임계값을 바꾸면 검출이 사라짐</div>
-          <div style="font-size:22px;line-height:1.5">프로브는 <strong>기록에만 사용</strong>하고 착지 결정에는 사용하지 않는다.</div>
-        </div>
-      </div>
+      <figure style="width:100%;height:100%;margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
+        <img data-simple-visual data-python-static="landing-probe-evidence" src="assets/landing-probe-evidence.png" alt="측정한 두 프로브 분포가 모두 지면 데이터이고 공중 분포는 미측정인 정정 근거" aria-label="측정한 두 프로브 분포가 모두 지면 데이터이고 공중 분포는 미측정인 정정 근거" style="display:block;width:100%;aspect-ratio:16/9;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px">
+        <figcaption style="background:#fff5d9;border-left:6px solid #d49b00;padding:14px 20px;font-size:20.5337px;line-height:1.4"><strong>라벨 정정</strong> · 두 분포 모두 지면 데이터 · 공중 분포는 미측정 · 프로브는 기록 전용이며 착지 결정에 사용하지 않는다.</figcaption>
+      </figure>
     </x-import>
   </section>
 
@@ -1962,11 +1944,11 @@
     </x-import>
   </section>
 
-  <section data-label="로그 해석" data-screen-label="81" data-speaker-notes="테더 구간 전체의 모터 출력 기록에서는 M3 평균이 M1보다 높았다. 화면은 그 관계를 개념적으로 배치한 그림이며 특정 한 줄의 원시 로그를 옮긴 것이 아니다. 지속적인 비대칭 보정은 관측했지만, 원인은 질량 분포, 모터와 프로펠러 추력차, 테더, 프레임, 공력 중 어느 하나로 확정할 수 없다. Fault_RC는 횟수가 아니라 상태 플래그이다." style="background:#fff">
+  <section data-label="로그 해석" data-screen-label="81" data-speaker-notes="테더 구간에서 M3>M1을 관측했다. 사용자 제공 현장 사실은 테더 줄이 M3 근처에 연결됐다는 것이다. 따라서 M3가 테더 하중을 지지했을 가능성이 높다는 추정은 가능하지만 원인 증명은 아니다. 한 구간만으로 모터·프로펠러 추력, 프레임, 공력 차이를 배제할 수 없다. 화면은 집계 관계를 개념적으로 배치한 그림이며 특정 한 줄의 원시 로그가 아니다. Fault_RC는 횟수가 아니라 상태 플래그이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="텔레메트리 로그 해석">
       <figure style="width:100%;height:100%;margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
-        <img data-simple-visual data-python-static="telemetry-motor-balance" src="assets/telemetry-motor-balance.png" alt="테더 구간에서 M3 평균 출력이 M1보다 높았지만 원인은 확정하지 않은 모터 출력 균형 시각화" aria-label="테더 구간에서 M3 평균 출력이 M1보다 높았지만 원인은 확정하지 않은 모터 출력 균형 시각화" style="display:block;width:100%;aspect-ratio:16/9;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px">
-        <figcaption style="background:var(--uos-surface);border-left:6px solid var(--uos-blue);padding:14px 20px;font-size:20.5337px;line-height:1.4"><strong>관측</strong> · 테더 구간 평균에서 M3 출력이 M1보다 높았다. 비대칭 보정은 확인했지만 원인은 추가 실험으로 분리해야 한다.</figcaption>
+        <img data-simple-visual data-python-static="telemetry-motor-balance" src="assets/telemetry-motor-balance.png" alt="테더 구간의 M3>M1 관측과 M3 근처 테더 줄을 근거로 M3가 테더 하중을 지지했을 가능성이 높다고 추정하되 다른 원인을 배제하지 않은 시각화" aria-label="테더 구간의 M3>M1 관측과 M3 근처 테더 줄을 근거로 M3가 테더 하중을 지지했을 가능성이 높다고 추정하되 다른 원인을 배제하지 않은 시각화" style="display:block;width:100%;aspect-ratio:16/9;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px">
+        <figcaption style="background:var(--uos-surface);border-left:6px solid var(--uos-blue);padding:14px 20px;font-size:20.5337px;line-height:1.4"><strong>관측 M3&gt;M1 · 추정</strong> · M3 근처 테더 줄 때문에 M3가 테더 하중을 지지했을 가능성이 높다. 한 구간만으로 추력·프레임·공력 차이는 배제할 수 없다.</figcaption>
       </figure>
     </x-import>
   </section>

@@ -35,17 +35,24 @@
     }
   },
   "cost": {
-    "scope": "reference_components_only",
+    "scope": "project_estimates_and_reference_components",
     "verified_bom": false,
     "one_unit_categories_krw": {
-      "motors_4": [78000, 82000],
-      "escs_4": [175400, 175400],
+      "motors_4": [80000, 80000],
+      "escs_4": [40000, 40000],
       "control_sensor_chips": [22700, 22700],
       "frame_material": [11200, 22400],
       "battery_propellers": [68000, 68000]
     },
-    "one_unit_core_subtotal_krw": [355300, 370500],
-    "ten_units_core_subtotal_krw": [3553000, 3705000],
+    "category_evidence": {
+      "motors_4": "user_confirmed_project_estimate",
+      "escs_4": "user_confirmed_project_estimate",
+      "control_sensor_chips": "vendor_reference_price",
+      "frame_material": "vendor_reference_price",
+      "battery_propellers": "vendor_reference_price"
+    },
+    "one_unit_core_subtotal_krw": [221900, 233100],
+    "ten_units_core_subtotal_krw": [2219000, 2331000],
     "optional_3901_l0x_per_unit_krw": [48000, 49000],
     "excluded_from_subtotal": [
       "custom_fc_pcb_power",
