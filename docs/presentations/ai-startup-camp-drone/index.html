@@ -16,6 +16,8 @@
   <script src="vendor/uos-slide-template/_ds_bundle.js"></script>
   <style>
     body { margin: 0; background: #202225; font-family: "Noto Sans CJK KR", "Noto Sans KR", sans-serif; }
+    .uos-slide { word-break: keep-all; overflow-wrap: normal; }
+    .uos-nowrap { white-space: nowrap; }
     a { color: #004094; }
     a:hover { color: #003076; }
   </style>
@@ -596,14 +598,14 @@
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:22px;font-weight:700">방위 센서 · 지자기</div>
-            <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">BMM350 · I2C · 50Hz로 읽어 좌우 회전(Yaw)의 기준점 제공</div>
+            <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">BMM350 · I2C · 50Hz로 읽어 좌우 <span class="uos-nowrap">회전(Yaw)의</span> 기준점 제공</div>
           </div>
           <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:22px;font-weight:700">지상국 · 노트북</div>
             <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">WiFi UDP · 조종 명령을 올리고 65개 상태 필드와 1kHz 원시 IMU를 분리 기록</div>
           </div>
         </div>
-        <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">힘은 왼쪽에서 오른쪽으로, 정보는 아래에서 위로 흐른다. 모터·ESC·배터리와 센서는 상용 부품을 사용했고, 프레임·FC 보드·펌웨어·지상국은 직접 설계·구현했다.</div>
+        <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">힘은 왼쪽에서 오른쪽으로, 정보는 아래에서 위로 흐른다. 모터·ESC·배터리와 센서는 상용 부품을 사용했고, 프레임·FC <span class="uos-nowrap">보드·펌웨어·지상국은</span> 직접 설계·구현했다.</div>
       </div>
     </x-import>
   </section>
@@ -2281,7 +2283,7 @@
           <div style="border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:22px 0;font-size:24.2px;line-height:1.55">
             전체 2,135행에서 M3 평균은 <strong>1360.0µs</strong>, M1 평균은 <strong>1334.2µs</strong>였다. 두 출력 사이에 <strong style="color:var(--uos-blue)">약 26µs의 차이</strong>가 계속 남았다.
           </div>
-          <div style="font-size:22px;line-height:1.55">이 차이는 제어기가 <strong>지속적인 비대칭을 보정했다</strong>는 증거이다. 원인은 질량 분포뿐 아니라 모터·프로펠러 추력차, 테더, 프레임, 공력 비대칭일 수 있다.</div>
+          <div style="font-size:22px;line-height:1.55">이 차이는 제어기가 <strong>지속적인 비대칭을 보정했다</strong>는 증거이다. 원인은 질량 분포뿐 아니라 <span class="uos-nowrap">모터·프로펠러</span> 추력차, 테더, 프레임, 공력 비대칭일 수 있다.</div>
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:22px;line-height:1.55">지속적인 비대칭 출력은 확인됐지만, <strong>I 항의 기여도</strong>는 적분항 로그를 따로 확인해야 한다.</div>
         </div>
       </div>
@@ -2371,12 +2373,12 @@
               <tr>
                 <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule);font-family:ui-monospace,monospace;font-size:20.5337px">Motor_M1</td>
                 <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule);text-align:right">1338</td>
-                <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule)">전-좌 모터 출력(µs)</td>
+                <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule)">전-좌 모터 <span class="uos-nowrap">출력(µs)</span></td>
               </tr>
               <tr style="background:var(--uos-surface)">
                 <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule);font-family:ui-monospace,monospace;font-size:20.5337px">Motor_M3</td>
                 <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule);text-align:right">1365</td>
-                <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule)">전-우 모터 출력(µs)</td>
+                <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule)">전-우 모터 <span class="uos-nowrap">출력(µs)</span></td>
               </tr>
               <tr>
                 <td style="padding:7px 14px;border-bottom:1px solid var(--uos-rule);font-family:ui-monospace,monospace;font-size:20.5337px">Throttle</td>
@@ -2409,7 +2411,7 @@
             <div style="font-size:22px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">판단 경계</div>
             <div style="font-size:24.2px;line-height:1.45">한 줄만으로 무게중심을 원인으로 확정할 수 없음</div>
           </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:22px;font-size:22px;line-height:1.5;margin-top:6px"><strong>약 26µs 차동</strong>은 결과이다. 질량·추력계·테더·프레임·공력 중 원인은 추가 실험으로 분리해야 한다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:22px;font-size:22px;line-height:1.5;margin-top:6px"><strong>약 26µs 차동</strong>은 결과이다. <span class="uos-nowrap">질량·추력계·테더·프레임·공력</span> 중 원인은 추가 실험으로 분리해야 한다.</div>
         </div>
       </div>
     </x-import>
@@ -2461,7 +2463,7 @@
           <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
             <div style="font-size:20.5337px;font-weight:700;opacity:.85">STEP 1 · 지금</div>
             <div style="font-size:26.4px;font-weight:700;line-height:1.3">안정 호버를 재현하기</div>
-            <div style="font-size:22px;line-height:1.55">첫 실비행 기록을 출발점으로, 자세·Yaw·비대칭 보정을 반복 가능한 조건에서 다시 검증한다.</div>
+            <div style="font-size:22px;line-height:1.55">첫 실비행 기록을 출발점으로, <span class="uos-nowrap">자세·Yaw·비대칭</span> 보정을 반복 가능한 조건에서 다시 검증한다.</div>
             <div style="font-size:20.5337px;line-height:1.4;opacity:.85;margin-top:auto">통과 기준 — 30초 이상 안정 호버 · 고장 0건</div>
           </div>
           <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">

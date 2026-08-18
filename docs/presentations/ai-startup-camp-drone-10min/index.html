@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="vendor/uos-slide-template/styles.css">
   <script src="vendor/uos-slide-template/_ds_bundle.js"></script>
   <style>
-    body { margin: 0; background: #202225; font-family: "Noto Sans CJK KR", "Noto Sans KR", sans-serif; }
+    body { margin: 0; background: #202225; font-family: "Noto Sans CJK KR", "Noto Sans KR", sans-serif; word-break: keep-all; overflow-wrap: normal; }
     .fill { width: 100%; height: 100%; min-width: 0; min-height: 0; }
     .keyline { background: var(--uos-blue); color: #fff; border-radius: 4px; padding: 14px 22px; font-size: 22px; font-weight: 700; line-height: 1.42; }
     .eyebrow { font-size: 20.5337px; color: var(--uos-blue); font-weight: 800; letter-spacing: .02em; }
@@ -24,6 +24,7 @@
     .rule-panel { border-top: 6px solid var(--uos-blue); padding-top: 17px; }
     .caption { font-size: 18.7px; line-height: 1.4; color: var(--uos-ink-muted); }
     .mono { font-family: ui-monospace, "Noto Sans Mono CJK KR", monospace; }
+    .nowrap { white-space: nowrap; }
     figure { margin: 0; }
     img, video { display: block; }
   </style>
@@ -120,7 +121,7 @@
           <div style="display:grid;grid-template-rows:1fr 1fr;gap:14px;min-height:0">
             <figure class="panel" style="padding:13px;display:grid;grid-template-columns:1.18fr .82fr;gap:10px;align-items:center;min-height:0">
               <img src="assets/pcb-layout.png" alt="자체 제작 제어 보드 PCB 레이아웃" style="width:100%;height:100%;object-fit:contain;min-height:0">
-              <figcaption style="font-size:19.8px;line-height:1.45"><strong>PCB 배선</strong><br><span class="muted">센서·모터·전원 핀의 물리 계약</span></figcaption>
+              <figcaption style="font-size:19.8px;line-height:1.45"><strong>PCB 배선</strong><br><span class="muted"><span class="nowrap">센서·모터·전원</span> 핀의 물리 계약</span></figcaption>
             </figure>
             <figure class="panel" style="padding:13px;display:grid;grid-template-columns:.78fr 1.22fr;gap:10px;align-items:center;min-height:0">
               <img src="assets/pcb-built.jpeg" alt="실제 제작된 자작 드론 제어 보드" style="width:100%;height:100%;object-fit:cover;min-height:0">

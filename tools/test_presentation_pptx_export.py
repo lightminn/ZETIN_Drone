@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -31,13 +32,18 @@ DEFAULT_PDF_PATH = DEFAULT_PPTX_PATH.with_suffix(".pdf")
 PDF_PATH = Path(
     os.environ.get("ZETIN_PRESENTATION_PDF", str(DEFAULT_PDF_PATH))
 )
-EXPECTED_SLIDES = 77
-EXPECTED_VIDEO_SLIDES = 11
+EXPECTED_SLIDES = 84
+EXPECTED_VIDEO_SLIDES = 14
 SLIDE_NAME = re.compile(r"ppt/slides/slide\d+\.xml$")
 NOTE_NAME = re.compile(r"ppt/notesSlides/notesSlide\d+\.xml$")
 PRESENTATION_NS = {
     "p": "http://schemas.openxmlformats.org/presentationml/2006/main"
 }
+RELATIONSHIP_NS = {
+    "r": "http://schemas.openxmlformats.org/package/2006/relationships"
+}
+VIDEO_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/video"
+MEDIA_REL = "http://schemas.microsoft.com/office/2007/relationships/media"
 
 
 @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")
@@ -72,6 +78,41 @@ class PresentationPptxExportTests(unittest.TestCase):
                 if name.startswith("ppt/media/") and name.lower().endswith(".mp4")
             )
             self.assertEqual(len(video_names), EXPECTED_VIDEO_SLIDES)
+
+            video_relationships = []
+            media_relationships = []
+            for relationship_name in names:
+                if not relationship_name.startswith("ppt/slides/_rels/"):
+                    continue
+                if not relationship_name.endswith(".rels"):
+                    continue
+                relationship_root = ElementTree.fromstring(
+                    archive.read(relationship_name)
+                )
+                slide_part = relationship_name.replace("/_rels/", "/")
+                slide_part = slide_part.removesuffix(".rels")
+                slide_directory = posixpath.dirname(slide_part)
+                for relationship in relationship_root.findall(
+                    "r:Relationship", RELATIONSHIP_NS
+                ):
+                    target = posixpath.normpath(
+                        posixpath.join(
+                            slide_directory, relationship.get("Target", "")
+                        )
+                    )
+                    item = (relationship_name, target)
+                    if relationship.get("Type") == VIDEO_REL:
+                        video_relationships.append(item)
+                    elif relationship.get("Type") == MEDIA_REL:
+                        media_relationships.append(item)
+
+            self.assertEqual(len(video_relationships), EXPECTED_VIDEO_SLIDES)
+            self.assertEqual(len(media_relationships), EXPECTED_VIDEO_SLIDES)
+            video_targets = {target for _, target in video_relationships}
+            media_targets = {target for _, target in media_relationships}
+            self.assertEqual(len(video_targets), EXPECTED_VIDEO_SLIDES)
+            self.assertEqual(video_targets, media_targets)
+            self.assertEqual(video_targets, set(video_names))
 
             with tempfile.TemporaryDirectory(prefix="zetin-pptx-media-") as temp_dir:
                 codecs = []

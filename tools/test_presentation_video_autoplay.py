@@ -719,6 +719,54 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertIn("SIL 시뮬레이션", comparison["slideText"], comparison)
         self.assertIn("전류 간섭 벤치", comparison["slideText"], comparison)
 
+    def test_korean_whitespace_tokens_do_not_wrap_across_visual_lines(self) -> None:
+        """Keep each Korean whitespace-delimited word together when Chrome lays out a slide."""
+        self._open_deck()
+        broken_tokens = self._evaluate(
+            r"""
+            (() => {
+              const stage = document.querySelector('deck-stage');
+              const broken = [];
+              const originalIndex = stage.index;
+              try {
+                for (let index = 0; index < stage._slides.length; index += 1) {
+                  stage.goTo(index);
+                  const slide = stage._slides[index];
+                  const walker = document.createTreeWalker(slide, NodeFilter.SHOW_TEXT);
+                  let textNode;
+                  while ((textNode = walker.nextNode())) {
+                    const parent = textNode.parentElement;
+                    if (!parent || parent.closest('script, style, svg, video')) continue;
+                    for (const match of textNode.textContent.matchAll(/\S+/gu)) {
+                      const token = match[0];
+                      if (!/[가-힣]/u.test(token)) continue;
+                      const range = document.createRange();
+                      range.setStart(textNode, match.index);
+                      range.setEnd(textNode, match.index + token.length);
+                      const rows = [...range.getClientRects()]
+                        .filter((rect) => rect.width > 0.5 && rect.height > 0.5)
+                        .map((rect) => Math.round(rect.top));
+                      if (new Set(rows).size > 1) {
+                        broken.push({
+                          slide: index + 1,
+                          label: slide.dataset.label,
+                          token,
+                          context: textNode.textContent.trim().slice(0, 120),
+                        });
+                      }
+                    }
+                  }
+                }
+              } finally {
+                stage.goTo(originalIndex);
+              }
+              return broken;
+            })()
+            """
+        )
+
+        self.assertEqual(broken_tokens, [], json.dumps(broken_tokens, ensure_ascii=False))
+
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._call(
             "Page.navigate",
