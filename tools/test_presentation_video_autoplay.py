@@ -33,20 +33,25 @@ TEAM_VISUALIZATIONS = {
     54: "gravity-yaw-observability.mp4",
 }
 
-PYTHON_DIAGRAM_VIDEOS = {
-    4: "drone-classification.mp4",
-    5: "qualification-weight.mp4",
-    6: "aircraft-uam.mp4",
-    7: "mission-specs.mp4",
-    9: "quadcopter-force-motion.mp4",
-    10: "helicopter-quadcopter-torque.mp4",
-    11: "swarm-system.mp4",
-    12: "attitude-correction.mp4",
-    46: "sil-closed-loop.mp4",
-    63: "failsafe-timeline.mp4",
-    64: "landing-observability.mp4",
-    71: "shared-state-race.mp4",
-    81: "telemetry-motor-balance.mp4",
+PYTHON_STATIC_IMAGES = {
+    4: "drone-classification.png",
+    5: "qualification-weight.png",
+    6: "aircraft-uam.png",
+    7: "mission-specs.png",
+    9: "quadcopter-force-motion.png",
+    10: "helicopter-quadcopter-torque.png",
+    11: "swarm-system.png",
+    12: "attitude-correction.png",
+    46: "sil-closed-loop.png",
+    63: "failsafe-timeline.png",
+    64: "landing-observability.png",
+    71: "shared-state-race.png",
+    81: "telemetry-motor-balance.png",
+}
+
+GENERATED_DIAGRAM_VIDEOS = {
+    Path(filename).with_suffix(".mp4").name
+    for filename in PYTHON_STATIC_IMAGES.values()
 }
 
 REPLACED_SVG_FILENAMES = {
@@ -115,7 +120,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
 
         self.assertNotIn("zetin", metadata.casefold())
 
-    def test_python_diagram_video_markup_and_assets_match_the_slide_contract(self) -> None:
+    def test_python_static_image_markup_and_assets_match_the_slide_contract(self) -> None:
         parser = _DeckParser()
         parser.feed((DECK_DIR / "index.html").read_text(encoding="utf-8"))
 
@@ -125,7 +130,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             for section in parser.sections
             for video in section["videos"]
         ]
-        self.assertEqual(len(all_videos), 27)
+        self.assertEqual(len(all_videos), 14)
         invalid_autoplay_markup = [
             attrs.get("src", "<unknown>")
             for attrs in all_videos
@@ -137,15 +142,19 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         ]
         self.assertEqual(invalid_autoplay_markup, [])
 
-        for slide_number, filename in PYTHON_DIAGRAM_VIDEOS.items():
+        for slide_number, filename in PYTHON_STATIC_IMAGES.items():
             with self.subTest(slide=slide_number, filename=filename):
-                videos = parser.sections[slide_number - 1]["videos"]
-                self.assertEqual(len(videos), 1)
-                video = videos[0]
-                self.assertEqual(video.get("src"), f"assets/{filename}")
-                self.assertEqual(video.get("data-python-visual"), Path(filename).stem)
-                self.assertTrue(video.get("aria-label"))
-                compact_style = re.sub(r"\s+", "", str(video.get("style", "")))
+                images = [
+                    image
+                    for image in parser.sections[slide_number - 1]["images"]
+                    if "data-python-static" in image
+                ]
+                self.assertEqual(len(images), 1)
+                image = images[0]
+                self.assertEqual(image.get("src"), f"assets/{filename}")
+                self.assertEqual(image.get("data-python-static"), Path(filename).stem)
+                self.assertTrue(image.get("aria-label"))
+                compact_style = re.sub(r"\s+", "", str(image.get("style", "")))
                 self.assertIn("width:100%", compact_style)
                 self.assertIn("aspect-ratio:16/9", compact_style)
 
@@ -158,6 +167,17 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         self.assertIn("mobile-lab-qr.svg", referenced_images)
 
         assets_dir = DECK_DIR / "assets"
+        for filename in PYTHON_STATIC_IMAGES.values():
+            with self.subTest(static_asset=filename):
+                self.assertTrue((assets_dir / filename).is_file())
+        self.assertEqual(
+            sorted(
+                filename
+                for filename in GENERATED_DIAGRAM_VIDEOS
+                if (assets_dir / filename).exists()
+            ),
+            [],
+        )
         self.assertEqual(
             sorted(
                 filename
@@ -372,10 +392,10 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         else:
             raise AssertionError("presentation fonts did not finish loading")
 
-    def test_python_diagram_videos_decode_at_full_width_in_mapped_slides(self) -> None:
+    def test_python_static_images_load_at_full_width_in_mapped_slides(self) -> None:
         self._open_deck()
 
-        for slide_number, filename in PYTHON_DIAGRAM_VIDEOS.items():
+        for slide_number, filename in PYTHON_STATIC_IMAGES.items():
             with self.subTest(slide=slide_number, filename=filename):
                 self._evaluate(
                     "document.querySelector('deck-stage').goTo(%d)"
@@ -389,33 +409,28 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                         (() => {
                           const stage = document.querySelector('deck-stage');
                           const slide = stage._slides[%d];
-                          const videos = [...slide.querySelectorAll(
-                            'video[data-python-visual]'
+                          const images = [...slide.querySelectorAll(
+                            'img[data-python-static]'
                           )];
-                          const video = videos[0];
-                          if (!video) return {count: videos.length};
-                          const rect = video.getBoundingClientRect();
+                          const image = images[0];
+                          if (!image) return {count: images.length};
+                          const rect = image.getBoundingClientRect();
                           const slideScale = slide.getBoundingClientRect().width / 1280;
                           return {
-                            count: videos.length,
-                            source: video.getAttribute('src'),
-                            marker: video.dataset.pythonVisual,
-                            ariaLabel: video.getAttribute('aria-label'),
-                            readyState: video.readyState,
-                            videoWidth: video.videoWidth,
-                            videoHeight: video.videoHeight,
+                            count: images.length,
+                            source: image.getAttribute('src'),
+                            marker: image.dataset.pythonStatic,
+                            ariaLabel: image.getAttribute('aria-label'),
+                            loaded: Boolean(image.complete && image.naturalWidth),
+                            naturalWidth: image.naturalWidth,
+                            naturalHeight: image.naturalHeight,
                             logicalWidth: rect.width / slideScale,
-                            controls: video.controls,
-                            loop: video.loop,
-                            muted: video.muted,
-                            playsInline: video.playsInline,
-                            preload: video.preload,
                           };
                         })()
                         """
                         % (slide_number - 1)
                     )
-                    if state.get("readyState", 0) >= 1:
+                    if state.get("loaded"):
                         break
                     time.sleep(0.05)
 
@@ -423,14 +438,10 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                 self.assertEqual(state["source"], f"assets/{filename}", state)
                 self.assertEqual(state["marker"], Path(filename).stem, state)
                 self.assertTrue(state["ariaLabel"], state)
-                self.assertEqual(state["videoWidth"], 1280, state)
-                self.assertEqual(state["videoHeight"], 720, state)
+                self.assertTrue(state["loaded"], state)
+                self.assertEqual(state["naturalWidth"], 1280, state)
+                self.assertEqual(state["naturalHeight"], 720, state)
                 self.assertGreaterEqual(state["logicalWidth"], 1040, state)
-                self.assertTrue(state["controls"], state)
-                self.assertTrue(state["loop"], state)
-                self.assertTrue(state["muted"], state)
-                self.assertTrue(state["playsInline"], state)
-                self.assertEqual(state["preload"], "metadata", state)
 
         qr = self._evaluate(
             """
@@ -812,12 +823,12 @@ class PresentationVideoBrowserTests(unittest.TestCase):
 
     def test_active_video_autoplays_and_previous_video_resets(self) -> None:
         self._open_deck()
-        self._evaluate("document.querySelector('deck-stage').goTo(3)")
-        self._wait_for_playback("drone-classification.mp4")
+        self._evaluate("document.querySelector('deck-stage').goTo(34)")
+        self._wait_for_playback("accelerometer.mp4")
 
-        self._evaluate("document.querySelector('deck-stage').goTo(4)")
-        self._wait_for_playback("qualification-weight.mp4")
-        previous = self._video_state("drone-classification.mp4")
+        self._evaluate("document.querySelector('deck-stage').goTo(35)")
+        self._wait_for_playback("gyro.mp4")
+        previous = self._video_state("accelerometer.mp4")
 
         self.assertIsNotNone(previous)
         self.assertTrue(previous["paused"])
