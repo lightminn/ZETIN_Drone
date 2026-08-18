@@ -23,6 +23,7 @@ GEOMETRY_PATH = (
     / "geometry.py"
 )
 VISUALIZATION_SOURCE_PATH = GEOMETRY_PATH.with_name("audience_visualizations.py")
+SIGNIFICANCE_SOURCE_PATH = GEOMETRY_PATH.with_name("significance_visualizations.py")
 VISUALIZATION_FILES = (
     "accelerometer.mp4",
     "gyro.mp4",
@@ -34,6 +35,15 @@ VISUALIZATION_FILES = (
     "yaw-correction.mp4",
     "landing-ambiguity.mp4",
 )
+SIGNIFICANCE_SCENES = {
+    "DroneClassificationAudience": "drone-classification.mp4",
+    "QualificationWeightAudience": "qualification-weight.mp4",
+    "AircraftUamAudience": "aircraft-uam.mp4",
+    "MissionSpecsAudience": "mission-specs.mp4",
+    "QuadcopterForceMotionAudience": "quadcopter-force-motion.mp4",
+    "HelicopterQuadcopterTorqueAudience": "helicopter-quadcopter-torque.mp4",
+    "SwarmSystemAudience": "swarm-system.mp4",
+}
 
 
 def load_geometry_module():
@@ -57,6 +67,22 @@ def load_visualization_module():
         sys.path.insert(0, source_dir)
     spec = importlib.util.spec_from_file_location(
         "presentation_audience_visualizations", VISUALIZATION_SOURCE_PATH
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_significance_module():
+    if not SIGNIFICANCE_SOURCE_PATH.is_file():
+        return None
+    source_dir = str(SIGNIFICANCE_SOURCE_PATH.parent)
+    if source_dir not in sys.path:
+        sys.path.insert(0, source_dir)
+    spec = importlib.util.spec_from_file_location(
+        "presentation_significance_visualizations", SIGNIFICANCE_SOURCE_PATH
     )
     if spec is None or spec.loader is None:
         return None
@@ -246,6 +272,28 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
 
         self.assertGreater(comparison.get_bottom()[1], 2.05)
 
+    def test_significance_scenes_render(self) -> None:
+        from manim import tempconfig
+
+        module = load_significance_module()
+        self.assertIsNotNone(module, "significance visualization module is missing")
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            for scene_name in SIGNIFICANCE_SCENES:
+                with self.subTest(scene_name=scene_name):
+                    scene_class = getattr(module, scene_name, None)
+                    self.assertIsNotNone(scene_class)
+                    scene = scene_class()
+                    scene.hold_and_clear = lambda *args, **kwargs: None
+                    scene.render()
+
 
 @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")
 class PresentationVisualizationDeliveryTests(unittest.TestCase):
@@ -281,6 +329,39 @@ class PresentationVisualizationDeliveryTests(unittest.TestCase):
                 self.assertEqual(stream["pix_fmt"], "yuv420p")
                 self.assertGreaterEqual(duration, 5.0)
                 self.assertLessEqual(duration, 12.0)
+
+    def test_new_python_diagram_videos_use_delivery_profile(self) -> None:
+        for filename in SIGNIFICANCE_SCENES.values():
+            with self.subTest(filename=filename):
+                completed = subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=codec_name,width,height,r_frame_rate,pix_fmt",
+                        "-show_entries",
+                        "format=duration",
+                        "-of",
+                        "json",
+                        str(ASSET_DIR / filename),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                metadata = json.loads(completed.stdout)
+                stream = metadata["streams"][0]
+                duration = float(metadata["format"]["duration"])
+
+                self.assertEqual(stream["codec_name"], "h264")
+                self.assertEqual((stream["width"], stream["height"]), (1280, 720))
+                self.assertEqual(stream["r_frame_rate"], "30/1")
+                self.assertEqual(stream["pix_fmt"], "yuv420p")
+                self.assertGreaterEqual(duration, 6.0)
+                self.assertLessEqual(duration, 9.0)
 
 
 if __name__ == "__main__":
