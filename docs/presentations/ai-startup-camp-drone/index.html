@@ -211,168 +211,161 @@
     </x-import>
   </section>
 
-  <section data-label="비행의 네 힘" data-screen-label="09" data-speaker-notes="일반적인 비행체에는 양력, 중력, 추력, 항력이 작용한다. 멀티콥터에서는 각 로터의 공기역학적 힘이 양력과 추진 역할을 함께 한다. 네 로터 추력의 벡터 합에 중력과 항력을 더한 것이 기체를 실제로 가속하는 합력이다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행의 네 힘과 쿼드콥터의 해석">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:292px 1fr;gap:28px;min-height:0">
-        <div style="display:flex;flex-direction:column;justify-content:space-between;min-height:0;padding:8px 0 4px">
-          <div>
-            <div style="font-size:20.5337px;font-weight:800;letter-spacing:.04em;color:var(--uos-ink-muted);padding-bottom:12px;border-bottom:2px solid var(--uos-ink)">일반 비행체의 네 힘</div>
-            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0;border-bottom:1px solid var(--uos-rule)"><div style="width:12px;height:12px;border-radius:50%;background:#3a78c2;margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">양력 L</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">기체를 위로 지지하는 공기력</div></div></div>
-            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0;border-bottom:1px solid var(--uos-rule)"><div style="width:12px;height:12px;border-radius:50%;background:#6f7f92;margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">중력 W</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">질량중심에서 아래 방향</div></div></div>
-            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0;border-bottom:1px solid var(--uos-rule)"><div style="width:12px;height:12px;border-radius:50%;background:var(--uos-blue);margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">추력 T</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">추진 장치가 만드는 힘</div></div></div>
-            <div style="display:grid;grid-template-columns:34px 1fr;column-gap:12px;row-gap:3px;padding:15px 0"><div style="width:12px;height:12px;border-radius:50%;background:#b04a55;margin-top:8px"></div><div><div style="font-size:24.2px;font-weight:800">항력 D</div><div style="font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted)">운동과 반대 방향의 공기력</div></div></div>
-          </div>
-          <div style="border-left:5px solid var(--uos-blue);padding:5px 0 5px 18px;font-size:20.5337px;line-height:1.45;color:var(--uos-ink-muted)"><strong style="color:var(--uos-blue)">쿼드콥터</strong>에서는 로터 추력이<br>양력과 추진을 함께 담당</div>
-        </div>
-        <div style="border-top:2px solid var(--uos-ink);border-bottom:1px solid var(--uos-rule);display:flex;flex-direction:column;min-width:0;min-height:0;padding:10px 0 5px">
-          <svg data-force-sum role="img" aria-label="네 로터 추력의 벡터 합과 중력 및 항력이 만드는 쿼드콥터의 합력" viewBox="0 0 820 440" style="width:100%;flex:1;min-height:0;overflow:visible">
-            <defs>
-              <marker id="force-rotor-arrow" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#3a78c2"/></marker>
-              <marker id="force-sum-arrow" markerUnits="userSpaceOnUse" markerWidth="28" markerHeight="28" refX="25" refY="14" orient="auto"><path d="M0,0 L0,28 L26,14 z" fill="#004094"/></marker>
-              <marker id="force-weight-arrow" markerUnits="userSpaceOnUse" markerWidth="21" markerHeight="21" refX="19" refY="10.5" orient="auto"><path d="M0,0 L0,21 L20,10.5 z" fill="#6f7f92"/></marker>
-              <marker id="force-drag-arrow" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#b04a55"/></marker>
-              <marker id="force-motion-arrow" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#8b95a5"/></marker>
-            </defs>
+  <section data-label="비행의 네 힘" data-screen-label="09" data-speaker-notes="일반적인 비행체에는 양력, 중력, 추력, 항력이 작용한다. 쿼드콥터에서는 네 로터가 만든 추력의 합이 양력과 추진 역할을 함께 한다. 호버링에서는 합추력과 중력이 같고, 기체를 기울이면 합추력의 일부가 진행 방향을 만들어 항력을 이겨 낸다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="네 로터의 힘을 더하면 기체 운동이 결정된다">
+      <div data-force-layout="direct-labels" style="width:100%;height:100%;display:flex;flex-direction:column;gap:10px;min-height:0">
+        <svg data-force-sum role="img" aria-label="네 로터 추력의 벡터 합이 양력과 추진을 만들고 중력 및 항력과 균형을 이루는 쿼드콥터 힘 도식" viewBox="0 0 1180 474" style="width:100%;flex:1;min-height:0;overflow:visible;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif">
+          <defs>
+            <marker id="force9-small-blue" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L0,16 L15,8 z" fill="#3a78c2"/></marker>
+            <marker id="force9-large-blue" markerUnits="userSpaceOnUse" markerWidth="24" markerHeight="24" refX="22" refY="12" orient="auto"><path d="M0,0 L0,24 L23,12 z" fill="#004094"/></marker>
+            <marker id="force9-gray" markerUnits="userSpaceOnUse" markerWidth="20" markerHeight="20" refX="18" refY="10" orient="auto"><path d="M0,0 L0,20 L19,10 z" fill="#6f7f92"/></marker>
+            <marker id="force9-red" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="16" refY="9" orient="auto"><path d="M0,0 L0,18 L17,9 z" fill="#b04a55"/></marker>
+            <marker id="force9-motion" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M0,0 L0,16 L15,8 z" fill="#718096"/></marker>
+          </defs>
 
-            <g aria-hidden="true" fill="none" stroke="#dfe5ec" stroke-width="1">
-              <path d="M38 224 H782" stroke-dasharray="4 8"/>
-              <path d="M410 32 V418" stroke-dasharray="4 8"/>
-            </g>
+          <path d="M590 34 V445" fill="none" stroke="#dfe5ec" stroke-width="1.5" stroke-dasharray="5 9"/>
 
-            <g data-drone-body>
-              <g fill="none" stroke-linecap="round">
-                <path d="M410 278 L233 223 M410 278 L587 223 M410 278 L303 356 M410 278 L517 356" stroke="#253448" stroke-width="20"/>
-                <path d="M410 278 L233 223 M410 278 L587 223 M410 278 L303 356 M410 278 L517 356" stroke="#748194" stroke-width="4" opacity=".65"/>
-              </g>
-              <g fill="#f7f9fc" stroke="#004094" stroke-width="5">
-                <ellipse cx="233" cy="223" rx="72" ry="22"/><ellipse cx="587" cy="223" rx="72" ry="22"/>
-                <ellipse cx="303" cy="356" rx="72" ry="22"/><ellipse cx="517" cy="356" rx="72" ry="22"/>
-              </g>
-              <g fill="none" stroke="#3a78c2" stroke-width="3" opacity=".58">
-                <path d="M169 223 H297 M523 223 H651 M239 356 H367 M453 356 H581"/>
-              </g>
-              <g fill="#004094"><circle cx="233" cy="223" r="9"/><circle cx="587" cy="223" r="9"/><circle cx="303" cy="356" r="9"/><circle cx="517" cy="356" r="9"/></g>
-              <path d="M410 222 L467 254 L456 321 L410 345 L364 321 L353 254 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
-              <path d="M377 262 L410 244 L443 262 L437 303 L410 318 L383 303 Z" fill="#004094"/>
-              <circle cx="410" cy="278" r="7" fill="#fff"/>
+          <g data-drone-body aria-label="옆에서 본 쿼드콥터">
+            <path d="M232 277 H948" fill="none" stroke="#253448" stroke-width="20" stroke-linecap="round"/>
+            <path d="M232 277 H948" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round" opacity=".62"/>
+            <g fill="#f7f9fc" stroke="#004094" stroke-width="5">
+              <ellipse cx="250" cy="260" rx="92" ry="17"/>
+              <ellipse cx="445" cy="260" rx="92" ry="17"/>
+              <ellipse cx="735" cy="260" rx="92" ry="17"/>
+              <ellipse cx="930" cy="260" rx="92" ry="17"/>
             </g>
+            <g fill="none" stroke="#3a78c2" stroke-width="3" opacity=".7">
+              <path d="M169 260 H331 M364 260 H526 M654 260 H816 M849 260 H1011"/>
+            </g>
+            <g fill="#004094">
+              <circle cx="250" cy="260" r="8"/><circle cx="445" cy="260" r="8"/>
+              <circle cx="735" cy="260" r="8"/><circle cx="930" cy="260" r="8"/>
+            </g>
+            <path d="M510 246 H670 L643 323 H537 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
+            <path d="M552 262 H628 L615 294 H565 Z" fill="#004094"/>
+            <circle cx="590" cy="284" r="7" fill="#fff"/>
+          </g>
 
-            <g fill="none" stroke="#3a78c2" stroke-width="5" stroke-linecap="round" marker-end="url(#force-rotor-arrow)" opacity=".92">
-              <path data-vector="rotor-thrust" d="M233 202 V126"/>
-              <path data-vector="rotor-thrust" d="M587 202 V126"/>
-              <path data-vector="rotor-thrust" d="M303 334 V258"/>
-              <path data-vector="rotor-thrust" d="M517 334 V258"/>
-            </g>
-            <g fill="#3a78c2" font-size="21" font-weight="800">
-              <text data-force-label x="248" y="150">T₁</text><text data-force-label x="602" y="150">T₂</text>
-              <text data-force-label x="318" y="282">T₃</text><text data-force-label x="532" y="282">T₄</text>
-            </g>
+          <g fill="none" stroke="#3a78c2" stroke-width="5" stroke-linecap="round" marker-end="url(#force9-small-blue)">
+            <path data-vector="rotor-thrust" d="M250 241 V167"/>
+            <path data-vector="rotor-thrust" d="M445 241 V167"/>
+            <path data-vector="rotor-thrust" d="M735 241 V167"/>
+            <path data-vector="rotor-thrust" d="M930 241 V167"/>
+          </g>
+          <g data-force-label fill="#3a78c2" font-size="22" font-weight="900" text-anchor="middle">
+            <text x="250" y="151">T₁</text><text x="445" y="151">T₂</text>
+            <text x="735" y="151">T₃</text><text x="930" y="151">T₄</text>
+          </g>
 
-            <path data-vector="aggregate-thrust" d="M410 218 V44" fill="none" stroke="#004094" stroke-width="10" stroke-linecap="round" marker-end="url(#force-sum-arrow)"/>
-            <g transform="translate(431 52)">
-              <text data-force-label x="0" y="0" fill="#004094" font-size="28" font-weight="900">TΣ</text>
-              <text x="0" y="28" fill="#516074" font-size="20.5337px" font-weight="700">T₁ + T₂ + T₃ + T₄</text>
-            </g>
+          <path data-vector="aggregate-thrust" d="M590 226 V46" fill="none" stroke="#004094" stroke-width="10" stroke-linecap="round" marker-end="url(#force9-large-blue)"/>
+          <g data-force-label transform="translate(620 62)">
+            <text x="0" y="0" fill="#004094" font-size="30" font-weight="900">양력 역할 · 합추력 TΣ</text>
+            <text x="0" y="29" fill="#516074" font-size="20.5337px" font-weight="700">T₁ + T₂ + T₃ + T₄</text>
+          </g>
 
-            <path data-vector="weight" d="M410 286 V412" fill="none" stroke="#6f7f92" stroke-width="7" stroke-linecap="round" marker-end="url(#force-weight-arrow)"/>
-            <text data-force-label x="430" y="401" fill="#596575" font-size="23" font-weight="800">W = mg</text>
+          <path data-vector="weight" d="M590 294 V438" fill="none" stroke="#6f7f92" stroke-width="7" stroke-linecap="round" marker-end="url(#force9-gray)"/>
+          <g data-force-label transform="translate(620 403)">
+            <text x="0" y="0" fill="#596575" font-size="25" font-weight="900">중력 W = mg</text>
+            <text x="0" y="28" fill="#718096" font-size="20.5337px" font-weight="700">질량중심에서 아래 방향</text>
+          </g>
 
-            <g transform="translate(602 54)">
-              <text x="0" y="0" fill="#596575" font-size="20.5337px" font-weight="800">이동할 때만</text>
-              <path d="M4 30 H154" fill="none" stroke="#8b95a5" stroke-width="3.5" marker-end="url(#force-motion-arrow)"/>
-              <text x="7" y="57" fill="#6f7f92" font-size="20.5337px" font-weight="700">진행 v</text>
-              <path data-vector="drag" d="M150 78 H18" fill="none" stroke="#b04a55" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="8 7" marker-end="url(#force-drag-arrow)"/>
-              <text data-force-label x="45" y="108" fill="#9b3f49" font-size="20.5337px" font-weight="800">항력 D · 반대 방향</text>
-            </g>
-          </svg>
-          <div style="display:flex;align-items:baseline;justify-content:center;gap:24px;padding:3px 18px 2px;border-top:1px solid var(--uos-rule);font-size:22px;line-height:1.4"><strong style="color:var(--uos-blue)">F⃗합 = T⃗Σ + W⃗ + D⃗</strong><span style="font-size:20.5337px;color:var(--uos-ink-muted)">호버링에서는 TΣ = mg, D ≈ 0</span></div>
-        </div>
+          <g transform="translate(48 55)">
+            <path d="M0 28 H235" fill="none" stroke="#718096" stroke-width="4" marker-end="url(#force9-motion)"/>
+            <text x="0" y="0" fill="#596575" font-size="22" font-weight="900">추진 · 진행 방향 v</text>
+            <path data-vector="drag" d="M235 92 H18" fill="none" stroke="#b04a55" stroke-width="5" stroke-linecap="round" stroke-dasharray="10 8" marker-end="url(#force9-red)"/>
+            <text data-force-label x="0" y="129" fill="#9b3f49" font-size="22" font-weight="900">항력 D · 진행 반대</text>
+          </g>
+        </svg>
+        <div data-force-summary style="border-top:1px solid var(--uos-rule);padding:11px 12px 0;display:flex;align-items:baseline;justify-content:center;gap:32px;font-size:22px;line-height:1.35"><strong style="color:var(--uos-blue)">호버링 · TΣ = mg</strong><span style="color:var(--uos-ink-muted)">기체를 기울이면 합추력의 수평 성분이 추진력이 된다.</span></div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="Yaw는 로터가 도는 방향과 반대 방향으로 기체에 작용하는 반작용 토크를 이용한다. 평상시에는 CW와 CCW 쌍의 토크가 서로 상쇄된다. M2와 M3 CCW 로터의 출력을 키우고 M1과 M4 CW 로터의 출력을 줄이면 CW 반작용 토크가 우세해져 기체가 CW로 회전한다. 두 쌍의 증감량을 비슷하게 맞추면 합추력을 거의 유지한 채 Yaw만 만들 수 있다. 헬리콥터는 꼬리로터가 메인로터 토크를 상쇄하지만, 쿼드콥터는 두 로터 쌍의 출력 차이를 사용한다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="Yaw의 원인은 로터 쌍의 토크 차이이다">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:12px;min-height:0">
-        <div style="display:grid;grid-template-columns:330px 1fr;gap:28px;flex:1;min-height:0">
-          <div style="border-top:2px solid var(--uos-ink);border-bottom:1px solid var(--uos-rule);display:flex;flex-direction:column;justify-content:space-evenly;min-height:0;padding:2px 0">
-            <div style="padding:14px 4px 16px">
-              <div style="font-size:20.5337px;font-weight:800;letter-spacing:.03em;color:var(--uos-ink-muted);margin-bottom:7px">평상시 · 토크 상쇄</div>
-              <div style="font-size:22px;line-height:1.42;font-weight:700">CW·CCW 쌍의 출력이 같으면<br><strong style="color:var(--uos-blue)">기체 토크의 합 = 0</strong></div>
-            </div>
-            <div style="border-top:1px solid var(--uos-rule);padding:16px 4px 17px">
-              <div style="font-size:20.5337px;font-weight:800;letter-spacing:.03em;color:var(--uos-ink-muted);margin-bottom:8px">Yaw 명령 · 쌍별 출력 차이</div>
-              <div style="font-size:22px;line-height:1.5;font-weight:800;color:var(--uos-blue)">M2·M3 · CCW 로터 출력 ↑</div>
-              <div style="font-size:22px;line-height:1.5;font-weight:800;color:#9a6900">M1·M4 · CW 로터 출력 ↓</div>
-              <div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted);margin-top:7px">증가·감소를 비슷하게 조절<br><strong>합추력 TΣ는 거의 유지</strong></div>
-            </div>
-            <div style="border-top:1px solid var(--uos-rule);padding:16px 4px 14px">
-              <div style="font-size:20.5337px;font-weight:800;letter-spacing:.03em;color:var(--uos-ink-muted);margin-bottom:7px">결과 · 반작용 토크 우세</div>
-              <div style="font-size:27.5px;line-height:1.3;font-weight:900;color:var(--uos-blue)">CCW 로터 ↑<br>기체는 CW Yaw</div>
-              <div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted);margin-top:7px">로터 회전과 기체 반작용은<br><strong>서로 반대 방향</strong></div>
-            </div>
-          </div>
-
-          <div style="border-top:2px solid var(--uos-ink);border-bottom:1px solid var(--uos-rule);display:flex;align-items:stretch;min-width:0;min-height:0;padding:5px 0 2px">
-            <svg data-control-mixing data-view="top" role="img" aria-label="네 프로펠러의 출력 배분으로 힘과 토크를 만드는 쿼드콥터 제어 혼합" viewBox="0 0 760 440" style="width:100%;height:100%;min-height:0;overflow:visible">
+  <section data-label="힘과 토크 제어" data-screen-label="10" data-speaker-notes="헬리콥터는 메인로터를 돌릴 때 동체에 반대 방향의 반작용 토크가 생긴다. 꼬리로터는 긴 꼬리 끝에서 옆 방향 추력을 만들어 그 토크를 상쇄한다. 쿼드콥터에는 별도의 꼬리로터가 없다. 현재 기체에서는 M1과 M2가 CW, M3와 M4가 CCW이다. 평상시에는 두 쌍의 반작용 토크가 상쇄된다. 기체를 CW로 돌리는 예에서는 M3와 M4의 출력을 키우고 M1과 M2를 줄여 합추력을 거의 유지하면서 CW 반작용 토크를 우세하게 만든다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="헬기와 드론은 반작용 토크를 다르게 다룬다">
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:10px;min-height:0">
+        <div data-torque-comparison data-layout="side-by-side" style="display:grid;grid-template-columns:.92fr 1.08fr;gap:30px;flex:1;min-height:0">
+          <div style="border-top:2px solid var(--uos-ink);display:flex;flex-direction:column;min-width:0;min-height:0;padding-top:9px">
+            <div style="font-size:24.2px;font-weight:900;color:var(--uos-ink);padding-left:4px">헬리콥터</div>
+            <div style="font-size:20.5337px;color:var(--uos-ink-muted);padding:2px 0 2px 4px">꼬리로터의 힘으로 반작용 토크 상쇄</div>
+            <svg data-helicopter-torque data-view="top" role="img" aria-label="메인로터의 반작용 토크를 꼬리로터 추력이 상쇄하는 헬리콥터의 위쪽 도식" viewBox="0 0 520 390" style="width:100%;flex:1;min-height:0;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif">
               <defs>
-                <marker id="yaw-cw-gold-arrow" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="15" refX="13" refY="7.5" orient="auto"><path d="M0,0 L0,15 L14,7.5 z" fill="#b47b00"/></marker>
-                <marker id="yaw-ccw-blue-arrow" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="15" refX="13" refY="7.5" orient="auto"><path d="M0,0 L0,15 L14,7.5 z" fill="#004094"/></marker>
-                <marker id="yaw-body-arrow" markerUnits="userSpaceOnUse" markerWidth="21" markerHeight="21" refX="19" refY="10.5" orient="auto"><path d="M0,0 L0,21 L20,10.5 z" fill="#004094"/></marker>
+                <marker id="heli10-gold" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="15" refX="13" refY="7.5" orient="auto"><path d="M0,0 L0,15 L14,7.5 z" fill="#b47b00"/></marker>
+                <marker id="heli10-red" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="17" refX="15" refY="8.5" orient="auto"><path d="M0,0 L0,17 L16,8.5 z" fill="#b04a55"/></marker>
+                <marker id="heli10-blue" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="17" refX="15" refY="8.5" orient="auto"><path d="M0,0 L0,17 L16,8.5 z" fill="#004094"/></marker>
               </defs>
 
-              <g aria-hidden="true">
-                <path d="M160 122 L600 318 M600 122 L160 318" fill="none" stroke="#253448" stroke-width="22" stroke-linecap="round"/>
-                <path d="M160 122 L600 318 M600 122 L160 318" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round" opacity=".62"/>
-              </g>
+              <path d="M233 206 H56" fill="none" stroke="#253448" stroke-width="20" stroke-linecap="round"/>
+              <path d="M233 206 H56" fill="none" stroke="#718096" stroke-width="4" opacity=".65"/>
+              <path d="M222 154 C290 140 337 165 350 205 C337 245 290 270 222 256 C198 233 198 177 222 154 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
+              <path d="M343 193 L396 205 L343 217 Z" fill="#004094"/>
+              <circle cx="248" cy="205" r="8" fill="#fff"/>
+              <circle cx="56" cy="206" r="30" fill="#f7f9fc" stroke="#004094" stroke-width="5"/>
+              <path d="M56 180 V232 M30 206 H82" stroke="#3a78c2" stroke-width="5" stroke-linecap="round"/>
 
-              <g aria-label="M1과 M4는 시계 방향으로 도는 출력 감소 로터 쌍">
-                <circle data-yaw-rotor data-spin="cw" data-pair-command="decrease" cx="160" cy="122" r="54" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
-                <circle data-yaw-rotor data-spin="cw" data-pair-command="decrease" cx="600" cy="318" r="54" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
-                <g fill="none" stroke="#b47b00" stroke-width="5" stroke-linecap="round" marker-end="url(#yaw-cw-gold-arrow)">
-                  <path d="M160 54 A68 68 0 0 1 228 122"/>
-                  <path d="M600 250 A68 68 0 0 1 668 318"/>
+              <ellipse cx="248" cy="205" rx="176" ry="48" fill="none" stroke="#aab5c2" stroke-width="4"/>
+              <path data-heli-torque="main" d="M111 174 A176 48 0 0 1 378 181" fill="none" stroke="#b47b00" stroke-width="6" stroke-linecap="round" marker-end="url(#heli10-gold)"/>
+              <text x="260" y="124" fill="#815900" font-size="22" font-weight="900" text-anchor="middle">메인로터 CW</text>
+
+              <path data-heli-torque="reaction" d="M300 225 A74 74 0 1 1 286 151" fill="none" stroke="#b04a55" stroke-width="7" stroke-linecap="round" marker-end="url(#heli10-red)"/>
+              <text x="326" y="294" fill="#9b3f49" font-size="22" font-weight="900" text-anchor="middle">동체 반작용 CCW</text>
+
+              <path d="M55 254 V112" fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round" marker-end="url(#heli10-blue)"/>
+              <text x="72" y="104" fill="#004094" font-size="20.5337px" font-weight="900">꼬리로터 추력</text>
+              <path data-heli-torque="tail-counter" d="M161 232 A103 103 0 0 0 173 154" fill="none" stroke="#004094" stroke-width="7" stroke-linecap="round" marker-end="url(#heli10-blue)"/>
+              <text x="112" y="342" fill="#004094" font-size="22" font-weight="900">상쇄 토크 CW</text>
+            </svg>
+          </div>
+
+          <div style="border-top:2px solid var(--uos-ink);border-left:1px solid var(--uos-rule);display:flex;flex-direction:column;min-width:0;min-height:0;padding:9px 0 0 28px">
+            <div style="font-size:24.2px;font-weight:900;color:var(--uos-ink);padding-left:4px">쿼드콥터 · CW Yaw 예시</div>
+            <div style="font-size:20.5337px;color:var(--uos-ink-muted);padding:2px 0 2px 4px">CW·CCW 로터 쌍의 출력 차이로 회전 토크 생성</div>
+            <svg data-control-mixing data-view="top" role="img" aria-label="네 로터의 힘과 토크 배분에서 M3와 M4 출력을 키우고 M1과 M2 출력을 줄여 기체에 CW Yaw를 만드는 쿼드콥터의 위쪽 도식" viewBox="0 0 610 390" style="width:100%;flex:1;min-height:0;font-family:'Noto Sans CJK KR','Noto Sans KR',sans-serif">
+              <defs>
+                <marker id="drone10-cw" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0,0 L0,14 L13,7 z" fill="#b47b00"/></marker>
+                <marker id="drone10-ccw" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M0,0 L0,14 L13,7 z" fill="#004094"/></marker>
+                <marker id="drone10-body" markerUnits="userSpaceOnUse" markerWidth="19" markerHeight="19" refX="17" refY="9.5" orient="auto"><path d="M0,0 L0,19 L18,9.5 z" fill="#004094"/></marker>
+              </defs>
+
+              <path d="M135 105 L475 285 M475 105 L135 285" fill="none" stroke="#253448" stroke-width="21" stroke-linecap="round"/>
+              <path d="M135 105 L475 285 M475 105 L135 285" fill="none" stroke="#718096" stroke-width="4" stroke-linecap="round" opacity=".62"/>
+
+              <g aria-label="M1과 M2는 CW 로터이며 이 예시에서는 출력을 줄인다">
+                <circle data-yaw-rotor data-motor="M1" data-spin="cw" data-pair-command="decrease" cx="135" cy="105" r="48" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
+                <circle data-yaw-rotor data-motor="M2" data-spin="cw" data-pair-command="decrease" cx="475" cy="285" r="48" fill="#fff8e8" stroke="#b47b00" stroke-width="5"/>
+                <g fill="none" stroke="#b47b00" stroke-width="5" stroke-linecap="round" marker-end="url(#drone10-cw)">
+                  <path d="M135 46 A59 59 0 0 1 194 105"/>
+                  <path d="M475 226 A59 59 0 0 1 534 285"/>
                 </g>
                 <g fill="#815900" font-size="20.5337px" text-anchor="middle">
-                  <text x="160" y="116" font-weight="900">M1 · CW</text><text x="160" y="142" font-weight="800">출력 ↓</text>
-                  <text x="600" y="312" font-weight="900">M4 · CW</text><text x="600" y="338" font-weight="800">출력 ↓</text>
+                  <text x="135" y="100" font-weight="900">M1 · CW</text><text x="135" y="126" font-weight="900">출력 ↓</text>
+                  <text x="475" y="280" font-weight="900">M2 · CW</text><text x="475" y="306" font-weight="900">출력 ↓</text>
                 </g>
               </g>
 
-              <g aria-label="M2와 M3은 반시계 방향으로 도는 출력 증가 로터 쌍">
-                <circle data-yaw-rotor data-spin="ccw" data-pair-command="increase" cx="600" cy="122" r="54" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
-                <circle data-yaw-rotor data-spin="ccw" data-pair-command="increase" cx="160" cy="318" r="54" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
-                <g fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round" marker-end="url(#yaw-ccw-blue-arrow)">
-                  <path d="M600 54 A68 68 0 0 0 532 122"/>
-                  <path d="M160 250 A68 68 0 0 0 92 318"/>
+              <g aria-label="M3와 M4는 CCW 로터이며 이 예시에서는 출력을 키운다">
+                <circle data-yaw-rotor data-motor="M3" data-spin="ccw" data-pair-command="increase" cx="475" cy="105" r="48" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
+                <circle data-yaw-rotor data-motor="M4" data-spin="ccw" data-pair-command="increase" cx="135" cy="285" r="48" fill="#eaf2fb" stroke="#004094" stroke-width="6"/>
+                <g fill="none" stroke="#004094" stroke-width="6" stroke-linecap="round" marker-end="url(#drone10-ccw)">
+                  <path d="M475 46 A59 59 0 0 0 416 105"/>
+                  <path d="M135 226 A59 59 0 0 0 76 285"/>
                 </g>
                 <g fill="#004094" font-size="20.5337px" text-anchor="middle">
-                  <text x="600" y="116" font-weight="900">M2 · CCW</text><text x="600" y="142" font-weight="900">출력 ↑</text>
-                  <text x="160" y="312" font-weight="900">M3 · CCW</text><text x="160" y="338" font-weight="900">출력 ↑</text>
+                  <text x="475" y="100" font-weight="900">M3 · CCW</text><text x="475" y="126" font-weight="900">출력 ↑</text>
+                  <text x="135" y="280" font-weight="900">M4 · CCW</text><text x="135" y="306" font-weight="900">출력 ↑</text>
                 </g>
               </g>
 
-              <g>
-                <path data-yaw-body d="M380 166 L427 191 L438 240 L407 278 L353 278 L322 240 L333 191 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
-                <path d="M380 179 L397 211 H363 Z" fill="#fff"/>
-                <circle cx="380" cy="228" r="11" fill="#004094" stroke="#fff" stroke-width="4"/>
-              </g>
-
-              <path d="M380 146 A82 82 0 1 1 321 287" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
-              <path data-yaw-result data-direction="cw" d="M380 146 A82 82 0 1 1 321 287" fill="none" stroke="#004094" stroke-width="8" stroke-linecap="round" marker-end="url(#yaw-body-arrow)"/>
-              <g transform="translate(380 25)" text-anchor="middle">
-                <text x="0" y="0" fill="#004094" font-size="25.3px" font-weight="900">기체 CW Yaw</text>
-                <text x="0" y="28" fill="#516074" font-size="20.5337px" font-weight="700">CCW 로터 ↑ → CW 반작용 토크 우세</text>
-              </g>
-
-              <g transform="translate(380 412)" text-anchor="middle">
-                <text x="0" y="0" fill="#004094" font-size="22px" font-weight="900">M2·M3 ↑ + M1·M4 ↓</text>
-                <text x="0" y="25" fill="#516074" font-size="20.5337px" font-weight="700">합추력은 거의 그대로 · Yaw 토크만 변화</text>
-              </g>
+              <path data-yaw-body d="M305 143 L347 167 L356 207 L329 239 L281 239 L254 207 L263 167 Z" fill="#172334" stroke="#004094" stroke-width="5"/>
+              <path d="M305 155 L321 184 H289 Z" fill="#fff"/>
+              <circle cx="305" cy="198" r="9" fill="#004094" stroke="#fff" stroke-width="3"/>
+              <path d="M305 128 A79 79 0 1 1 247 251" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round"/>
+              <path data-yaw-result data-direction="cw" d="M305 128 A79 79 0 1 1 247 251" fill="none" stroke="#004094" stroke-width="8" stroke-linecap="round" marker-end="url(#drone10-body)"/>
+              <text x="305" y="373" fill="#004094" font-size="22" font-weight="900" text-anchor="middle">M3·M4 ↑ + M1·M2 ↓ → 기체 CW</text>
             </svg>
           </div>
         </div>
-        <div style="border-top:1px solid var(--uos-rule);padding:10px 2px 0;font-size:20.5337px;line-height:1.35;color:var(--uos-ink-muted);text-align:center"><strong style="color:var(--uos-ink)">헬리콥터</strong>는 꼬리로터로 메인로터 토크를 상쇄 · <strong style="color:var(--uos-ink)">쿼드콥터</strong>는 CW·CCW 로터 쌍의 출력 차이로 Yaw 제어</div>
+        <div style="border-top:1px solid var(--uos-rule);padding:11px 2px 0;font-size:22px;line-height:1.35;text-align:center"><strong style="color:var(--uos-ink)">헬기</strong><span style="color:var(--uos-ink-muted)"> · 꼬리로터로 상쇄</span><span style="display:inline-block;width:42px"></span><strong style="color:var(--uos-ink)">쿼드콥터</strong><span style="color:var(--uos-ink-muted)"> · 두 로터 쌍의 출력 차이로 Yaw 생성</span></div>
       </div>
     </x-import>
   </section>
@@ -926,56 +919,45 @@
     </x-import>
   </section>
 
-  <section data-label="핀 배치" data-screen-label="30" data-speaker-notes="이 표와 아래 믹서 식이 하드웨어와 소프트웨어의 접점이다. 벤치에서 한 모터씩 저속으로 돌려 이 매핑을 물리적으로 확인했다." style="background:#fff">
+  <section data-label="핀 배치" data-screen-label="30" data-speaker-notes="모터 번호와 위치, 회전 방향은 하드웨어와 소프트웨어가 함께 지켜야 하는 약속이다. 오른쪽 영상은 보정 명령이 출력 상한을 넘을 때 세 축의 비율을 유지한 채 함께 줄이는 과정을 보여준다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="GPIO 핀 배치와 모터 믹서">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.15fr 1fr;gap:32px">
-        <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px;align-self:start">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:.76fr 1.24fr;gap:28px;align-items:center">
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px;align-self:center">
           <thead>
             <tr>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">신호</th>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px;width:110px">GPIO</th>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">위치 / 비고</th>
+              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:14px 18px">모터</th>
+              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:14px 18px;width:92px">GPIO</th>
+              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:14px 18px">위치 · 회전</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">SPI SCK / MISO / MOSI</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">12 / 13 / 11</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">두 IMU 공용 버스</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule);font-weight:700">M1</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">4</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">전-좌 · CW</td>
             </tr>
             <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">IMU1 CS / IMU2 CS</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">10 / 9</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">칩 선택선으로 두 센서를 구분</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule);font-weight:700">M2</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">5</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">후-우 · CW</td>
             </tr>
             <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">Motor M1</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">4</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">전-좌 (FL) · CW</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule);font-weight:700">M3</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">6</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">전-우 · CCW</td>
             </tr>
             <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">Motor M2</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">5</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">후-우 (RR) · CW</td>
-            </tr>
-            <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">Motor M3</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">6</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">전-우 (FR) · CCW</td>
-            </tr>
-            <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">Motor M4</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">7</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">후-좌 (RL) · CCW</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule);font-weight:700">M4</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">7</td>
+              <td style="padding:18px;border-bottom:1px solid var(--uos-rule)">후-좌 · CCW</td>
             </tr>
           </tbody>
         </table>
-        <div style="display:flex;flex-direction:column;gap:20px">
-          <div style="font-size:22px;font-weight:700;color:var(--uos-blue)">모터 믹서 — 네 모터에 출력을 나누는 식</div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-family:ui-monospace,monospace;font-size:22px;line-height:1.9">M1 = T − P + R − Y<br />M2 = T + P − R − Y<br />M3 = T − P − R + Y<br />M4 = T + P + R + Y</div>
-          <div style="font-size:22px;line-height:1.55">T는 전체 출력, R·P·Y는 좌우기울기·앞뒤기울기·회전 보정량이다. 출력이 허용 범위를 넘으면 <strong>세 보정량을 같은 비율로 줄여</strong> 토크 비율을 보존한다.</div>
-          <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">부호가 하나라도 틀리면 기체는 자세를 바로잡는 대신 넘어지는 쪽으로 힘을 준다. 그래서 벤치에서 한 모터씩 돌려 물리적으로 확인한다.</div>
-        </div>
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-width:0">
+          <video src="assets/mixer-saturation.mp4" controls loop muted playsinline preload="metadata" aria-label="모터 보정 명령이 출력 상한을 넘을 때 같은 비율로 줄여 자세 토크 비율을 보존하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">출력 상한에 닿으면 Roll·Pitch·Yaw 보정량을 같은 비율로 축소</figcaption>
+          <div style="border-left:6px solid var(--uos-blue);padding:12px 0 12px 18px;font-size:22px;line-height:1.45"><strong>토크 비율 보존</strong> · 한 축만 잘라내지 않고 세 보정량을 함께 줄인다.</div>
+        </figure>
       </div>
     </x-import>
   </section>
@@ -1156,21 +1138,24 @@
 
   <section data-label="적응형 필터" data-screen-label="38" data-speaker-notes="가속도계를 믿을 수 있는 순간과 믿을 수 없는 순간을 구분하는 장치이다. 판단 기준은 가속도의 크기." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="적응형 상보필터 — 신뢰도를 상황에 따라 바꾼다">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
-        <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1020px">가속도계는 <strong>중력만 걸려 있을 때</strong> 정확하다. 지금 그런 상황인지 판단할 방법이 필요하다.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue)">가속도 크기 ≈ 1G</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">가속도 크기가 1g에 가까운 구간</div>
-            <div style="font-size:22px;line-height:1.55">선형 가속이 크지 않은 구간으로 보고 α를 낮춰 가속도계 비중을 올린다. 정지 여부를 확정하는 판정은 아니다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.28fr .72fr;gap:30px;align-items:center">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-width:0">
+          <video src="assets/accelerometer-confidence.mp4" controls loop muted playsinline preload="metadata" aria-label="가속도 크기가 1g에서 벗어날수록 가속도계 비중을 줄이고 자이로 비중을 높이는 적응형 상보필터 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">가속도 크기와 α가 함께 바뀌는 개념 시뮬레이션</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;justify-content:center">
+          <div style="border-top:6px solid var(--uos-blue);padding:18px 0 20px">
+            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">|a| ≈ 1g</div>
+            <div style="font-size:24.2px;font-weight:700;line-height:1.35">가속도계 비중 증가</div>
+            <div style="font-size:22px;line-height:1.45;margin-top:8px">중력 기준으로 누적 오차 교정</div>
           </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;opacity:.85">1G에서 벗어남</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">급기동 중 — 자이로에 맡긴다</div>
-            <div style="font-size:22px;line-height:1.55">가속·감속·외부 충격이 섞인 상태이다. α를 <strong>0.9998</strong>까지 올려 가속도계 비중을 거의 0으로 줄인다.</div>
+          <div style="border-top:1px solid var(--uos-rule);padding:20px 0">
+            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">|a|가 1g에서 벗어남</div>
+            <div style="font-size:24.2px;font-weight:700;line-height:1.35">자이로 비중 증가</div>
+            <div style="font-size:22px;line-height:1.45;margin-top:8px">선형 가속·충격의 영향 억제</div>
           </div>
+          <div style="border-top:1px solid var(--uos-rule);padding:18px 0 0;font-size:22px;line-height:1.45">현재 선택 범위 · <strong>α=0.999~0.9998</strong></div>
         </div>
-        <div style="font-size:22px;line-height:1.55;border-top:1px solid var(--uos-rule);padding-top:20px">현재 코드는 가속도 크기에 따라 α를 <strong>0.999~0.9998</strong> 사이에서 바꾼다.</div>
       </div>
     </x-import>
   </section>
@@ -1549,21 +1534,21 @@
 
   <section data-label="캐스케이드 구조" data-screen-label="52" data-speaker-notes="각도 루프와 각속도 루프를 나눈 이유. 안쪽이 빨라야 바깥쪽 목표를 따라갈 수 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="각도·각속도 캐스케이드 제어">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.16fr 1fr;gap:32px">
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.28fr .72fr;gap:30px;align-items:center">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
-          <video src="assets/cascade-loop-timing.mp4" controls loop muted playsinline preload="metadata" aria-label="250Hz 각도 루프와 1000Hz 각속도 루프가 서로 다른 주기로 동작하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
-          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">바깥 루프 한 번 사이에 안쪽 루프가 네 번 모터를 보정</figcaption>
+          <video src="assets/cascade-loop-response.mp4" controls loop muted playsinline preload="metadata" aria-label="같은 제어 이득에서 갱신 주기가 느려지면 외란 보정이 늦어져 진동이 커지는 개념 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">같은 이득에서도 갱신이 느리면 보정이 늦어져 진동이 커짐</figcaption>
         </figure>
-        <div style="display:flex;flex-direction:column;gap:18px;justify-content:center">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;flex-direction:column;justify-content:center">
+          <div style="border-top:6px solid var(--uos-blue);padding:18px 0 20px">
             <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue)">바깥 루프 · 250Hz</div>
-            <div style="font-size:24.2px;font-weight:700;line-height:1.4">각도 오차 → 목표 회전 속도</div>
+            <div style="font-size:24.2px;font-weight:700;line-height:1.4;margin-top:8px">각도 오차 → 목표 각속도</div>
           </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:9px">
-            <div style="font-size:20.5337px;font-weight:700;opacity:.85">안쪽 루프 · 1000Hz</div>
-            <div style="font-size:24.2px;font-weight:700;line-height:1.4">각속도 오차 → 모터 출력</div>
+          <div style="border-top:1px solid var(--uos-rule);padding:20px 0">
+            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue)">안쪽 루프 · 1kHz</div>
+            <div style="font-size:24.2px;font-weight:700;line-height:1.4;margin-top:8px">각속도 오차 → 모터 출력</div>
           </div>
-          <div style="font-size:22px;line-height:1.5">회전 속도를 중간 목표로 두면 목표를 지나치는 <strong>오버슈트</strong>를 따로 제동할 수 있다.</div>
+          <div style="border-top:1px solid var(--uos-rule);padding:18px 0 0;font-size:22px;line-height:1.5"><strong>안쪽 루프가 네 배 빠르게</strong> 외란을 먼저 억제하고, 바깥 루프가 기울기 목표를 정한다.</div>
         </div>
       </div>
     </x-import>
@@ -1627,31 +1612,23 @@
 
   <section data-label="Yaw 기준점" data-screen-label="54" data-speaker-notes="롤과 피치는 선형 가속이 크지 않은 구간에서 중력을 장기 기준으로 쓸 수 있지만, Yaw는 중력만으로 알 수 없다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="좌우 회전(Yaw)은 중력으로 기준을 잡을 수 없다">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue)">앞뒤·좌우 기울기 (Roll · Pitch)</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">중력을 장기 기준으로 쓸 수 있다</div>
-            <div style="font-size:22px;line-height:1.55">선형 가속이 크지 않은 구간에서는 가속도계가 장기적인 중력 기준을 제공한다. 누적 오차는 이 기준으로 교정된다.</div>
+      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.28fr .72fr;gap:30px;align-items:center">
+        <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-width:0">
+          <video src="assets/gravity-yaw-observability.mp4" controls loop muted playsinline preload="metadata" aria-label="중력 벡터는 Roll과 Pitch 기울기를 구분하지만 Yaw 회전 뒤에는 같은 방향으로 남는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">중력은 기울기는 구분하지만 수직축 주위 회전은 구분하지 못함</figcaption>
+        </figure>
+        <div style="display:flex;flex-direction:column;justify-content:center">
+          <div style="border-top:6px solid var(--uos-blue);padding:18px 0 22px">
+            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">Roll · Pitch</div>
+            <div style="font-size:26.4px;font-weight:700;line-height:1.3">중력 방향이 달라진다</div>
+            <div style="font-size:22px;line-height:1.5;margin-top:10px">가속도계를 장기 기준으로 사용</div>
           </div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;opacity:.85">좌우 회전 (Yaw)</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">중력으로는 알 수 없다</div>
-            <div style="font-size:22px;line-height:1.55">제자리에서 도는 동작은 중력 방향을 바꾸지 않는다. 기준이 없으니 자이로 누적 오차가 <strong>교정되지 않고 계속 쌓인다</strong>.</div>
+          <div style="border-top:1px solid var(--uos-rule);padding:22px 0">
+            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue);margin-bottom:8px">Yaw</div>
+            <div style="font-size:26.4px;font-weight:700;line-height:1.3">중력 방향이 그대로이다</div>
+            <div style="font-size:22px;line-height:1.5;margin-top:10px">별도의 방위 기준 필요</div>
           </div>
-        </div>
-        <div style="background:var(--uos-surface);border-radius:4px;padding:24px 28px;display:flex;flex-direction:column;gap:16px">
-          <div style="display:grid;grid-template-columns:170px 1fr 80px;gap:18px;align-items:center;font-size:22px">
-            <div style="font-weight:700">자이로만 사용</div>
-            <div style="height:12px;background:#d8d8d8;position:relative"><div style="position:absolute;inset:0;background:var(--uos-blue)"></div></div>
-            <div style="font-weight:700;color:var(--uos-blue);text-align:right">18.3°</div>
-          </div>
-          <div style="display:grid;grid-template-columns:170px 1fr 80px;gap:18px;align-items:center;font-size:22px">
-            <div style="font-weight:700">지자기 융합</div>
-            <div style="height:12px;background:#d8d8d8;position:relative"><div style="position:absolute;inset:0 auto 0 0;width:13%;background:var(--uos-blue)"></div></div>
-            <div style="font-weight:700;color:var(--uos-blue);text-align:right">2.4°</div>
-          </div>
-          <div style="font-size:22px;line-height:1.5;border-top:1px solid var(--uos-rule);padding-top:14px">Yaw 융합 SIL에서 지자기 기준을 더하자 30초 뒤 누적 오차가 <strong>18.3°에서 2.4°</strong>로 줄었다.</div>
+          <div style="border-top:1px solid var(--uos-rule);padding:18px 0 0;font-size:22px;line-height:1.45">다음 단계 · <strong>지자기센서로 장기 기준 확보</strong></div>
         </div>
       </div>
     </x-import>

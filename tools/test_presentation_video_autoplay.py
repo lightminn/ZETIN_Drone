@@ -25,6 +25,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DECK_DIR = REPO_ROOT / "docs" / "presentations" / "ai-startup-camp-drone"
 CHROME_BIN = shutil.which("google-chrome-stable") or shutil.which("google-chrome")
 
+TEAM_VISUALIZATIONS = {
+    30: "mixer-saturation.mp4",
+    38: "accelerometer-confidence.mp4",
+    52: "cascade-loop-response.mp4",
+    54: "gravity-yaw-observability.mp4",
+}
+
 
 def _unused_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -64,7 +71,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         parser = _VideoParser()
         parser.feed((DECK_DIR / "index.html").read_text(encoding="utf-8"))
 
-        self.assertEqual(len(parser.videos), 11)
+        self.assertEqual(len(parser.videos), 14)
         missing = [attrs.get("src", "<unknown>") for attrs in parser.videos if "muted" not in attrs]
         self.assertEqual(missing, [])
 
@@ -201,6 +208,8 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                 controls: video.controls,
                 loop: video.loop,
                 playsInline: video.playsInline,
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
                 error: video.error && {code: video.error.code, message: video.error.message},
               };
             })()
@@ -324,6 +333,9 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                   const figure = document.querySelector('svg[data-force-sum]');
                   if (!figure) return null;
                   return {
+                    layout: figure.closest('[data-force-layout]')?.dataset.forceLayout || null,
+                    logicalWidth: figure.getBoundingClientRect().width /
+                      (figure.closest('section').getBoundingClientRect().width / 1280),
                     rotorThrusts: figure.querySelectorAll(
                       '[data-vector="rotor-thrust"]'
                     ).length,
@@ -343,6 +355,8 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             time.sleep(0.05)
 
         self.assertIsNotNone(hierarchy)
+        self.assertEqual(hierarchy["layout"], "direct-labels", hierarchy)
+        self.assertGreaterEqual(hierarchy["logicalWidth"], 1040, hierarchy)
         self.assertEqual(hierarchy["rotorThrusts"], 4, hierarchy)
         self.assertEqual(hierarchy["aggregateThrusts"], 1, hierarchy)
         self.assertEqual(hierarchy["weights"], 1, hierarchy)
@@ -362,12 +376,37 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                 """
                 (() => {
                   if (document.readyState !== 'complete') return null;
-                  const figure = document.querySelector('svg[data-control-mixing]');
-                  if (!figure) return null;
+                  const comparison = document.querySelector('[data-torque-comparison]');
+                  const helicopter = comparison?.querySelector('svg[data-helicopter-torque]');
+                  const figure = comparison?.querySelector('svg[data-control-mixing]');
+                  if (!comparison || !helicopter || !figure) return null;
                   const rotors = [...figure.querySelectorAll('[data-yaw-rotor]')];
+                  const motors = Object.fromEntries(rotors.map(rotor => [
+                    rotor.dataset.motor,
+                    {
+                      spin: rotor.dataset.spin,
+                      command: rotor.dataset.pairCommand,
+                    },
+                  ]));
+                  const helicopterRect = helicopter.getBoundingClientRect();
+                  const droneRect = figure.getBoundingClientRect();
                   return {
+                    comparison: comparison.dataset.layout || null,
+                    helicopterMainTorque: helicopter.querySelectorAll(
+                      '[data-heli-torque="main"]'
+                    ).length,
+                    helicopterReactionTorque: helicopter.querySelectorAll(
+                      '[data-heli-torque="reaction"]'
+                    ).length,
+                    helicopterTailCounterTorque: helicopter.querySelectorAll(
+                      '[data-heli-torque="tail-counter"]'
+                    ).length,
+                    diagramsSideBySide:
+                      helicopterRect.right < droneRect.left &&
+                      Math.abs(helicopterRect.top - droneRect.top) < 4,
                     view: figure.dataset.view || null,
                     rotors: rotors.length,
+                    motors,
                     circularRotors: rotors.filter(rotor => {
                       const rect = rotor.getBoundingClientRect();
                       return Math.abs(rect.width - rect.height) < 2;
@@ -391,8 +430,23 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             time.sleep(0.05)
 
         self.assertIsNotNone(yaw)
+        self.assertEqual(yaw["comparison"], "side-by-side", yaw)
+        self.assertEqual(yaw["helicopterMainTorque"], 1, yaw)
+        self.assertEqual(yaw["helicopterReactionTorque"], 1, yaw)
+        self.assertEqual(yaw["helicopterTailCounterTorque"], 1, yaw)
+        self.assertTrue(yaw["diagramsSideBySide"], yaw)
         self.assertEqual(yaw["view"], "top", yaw)
         self.assertEqual(yaw["rotors"], 4, yaw)
+        self.assertEqual(
+            yaw["motors"],
+            {
+                "M1": {"spin": "cw", "command": "decrease"},
+                "M2": {"spin": "cw", "command": "decrease"},
+                "M3": {"spin": "ccw", "command": "increase"},
+                "M4": {"spin": "ccw", "command": "increase"},
+            },
+            yaw,
+        )
         self.assertEqual(yaw["circularRotors"], 4, yaw)
         self.assertEqual(yaw["cw"], 2, yaw)
         self.assertEqual(yaw["ccw"], 2, yaw)
@@ -671,6 +725,36 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertTrue(state["controls"])
         self.assertTrue(state["loop"])
         self.assertTrue(state["playsInline"])
+
+    def test_team_visualizations_decode_and_remain_prominent(self) -> None:
+        self._open_deck()
+
+        for slide_number, filename in TEAM_VISUALIZATIONS.items():
+            with self.subTest(slide=slide_number, filename=filename):
+                self._evaluate(
+                    "document.querySelector('deck-stage').goTo(%d)"
+                    % (slide_number - 1)
+                )
+                state = self._wait_for_playback(filename)
+                self.assertEqual(state["videoWidth"], 1280, state)
+                self.assertEqual(state["videoHeight"], 720, state)
+
+                rendered_width = self._evaluate(
+                    """
+                    (() => {
+                      const stage = document.querySelector('deck-stage');
+                      const slide = stage._slides[%d];
+                      const video = [...slide.querySelectorAll('video')]
+                        .find(item => item.src.endsWith(%s));
+                      if (!video) return null;
+                      const scale = slide.getBoundingClientRect().width / 1280;
+                      return video.getBoundingClientRect().width / scale;
+                    })()
+                    """
+                    % (slide_number - 1, json.dumps(filename))
+                )
+                self.assertIsNotNone(rendered_width)
+                self.assertGreaterEqual(rendered_width, 620)
 
 
 if __name__ == "__main__":
