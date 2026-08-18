@@ -26,6 +26,7 @@ GEOMETRY_PATH = (
 VISUALIZATION_SOURCE_PATH = GEOMETRY_PATH.with_name("audience_visualizations.py")
 SIGNIFICANCE_SOURCE_PATH = GEOMETRY_PATH.with_name("significance_visualizations.py")
 ENGINEERING_SOURCE_PATH = GEOMETRY_PATH.with_name("engineering_visualizations.py")
+STATIC_SOURCE_PATH = GEOMETRY_PATH.with_name("static_diagram_visualizations.py")
 VISUALIZATION_FILES = (
     "accelerometer.mp4",
     "gyro.mp4",
@@ -53,6 +54,150 @@ ENGINEERING_SCENES = {
     "LandingObservabilityAudience": "landing-observability.mp4",
     "SharedStateRaceAudience": "shared-state-race.mp4",
     "TelemetryMotorBalanceAudience": "telemetry-motor-balance.mp4",
+}
+STATIC_SCENES = {
+    "DroneClassificationStatic": "drone-classification.png",
+    "QualificationWeightStatic": "qualification-weight.png",
+    "AircraftUamStatic": "aircraft-uam.png",
+    "MissionSpecsStatic": "mission-specs.png",
+    "QuadcopterForceMotionStatic": "quadcopter-force-motion.png",
+    "HelicopterQuadcopterTorqueStatic": "helicopter-quadcopter-torque.png",
+    "SwarmSystemStatic": "swarm-system.png",
+    "AttitudeCorrectionStatic": "attitude-correction.png",
+    "SilClosedLoopStatic": "sil-closed-loop.png",
+    "FailsafeTimelineStatic": "failsafe-timeline.png",
+    "LandingObservabilityStatic": "landing-observability.png",
+    "SharedStateRaceStatic": "shared-state-race.png",
+    "TelemetryMotorBalanceStatic": "telemetry-motor-balance.png",
+}
+STATIC_REQUIRED_TEXT = {
+    "DroneClassificationStatic": {
+        "고정익",
+        "단일로터",
+        "멀티로터",
+        "쿼드콥터",
+        "수직이착륙기",
+    },
+    "QualificationWeightStatic": {
+        "4종",
+        "3종",
+        "2종",
+        "1종",
+        "250g초과·2kg이하",
+        "2kg초과·7kg이하",
+        "7kg초과·25kg이하",
+        "최대이륙중량25kg초과",
+        "연료제외자체중량150kg이하",
+    },
+    "AircraftUamStatic": {
+        "고정익",
+        "헬리콥터",
+        "멀티콥터",
+        "eVTOL",
+        "버티포트",
+        "운항",
+        "교통관리",
+    },
+    "MissionSpecsStatic": {
+        "공연",
+        "동기화",
+        "물류",
+        "탑재중량",
+        "안전감시",
+        "체공·통신",
+        "국방정찰",
+        "보안·내환경성",
+    },
+    "QuadcopterForceMotionStatic": {
+        "상승",
+        "합추력>무게",
+        "호버링",
+        "합추력=무게",
+        "하강",
+        "합추력<무게",
+        "수평이동",
+        "수평성분발생",
+    },
+    "HelicopterQuadcopterTorqueStatic": {
+        "메인로터반작용토크",
+        "꼬리로터힘",
+        "CW",
+        "CCW",
+        "평상시토크상쇄",
+    },
+    "SwarmSystemStatic": {
+        "단일기체",
+        "군집체계",
+        "공통좌표",
+        "통신",
+        "상대위치",
+        "경로·충돌회피",
+        "집단안전",
+        "후속목표·미구현·미검증",
+    },
+    "AttitudeCorrectionStatic": {
+        "외란",
+        "센서관측",
+        "모터출력차이",
+        "복원토크",
+        "수평복원",
+    },
+    "SilClosedLoopStatic": {
+        "가상물리",
+        "센서합성",
+        "실제비행코드",
+        "모터출력",
+        "HOSTSIL·실제비행증거아님",
+    },
+    "FailsafeTimelineStatic": {
+        "상태판단",
+        "RC신호두절",
+        "자세유지·제한하강",
+        "설정된상한·모터정지",
+        "치명적고장",
+        "즉시모터정지",
+    },
+    "LandingObservabilityStatic": {
+        "지면정지",
+        "등속하강",
+        "IMU관측동일",
+        "거리센서추가단서",
+        "폐루프착지판정미검증",
+    },
+    "SharedStateRaceStatic": {
+        "통신코어",
+        "제어태스크",
+        "공유상태A",
+        "A읽기",
+        "B쓰기",
+        "옛A기반C쓰기",
+        "B갱신손실가능",
+        "가능한race·관측사고아님",
+    },
+    "TelemetryMotorBalanceStatic": {
+        "X형모터배치",
+        "M1",
+        "M3",
+        "M3평균>M1평균",
+        "테더구간·집계방향",
+        "원인미확정",
+    },
+}
+STATIC_FORBIDDEN_TEXT = {
+    "드론분류",
+    "조종자증명",
+    "비행체와UAM",
+    "임무별요구사양",
+    "힘과운동",
+    "반작용토크",
+    "군집확장",
+    "자세복원",
+    "SIL폐루프",
+    "Failsafe분기",
+    "착지관측한계",
+    "공유상태경쟁",
+    "모터출력균형",
+    "고정시간·보편출력값없음",
 }
 
 
@@ -109,6 +254,22 @@ def load_engineering_module():
         sys.path.insert(0, source_dir)
     spec = importlib.util.spec_from_file_location(
         "presentation_engineering_visualizations", ENGINEERING_SOURCE_PATH
+    )
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_static_module():
+    if not STATIC_SOURCE_PATH.is_file():
+        return None
+    source_dir = str(STATIC_SOURCE_PATH.parent)
+    if source_dir not in sys.path:
+        sys.path.insert(0, source_dir)
+    spec = importlib.util.spec_from_file_location(
+        "presentation_static_diagram_visualizations", STATIC_SOURCE_PATH
     )
     if spec is None or spec.loader is None:
         return None
@@ -380,6 +541,72 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                         rendered_text,
                     )
 
+    def test_static_scenes_render_all_comparison_content_without_animation(self) -> None:
+        from manim import Text, tempconfig
+        from unittest.mock import patch
+
+        module = load_static_module()
+        self.assertIsNotNone(module, "static diagram visualization module is missing")
+        forbidden_identifier = re.compile(
+            r"(?<!\d)(?:19|20)\d{2}-\d{2}-\d{2}(?!\d)"
+            r"|(?<![0-9a-fA-F])[0-9a-fA-F]{7,40}(?![0-9a-fA-F])"
+        )
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            for scene_name, required_text in STATIC_REQUIRED_TEXT.items():
+                with self.subTest(scene_name=scene_name):
+                    scene_class = getattr(module, scene_name, None)
+                    self.assertIsNotNone(scene_class)
+                    scene = scene_class()
+                    scene.play = lambda *args, **kwargs: self.fail(
+                        f"{scene_name} must show every comparison state at once"
+                    )
+                    scene.wait = lambda *args, **kwargs: self.fail(
+                        f"{scene_name} must not rely on a timed reveal"
+                    )
+                    created_text = []
+                    original_text_init = Text.__init__
+
+                    def record_text_init(text_object, *args, **kwargs):
+                        original_text_init(text_object, *args, **kwargs)
+                        created_text.append(text_object)
+
+                    with patch.object(Text, "__init__", record_text_init):
+                        scene.render()
+
+                    rendered_text = {item.text for item in created_text}
+                    self.assertTrue(
+                        required_text.issubset(rendered_text),
+                        f"missing {sorted(required_text - rendered_text)} from {scene_name}",
+                    )
+                    self.assertFalse(
+                        STATIC_FORBIDDEN_TEXT & rendered_text,
+                        f"forbidden slide-level text duplicated inside {scene_name}",
+                    )
+                    self.assertFalse(
+                        any(forbidden_identifier.search(value) for value in rendered_text),
+                        sorted(rendered_text),
+                    )
+                    self.assertTrue(created_text, f"no Text rendered by {scene_name}")
+                    for text_object in created_text:
+                        self.assertGreaterEqual(
+                            float(text_object.font_size),
+                            26.0,
+                            f"undersized text in {scene_name}: {text_object.text}",
+                        )
+                    for mobject in scene.mobjects:
+                        self.assertGreaterEqual(mobject.get_left()[0], -7.96)
+                        self.assertLessEqual(mobject.get_right()[0], 7.96)
+                        self.assertGreaterEqual(mobject.get_bottom()[1], -4.46)
+                        self.assertLessEqual(mobject.get_top()[1], 4.46)
+
     def test_telemetry_evidence_badge_clears_content_panels(self) -> None:
         from manim import tempconfig
 
@@ -564,6 +791,25 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
             self.assertIn("후속목표·미구현·미검증", rendered_text)
 
 
+class PresentationStaticDiagramDeliveryTests(unittest.TestCase):
+    def test_static_python_diagrams_are_nonblank_hd_pngs(self) -> None:
+        from PIL import Image, ImageChops
+
+        for filename in STATIC_SCENES.values():
+            with self.subTest(filename=filename):
+                path = ASSET_DIR / filename
+                self.assertTrue(path.is_file(), f"missing static diagram: {path}")
+                with Image.open(path) as image:
+                    self.assertEqual(image.size, (1280, 720))
+                    self.assertIn(image.mode, {"RGB", "RGBA"})
+                    rgb = image.convert("RGB")
+                    background = Image.new("RGB", image.size, rgb.getpixel((0, 0)))
+                    difference = ImageChops.difference(rgb, background)
+                    self.assertIsNotNone(
+                        difference.getbbox(), f"uniform static diagram: {path}"
+                    )
+
+
 @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")
 class PresentationVisualizationDeliveryTests(unittest.TestCase):
     def test_explainer_videos_use_readable_browser_delivery_profile(self) -> None:
@@ -598,40 +844,6 @@ class PresentationVisualizationDeliveryTests(unittest.TestCase):
                 self.assertEqual(stream["pix_fmt"], "yuv420p")
                 self.assertGreaterEqual(duration, 5.0)
                 self.assertLessEqual(duration, 12.0)
-
-    def test_new_python_diagram_videos_use_delivery_profile(self) -> None:
-        filenames = (*SIGNIFICANCE_SCENES.values(), *ENGINEERING_SCENES.values())
-        for filename in filenames:
-            with self.subTest(filename=filename):
-                completed = subprocess.run(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-select_streams",
-                        "v:0",
-                        "-show_entries",
-                        "stream=codec_name,width,height,r_frame_rate,pix_fmt",
-                        "-show_entries",
-                        "format=duration",
-                        "-of",
-                        "json",
-                        str(ASSET_DIR / filename),
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                metadata = json.loads(completed.stdout)
-                stream = metadata["streams"][0]
-                duration = float(metadata["format"]["duration"])
-
-                self.assertEqual(stream["codec_name"], "h264")
-                self.assertEqual((stream["width"], stream["height"]), (1280, 720))
-                self.assertEqual(stream["r_frame_rate"], "30/1")
-                self.assertEqual(stream["pix_fmt"], "yuv420p")
-                self.assertGreaterEqual(duration, 6.0)
-                self.assertLessEqual(duration, 9.0)
 
 
 if __name__ == "__main__":

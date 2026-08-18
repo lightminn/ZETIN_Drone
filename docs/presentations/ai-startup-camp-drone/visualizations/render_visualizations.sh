@@ -27,7 +27,7 @@ fi
 WORK_DIR=$(mktemp -d)
 trap 'find "$WORK_DIR" -mindepth 1 -delete; rmdir "$WORK_DIR"' EXIT
 
-SCENES=(
+VIDEO_SCENES=(
   "audience_visualizations.py:AccelerometerAudience:accelerometer.mp4"
   "audience_visualizations.py:GyroAudience:gyro.mp4"
   "audience_visualizations.py:ComplementaryFilterAudience:complementary-filter.mp4"
@@ -37,22 +37,25 @@ SCENES=(
   "audience_visualizations.py:CascadeTimingAudience:cascade-loop-timing.mp4"
   "audience_visualizations.py:YawCorrectionAudience:yaw-correction.mp4"
   "audience_visualizations.py:LandingAmbiguityAudience:landing-ambiguity.mp4"
-  "significance_visualizations.py:DroneClassificationAudience:drone-classification.mp4"
-  "significance_visualizations.py:QualificationWeightAudience:qualification-weight.mp4"
-  "significance_visualizations.py:AircraftUamAudience:aircraft-uam.mp4"
-  "significance_visualizations.py:MissionSpecsAudience:mission-specs.mp4"
-  "significance_visualizations.py:QuadcopterForceMotionAudience:quadcopter-force-motion.mp4"
-  "significance_visualizations.py:HelicopterQuadcopterTorqueAudience:helicopter-quadcopter-torque.mp4"
-  "significance_visualizations.py:SwarmSystemAudience:swarm-system.mp4"
-  "engineering_visualizations.py:AttitudeCorrectionAudience:attitude-correction.mp4"
-  "engineering_visualizations.py:SilClosedLoopAudience:sil-closed-loop.mp4"
-  "engineering_visualizations.py:FailsafeTimelineAudience:failsafe-timeline.mp4"
-  "engineering_visualizations.py:LandingObservabilityAudience:landing-observability.mp4"
-  "engineering_visualizations.py:SharedStateRaceAudience:shared-state-race.mp4"
-  "engineering_visualizations.py:TelemetryMotorBalanceAudience:telemetry-motor-balance.mp4"
 )
 
-for entry in "${SCENES[@]}"; do
+STATIC_SCENES=(
+  "static_diagram_visualizations.py:DroneClassificationStatic:drone-classification.png"
+  "static_diagram_visualizations.py:QualificationWeightStatic:qualification-weight.png"
+  "static_diagram_visualizations.py:AircraftUamStatic:aircraft-uam.png"
+  "static_diagram_visualizations.py:MissionSpecsStatic:mission-specs.png"
+  "static_diagram_visualizations.py:QuadcopterForceMotionStatic:quadcopter-force-motion.png"
+  "static_diagram_visualizations.py:HelicopterQuadcopterTorqueStatic:helicopter-quadcopter-torque.png"
+  "static_diagram_visualizations.py:SwarmSystemStatic:swarm-system.png"
+  "static_diagram_visualizations.py:AttitudeCorrectionStatic:attitude-correction.png"
+  "static_diagram_visualizations.py:SilClosedLoopStatic:sil-closed-loop.png"
+  "static_diagram_visualizations.py:FailsafeTimelineStatic:failsafe-timeline.png"
+  "static_diagram_visualizations.py:LandingObservabilityStatic:landing-observability.png"
+  "static_diagram_visualizations.py:SharedStateRaceStatic:shared-state-race.png"
+  "static_diagram_visualizations.py:TelemetryMotorBalanceStatic:telemetry-motor-balance.png"
+)
+
+for entry in "${VIDEO_SCENES[@]}"; do
   source=${entry%%:*}
   scene_and_output=${entry#*:}
   scene=${scene_and_output%%:*}
@@ -77,5 +80,29 @@ for entry in "${SCENES[@]}"; do
     -an -c:v libx264 -preset medium -crf 20 \
     -pix_fmt yuv420p -r 30 -movflags +faststart \
     "$ASSET_DIR/$output"
+  echo "$scene -> assets/$output"
+done
+
+for entry in "${STATIC_SCENES[@]}"; do
+  source=${entry%%:*}
+  scene_and_output=${entry#*:}
+  scene=${scene_and_output%%:*}
+  output=${scene_and_output#*:}
+  media_dir="$WORK_DIR/$scene"
+  "${MANIM_CMD[@]}" \
+    --media_dir "$media_dir" \
+    --resolution 1280,720 \
+    --format png \
+    --save_last_frame \
+    "$SCRIPT_DIR/$source" \
+    "$scene"
+
+  rendered=$(find "$media_dir" -type f -name "$scene*.png" -print -quit)
+  if [[ -z "$rendered" ]]; then
+    echo "rendered frame not found for $scene" >&2
+    exit 1
+  fi
+
+  cp -- "$rendered" "$ASSET_DIR/$output"
   echo "$scene -> assets/$output"
 done
