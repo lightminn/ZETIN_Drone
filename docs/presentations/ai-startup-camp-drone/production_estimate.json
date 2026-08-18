@@ -5,34 +5,47 @@
       "parts_in_stock",
       "one_printer",
       "first_print_success",
+      "assembled_fc_pcb_available",
       "design_and_firmware_ready"
     ],
+    "print_model": {
+      "printed_mass_kg_per_unit": [0.4, 0.8],
+      "effective_output_grams_per_hour": 16.7
+    },
     "includes_free_flight_validation": false
   },
   "time": {
     "one_unit": {
       "printer_hours": [24, 48],
       "hands_on_hours": [6, 10],
+      "hands_on_breakdown_hours": {
+        "print_setup_and_postprocess": [1, 2],
+        "frame_and_electronics_assembly": [2, 3],
+        "wiring_and_connectors": [1, 2],
+        "flash_calibration_bench_check": [2, 3]
+      },
       "elapsed_days_one_printer": [2, 3]
     },
     "ten_units": {
       "printer_hours_one_printer": [240, 480],
-      "hands_on_hours": [47, 74],
+      "hands_on_hours": [60, 100],
       "elapsed_days_one_printer": [10, 20],
       "elapsed_days_two_printers": [5, 10],
       "elapsed_days_four_printers": [2.5, 5]
     }
   },
   "cost": {
+    "scope": "reference_components_only",
+    "verified_bom": false,
     "one_unit_categories_krw": {
-      "motors_4": [69000, 82000],
-      "escs_4": [51200, 175400],
+      "motors_4": [78000, 82000],
+      "escs_4": [175400, 175400],
       "control_sensor_chips": [22700, 22700],
       "frame_material": [11200, 22400],
       "battery_propellers": [68000, 68000]
     },
-    "one_unit_core_subtotal_krw": [222100, 370500],
-    "ten_units_core_subtotal_krw": [2221000, 3705000],
+    "one_unit_core_subtotal_krw": [355300, 370500],
+    "ten_units_core_subtotal_krw": [3553000, 3705000],
     "optional_3901_l0x_per_unit_krw": [48000, 49000],
     "excluded_from_subtotal": [
       "custom_fc_pcb_power",

@@ -196,15 +196,24 @@ STATIC_REQUIRED_TEXT = {
         "10대",
         "프린터점유",
         "직접작업",
-        "핵심부품비",
+        "6~10시간",
+        "60~100시간",
+        "가격확인품목",
+        "1대약35.5~37.1만원",
+        "10대약355~371만원",
         "모터4개",
+        "7.8~8.2만원",
         "ESC4개",
-        "제어·센서칩",
+        "약17.5만원",
+        "MCU·센서IC",
+        "약2.3만원",
         "프레임재료",
+        "1.1~2.2만원",
         "배터리·프로펠러",
+        "약6.8만원",
         "3901-L0X선택·+4.8~4.9만원/대",
-        "부품보유·프린터1대·첫형상성공가정",
-        "PCB·배선·체결·배송·인건비·비행튜닝제외",
+        "시간:PCB조립완료·첫출력성공·비용:FCPCB·전원·배선등별도",
+        "배송·인건비·재출력·비행튜닝제외",
     },
 }
 STATIC_FORBIDDEN_TEXT = {
@@ -390,12 +399,29 @@ class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
         self.assertEqual(one["hands_on_hours"], [6, 10])
         self.assertEqual(one["elapsed_days_one_printer"], [2, 3])
         self.assertEqual(ten["printer_hours_one_printer"], [240, 480])
-        self.assertEqual(ten["hands_on_hours"], [47, 74])
+        self.assertEqual(ten["hands_on_hours"], [60, 100])
         self.assertEqual(ten["elapsed_days_one_printer"], [10, 20])
         self.assertEqual(
             ten["printer_hours_one_printer"],
             [value * 10 for value in one["printer_hours"]],
         )
+        self.assertEqual(
+            ten["hands_on_hours"],
+            [value * 10 for value in one["hands_on_hours"]],
+        )
+        breakdown = one["hands_on_breakdown_hours"]
+        self.assertEqual(
+            [sum(bounds[index] for bounds in breakdown.values()) for index in (0, 1)],
+            one["hands_on_hours"],
+        )
+        print_model = self.data["basis"]["print_model"]
+        calculated_printer_hours = [
+            round(
+                mass_kg * 1000 / print_model["effective_output_grams_per_hour"]
+            )
+            for mass_kg in print_model["printed_mass_kg_per_unit"]
+        ]
+        self.assertEqual(calculated_printer_hours, one["printer_hours"])
 
     def test_cost_estimate_keeps_required_categories_and_unknowns_visible(self) -> None:
         cost = self.data["cost"]
@@ -418,7 +444,13 @@ class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
             cost["ten_units_core_subtotal_krw"],
             [value * 10 for value in cost["one_unit_core_subtotal_krw"]],
         )
+        self.assertEqual(categories["motors_4"], [78000, 82000])
+        self.assertEqual(categories["escs_4"], [175400, 175400])
+        self.assertEqual(cost["one_unit_core_subtotal_krw"], [355300, 370500])
+        self.assertEqual(cost["ten_units_core_subtotal_krw"], [3553000, 3705000])
         self.assertEqual(cost["optional_3901_l0x_per_unit_krw"], [48000, 49000])
+        self.assertFalse(cost["verified_bom"])
+        self.assertEqual(cost["scope"], "reference_components_only")
         for required_exclusion in (
             "custom_fc_pcb_power",
             "wiring_fasteners",
@@ -434,6 +466,7 @@ class PresentationProductionEstimateEvidenceTests(unittest.TestCase):
         self.assertIn("parts_in_stock", basis["assumptions"])
         self.assertIn("one_printer", basis["assumptions"])
         self.assertIn("first_print_success", basis["assumptions"])
+        self.assertIn("assembled_fc_pcb_available", basis["assumptions"])
         self.assertFalse(basis["includes_free_flight_validation"])
 
 
@@ -906,7 +939,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         excluded = next(
             item
             for item in texts
-            if item.text == "PCB·배선·체결·배송·인건비·비행튜닝제외"
+            if item.text == "배송·인건비·재출력·비행튜닝제외"
         )
         optional = next(
             item
@@ -926,7 +959,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         for category_text in (
             "모터4개",
             "ESC4개",
-            "제어·센서칩",
+            "MCU·센서IC",
             "프레임재료",
             "배터리·프로펠러",
         ):
@@ -944,11 +977,50 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                 f"optional sensor badge overlaps {category_text}",
             )
             if horizontal_overlap:
-                self.assertGreater(
-                    optional.get_bottom()[1],
-                    category.get_top()[1] + 0.18,
+                vertical_gap = max(
+                    optional.get_bottom()[1] - category.get_top()[1],
+                    category.get_bottom()[1] - optional.get_top()[1],
+                )
+                self.assertGreaterEqual(
+                    vertical_gap,
+                    0.18,
                     f"optional sensor badge crowds {category_text}",
                 )
+
+        paired_cost_text = {
+            "모터4개": "7.8~8.2만원",
+            "ESC4개": "약17.5만원",
+            "MCU·센서IC": "약2.3만원",
+            "프레임재료": "1.1~2.2만원",
+            "배터리·프로펠러": "약6.8만원",
+        }
+        category_cards = [
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "RoundedRectangle"
+            and 2.6 < item.width < 2.8
+            and 0.8 < item.height < 1.0
+        ]
+        self.assertEqual(len(category_cards), 5)
+        for name_text, value_text in paired_cost_text.items():
+            name = next(item for item in texts if item.text == name_text)
+            value = next(item for item in texts if item.text == value_text)
+            self.assertAlmostEqual(
+                name.get_center()[0], value.get_center()[0], delta=0.08
+            )
+            self.assertGreater(name.get_center()[1], value.get_center()[1])
+            self.assertLess(name.get_center()[1] - value.get_center()[1], 0.6)
+            card = min(
+                category_cards,
+                key=lambda item: abs(item.get_center()[0] - name.get_center()[0]),
+            )
+            for label in (name, value):
+                self.assertGreaterEqual(label.get_left()[0], card.get_left()[0] + 0.04)
+                self.assertLessEqual(label.get_right()[0], card.get_right()[0] - 0.04)
+                self.assertGreaterEqual(
+                    label.get_bottom()[1], card.get_bottom()[1] + 0.04
+                )
+                self.assertLessEqual(label.get_top()[1], card.get_top()[1] - 0.04)
 
     def test_telemetry_evidence_badge_clears_content_panels(self) -> None:
         from manim import tempconfig

@@ -9,6 +9,7 @@ or takeaway line.
 from __future__ import annotations
 
 import json
+from decimal import Decimal, ROUND_HALF_UP
 from math import cos
 from pathlib import Path
 
@@ -1130,12 +1131,46 @@ class ProductionEstimateStatic(StaticDiagramScene):
         return f"{values[0]:g}~{values[1]:g}{suffix}"
 
     @staticmethod
-    def _money_range(values, scale: int, rounded_to: int = 1) -> str:
-        low = values[0] / scale
-        high = values[1] / scale
-        if rounded_to == 1:
-            return f"약 {low:.0f}~{high:.0f}만원"
-        return f"약 {round(low / rounded_to) * rounded_to:.0f}~{round(high / rounded_to) * rounded_to:.0f}만원"
+    def _money_range(values, scale: int, decimals: int = 1) -> str:
+        quantum = Decimal("1") if decimals == 0 else Decimal("0.1")
+        low = (Decimal(values[0]) / Decimal(scale)).quantize(
+            quantum, rounding=ROUND_HALF_UP
+        )
+        high = (Decimal(values[1]) / Decimal(scale)).quantize(
+            quantum, rounding=ROUND_HALF_UP
+        )
+        return f"약 {low:.{decimals}f}~{high:.{decimals}f}만원"
+
+    @staticmethod
+    def _single_money(values) -> str:
+        low = (Decimal(values[0]) / Decimal(10000)).quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        high = (Decimal(values[1]) / Decimal(10000)).quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        if values[0] == values[1]:
+            return f"약 {low:.1f}만원"
+        return f"{low:.1f}~{high:.1f}만원"
+
+    @staticmethod
+    def _cost_item(name: str, value: str, color: str) -> VGroup:
+        panel = RoundedRectangle(
+            width=2.68,
+            height=0.9,
+            corner_radius=0.13,
+            fill_color=PANEL_2,
+            fill_opacity=1,
+            stroke_color=color,
+            stroke_width=2,
+        )
+        name_label = text(name, 24, color, "BOLD").move_to(
+            panel.get_center() + UP * 0.2
+        )
+        value_label = text(value, 24, WHITE, "BOLD").move_to(
+            panel.get_center() + DOWN * 0.2
+        )
+        return VGroup(panel, name_label, value_label)
 
     def _time_panel(
         self,
@@ -1208,47 +1243,54 @@ class ProductionEstimateStatic(StaticDiagramScene):
         )
 
         cost_panel = card(15.1, 2.75, ORANGE).move_to(DOWN * 1.67)
-        cost_heading = text("핵심 부품비", 28, ORANGE, "BOLD")
-        cost_heading.move_to(cost_panel.get_center() + LEFT * 6.15 + UP * 0.82)
+        cost_heading = text("가격 확인 품목", 28, ORANGE, "BOLD")
+        cost_heading.move_to(cost_panel.get_center() + LEFT * 6.0 + UP * 0.88)
         one_cost = text(
             "1대 " + self._money_range(cost["one_unit_core_subtotal_krw"], 10000),
-            27,
+            25,
             WHITE,
             "BOLD",
-        ).move_to(cost_panel.get_center() + LEFT * 5.15 + UP * 0.05)
+        ).move_to(cost_panel.get_center() + LEFT * 1.7 + UP * 0.88)
         ten_cost = text(
             "10대 "
             + self._money_range(
-                cost["ten_units_core_subtotal_krw"], 10000, rounded_to=10
+                cost["ten_units_core_subtotal_krw"], 10000, decimals=0
             ),
-            27,
+            25,
             WHITE,
             "BOLD",
-        ).move_to(cost_panel.get_center() + LEFT * 5.0 + DOWN * 0.74)
+        ).move_to(cost_panel.get_center() + RIGHT * 2.55 + UP * 0.88)
 
-        category_names = (
-            ("모터 4개", BLUE),
-            ("ESC 4개", CYAN),
-            ("제어·센서 칩", GREEN),
-            ("프레임 재료", ORANGE),
-            ("배터리·프로펠러", YELLOW),
+        category_specs = (
+            ("모터 4개", "motors_4", BLUE),
+            ("ESC 4개", "escs_4", CYAN),
+            ("MCU·센서 IC", "control_sensor_chips", GREEN),
+            ("프레임 재료", "frame_material", ORANGE),
+            ("배터리·프로펠러", "battery_propellers", YELLOW),
         )
         categories = VGroup(
             *[
-                label_pill(name, color, 2.35 if index < 4 else 2.9)
-                for index, (name, color) in enumerate(category_names)
+                self._cost_item(
+                    name,
+                    self._single_money(cost["one_unit_categories_krw"][key]),
+                    color,
+                )
+                for name, key, color in category_specs
             ]
-        ).arrange_in_grid(rows=2, cols=3, buff=(0.26, 0.22))
-        categories.move_to(cost_panel.get_center() + RIGHT * 1.6 + DOWN * 0.08)
+        ).arrange(RIGHT, buff=0.14)
+        categories.move_to(cost_panel.get_center() + RIGHT * 0.25 + DOWN * 0.02)
         optional = label_pill("3901-L0X 선택 · +4.8~4.9만원/대", CYAN, 5.15)
-        optional.move_to(cost_panel.get_center() + RIGHT * 4.45 + UP * 1.02)
+        optional.move_to(cost_panel.get_center() + RIGHT * 4.25 + DOWN * 0.96)
         excluded = text(
-            "PCB·배선·체결·배송·인건비·비행 튜닝 제외",
+            "배송·인건비·재출력·비행 튜닝 제외",
             24,
             YELLOW,
             "BOLD",
-        ).move_to(cost_panel.get_center() + RIGHT * 1.45 + DOWN * 1.0)
-        note = takeaway("부품 보유 · 프린터 1대 · 첫 형상 성공 가정", YELLOW)
+        ).move_to(cost_panel.get_center() + LEFT * 2.4 + DOWN * 0.96)
+        note = takeaway(
+            "시간: PCB 조립 완료·첫 출력 성공 · 비용: FC PCB·전원·배선 등 별도",
+            YELLOW,
+        )
         self.add(
             badge,
             one_panel,
