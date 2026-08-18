@@ -343,7 +343,8 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                     scene.render()
 
     def test_engineering_scene_text_omits_dates_and_commit_hashes(self) -> None:
-        from manim import tempconfig
+        from manim import Text, tempconfig
+        from unittest.mock import patch
 
         module = load_engineering_module()
         self.assertIsNotNone(module)
@@ -362,14 +363,18 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         ):
             for scene_name in ENGINEERING_SCENES:
                 with self.subTest(scene_name=scene_name):
+                    rendered_text = []
+                    original_text_init = Text.__init__
+
+                    def record_text_init(text_object, *args, **kwargs):
+                        original_text_init(text_object, *args, **kwargs)
+                        rendered_text.append(text_object.text)
+
                     scene = getattr(module, scene_name)()
                     scene.hold_and_clear = lambda *args, **kwargs: None
-                    scene.render()
-                    rendered_text = [
-                        item.text
-                        for item in self._mobjects(scene)
-                        if getattr(item, "text", None) is not None
-                    ]
+                    with patch.object(Text, "__init__", record_text_init):
+                        scene.render()
+                    self.assertTrue(rendered_text, f"no Text rendered by {scene_name}")
                     self.assertFalse(
                         any(forbidden.search(value) for value in rendered_text),
                         rendered_text,
