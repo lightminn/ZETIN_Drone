@@ -15,6 +15,7 @@ import time
 import unittest
 import urllib.request
 import zipfile
+from decimal import Decimal, ROUND_HALF_UP
 from fractions import Fraction
 from html.parser import HTMLParser
 from pathlib import Path
@@ -32,6 +33,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DECK_DIR = REPO_ROOT / "docs" / "presentations" / "ai-startup-camp-drone-10min"
 HTML_PATH = DECK_DIR / "index.html"
 PPTX_PATH = DECK_DIR / "드론_10분_요약본.pptx"
+PRODUCTION_ESTIMATE_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "presentations"
+    / "ai-startup-camp-drone"
+    / "production_estimate.json"
+)
 EXPECTED_SLIDES = 14
 EXPECTED_VIDEOS = 1
 SLIDE_NAME = re.compile(r"ppt/slides/slide\d+\.xml$")
@@ -212,11 +220,10 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "조립 완료 FC PCB",
             "프린터 1대",
             "첫 출력 성공",
-            "1대 · 2–3일",
-            "직접 작업 6–10인시",
+            "프린터 1대 기준",
+            "직접 작업 6–10시간",
             "35.5–37.1만 원",
-            "10대 · 10–20일",
-            "직접 작업 60–100인시",
+            "직접 작업 60–100시간",
             "355–371만 원",
             "참고 품목 합계",
             "완성기 총액·확정 BOM 아님",
@@ -225,6 +232,73 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "data-teamless-crop",
         ):
             self.assertIn(required, slide)
+
+        visible_markup = slide.split(">", 1)[1]
+        self.assertNotIn("인시", visible_markup)
+
+    def test_slide_04_cost_and_time_values_follow_production_estimate_json(self) -> None:
+        estimate = json.loads(PRODUCTION_ESTIMATE_PATH.read_text(encoding="utf-8"))
+        slide = self.slide_source("04")
+        rendered = slide.split(">", 1)[1]
+
+        def in_manwon(value: int, digits: int) -> str:
+            quantum = Decimal(1).scaleb(-digits)
+            converted = (Decimal(value) / Decimal(10_000)).quantize(
+                quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            return f"{converted:.{digits}f}"
+
+        def range_in_manwon(values: list[int], digits: int = 1) -> str:
+            low = in_manwon(values[0], digits)
+            high = in_manwon(values[1], digits)
+            return low if low == high else f"{low}–{high}"
+
+        category_labels = {
+            "motors_4": "모터",
+            "escs_4": "ESC",
+            "control_sensor_chips": "MCU·센서",
+            "frame_material": "프레임",
+            "battery_propellers": "배터리·프로펠러",
+        }
+        category_costs = estimate["cost"]["one_unit_categories_krw"]
+        for key, label in category_labels.items():
+            with self.subTest(category=key):
+                expected = f"{label} {range_in_manwon(category_costs[key])}만 원"
+                self.assertIn(expected, rendered)
+
+        one_unit_total = range_in_manwon(
+            estimate["cost"]["one_unit_core_subtotal_krw"]
+        )
+        ten_unit_total = range_in_manwon(
+            estimate["cost"]["ten_units_core_subtotal_krw"],
+            digits=0,
+        )
+        self.assertIn(f"1대 합계 {one_unit_total}만 원", rendered)
+        self.assertIn(f"10대 환산 {ten_unit_total}만 원", rendered)
+
+        one_unit_time = estimate["time"]["one_unit"]
+        ten_unit_time = estimate["time"]["ten_units"]
+        self.assertIn(
+            f"프린터 점유 {one_unit_time['printer_hours'][0]}–"
+            f"{one_unit_time['printer_hours'][1]}시간",
+            rendered,
+        )
+        self.assertIn(
+            f"직접 작업 {one_unit_time['hands_on_hours'][0]}–"
+            f"{one_unit_time['hands_on_hours'][1]}시간",
+            rendered,
+        )
+        self.assertIn(
+            f"프린터 점유 {ten_unit_time['printer_hours_one_printer'][0]}–"
+            f"{ten_unit_time['printer_hours_one_printer'][1]}시간",
+            rendered,
+        )
+        self.assertIn(
+            f"직접 작업 {ten_unit_time['hands_on_hours'][0]}–"
+            f"{ten_unit_time['hands_on_hours'][1]}시간",
+            rendered,
+        )
 
     def test_slide_07_uses_actual_roll_mixer_fault_debugging_path(self) -> None:
         slide = self.slide_source("07")
@@ -563,7 +637,7 @@ class Presentation10MinuteBrowserWrapTests(unittest.TestCase):
             """
             (() => {
               const stage = document.querySelector('deck-stage');
-              const targets = [2, 4, 7, 9, 11, 13, 14];
+              const targets = [2, 4, 7, 8, 9, 11, 13, 14];
               const findings = {};
               for (const number of targets) {
                 stage.goTo(number - 1);
@@ -600,7 +674,7 @@ class Presentation10MinuteBrowserWrapTests(unittest.TestCase):
             })()
             """
         )
-        for number in (2, 4, 7, 9, 11, 13, 14):
+        for number in (2, 4, 7, 8, 9, 11, 13, 14):
             with self.subTest(slide=number):
                 item = result[str(number)]
                 self.assertEqual(item["marker"], str(number), result)

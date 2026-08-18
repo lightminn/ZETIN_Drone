@@ -15,7 +15,7 @@
 | 1 | 기체·제어 보드·펌웨어·검증 환경을 연결한 개발 결과 | [`BRIEF.md`](BRIEF.md), [`../ai-startup-camp-drone/index.html`](../ai-startup-camp-drone/index.html) | 결과발표의 범위. 자유비행 완료 주장이 아님 |
 | 2 | 상용 제품은 현장 운용, 자작 시스템은 측정·오류 주입·디버깅 학습에 적합 | [`BRIEF.md`](BRIEF.md), [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino), [`test_sil_attitude.cpp`](../../../tools/native_tests/test_sil_attitude.cpp) | 목적에 따른 선택. 상용 비행제어기보다 우수하다는 주장이 아님 |
 | 3 | 센서 → 추정 → 목표 → 제어 → 믹서 → 기체의 폐루프 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino), [`test_sil_attitude.cpp`](../../../tools/native_tests/test_sil_attitude.cpp) | 현행 펌웨어와 SIL 구조의 요약 |
-| 4 | CAD → 출력 → 조립 → 수정의 래피드 프로토타이핑과 1대·10대 제작 계획 | [`cad-top.png`](assets/cad-top.png), [`frame-iterations.jpeg`](assets/frame-iterations.jpeg), [`pcb-built.jpeg`](assets/pcb-built.jpeg), [`PRODUCTION_ESTIMATE.md`](../ai-startup-camp-drone/PRODUCTION_ESTIMATE.md), [`production_estimate.json`](../ai-startup-camp-drone/production_estimate.json) | 사진은 실제 제작 자산. 시간은 실측이 아닌 계획 시나리오이고 비용은 가격이 확인된 참고 품목의 합계. 완성기 총원가나 검증된 BOM이 아님 |
+| 4 | CAD → 출력 → 조립 → 수정의 래피드 프로토타이핑, 프린터 점유·직접 작업 계획과 가격 확인 품목별 산정 | [`cad-top.png`](assets/cad-top.png), [`frame-iterations.jpeg`](assets/frame-iterations.jpeg), [`pcb-built.jpeg`](assets/pcb-built.jpeg), [`PRODUCTION_ESTIMATE.md`](../ai-startup-camp-drone/PRODUCTION_ESTIMATE.md), [`production_estimate.json`](../ai-startup-camp-drone/production_estimate.json) | 사진은 실제 제작 자산. 2~3일·10~20일은 프린터 한 대 기준 계획 경과이며 납기 약속이 아님. 비용은 가격이 확인된 참고 품목의 합계이고 완성기 총원가나 검증된 BOM이 아님 |
 | 5 | M1 전좌 CW, M2 후우 CW, M3 전우 CCW, M4 후좌 CCW와 차동 믹서 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `pinM1`~`pinM4`, `mixAndDesaturate()`; [`power_on_bench_procedure.md`](../../power_on_bench_procedure.md) Stage A | 현행 핀·믹서 계약과 실물 회전 방향 확인 절차. 실제 장착 결과는 매 비행 전 다시 확인할 항목 |
 | 6 | 가속도 신뢰도에 따라 α=0.999 / 0.9995 / 0.9998 선택 | [`dual_imu_cascade_pwm.ino`](../../../firmware/flight/dual_imu_cascade_pwm/dual_imu_cascade_pwm.ino) `compute_alpha()`, `angleX`, `angleY` | 현행 펌웨어 계산. 시각화는 개념 설명용 |
 | 7 | Roll 믹서 보정 방향 오류를 증상 → 로그·축 비교 → 원인 → SIL 재현 → 수정 검증으로 추적 | [`test_sil_attitude.cpp`](../../../tools/native_tests/test_sil_attitude.cpp) `SIL_INJECT_SIGN_FAULT`, `inject_roll_sign_fault`, `integratePlant()` 488~501행 | 변이는 자이로 부호가 아니라 Roll 믹서 보정 R 전체를 R→−R로 뒤집음. host SIL이며 실기 결함 주입 증거가 아님 |
@@ -35,6 +35,8 @@
 - 가정: 부품 재고, 설계·펌웨어 준비, 조립 완료 FC PCB, 프린터 한 대,
   기체당 출력 질량 0.4~0.8kg, 유효 출력량 16.7g/h, 첫 출력 성공
 - 가격 확인 참고 품목 합계: 1대 약 35.5~37.1만 원, 10대 약 355~371만 원
+- 1대 가격 확인 품목: 모터 7.8~8.2만 원, ESC 17.5만 원, MCU·센서 2.3만 원,
+  프레임 1.1~2.2만 원, 배터리·프로펠러 6.8만 원
 - 가격 미포함: 자체 FC PCB와 전원·보호 회로, 배선·커넥터·XT60·수축튜브,
   나사·인서트·스탠드오프, 배송·관부가세·환전 수수료, 인건비·장비 감가,
   실패 출력·재작업, 자유비행 튜닝과 반복 비행 검증

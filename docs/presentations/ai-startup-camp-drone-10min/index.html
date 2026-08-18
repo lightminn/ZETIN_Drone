@@ -108,9 +108,9 @@
     </x-import>
   </section>
 
-  <section data-label="래피드 프로토타이핑" data-screen-label="04" data-speaker-notes="CAD 형상을 바로 출력하고 조립하면서 나사 간격, 적층 방향과 배선 통로를 수정한 래피드 프로토타이핑 결과이다. 제작 규모는 부품 재고와 조립 완료된 FC PCB가 있고 프린터 한 대에서 첫 출력이 성공한다는 일정 시나리오이다. 1대는 프린터 점유 24~48시간과 직접 작업 6~10인시, 10대는 프린터 점유 240~480시간과 직접 작업 60~100인시로 산정했다. 기체당 출력 질량 0.4~0.8kg과 시간당 유효 출력량 16.7g을 둔 계획 가정이며 실측이 아니다. 비용은 대체 부품을 포함해 가격이 확인된 참고 품목의 합계이다. 완성기 총원가나 검증된 BOM이 아니며 FC PCB, 전원·보호 회로, 배선·커넥터·체결부품, 배송·관부가세·환전 수수료, 인건비·장비 감가, 재출력·재작업, 비행 튜닝은 포함하지 않았다. Maker Space 박근원 선생님의 장비·제작 지원에 감사드린다." style="background:#fff">
+  <section data-label="래피드 프로토타이핑" data-screen-label="04" data-speaker-notes="CAD 형상을 바로 출력하고 조립하면서 나사 간격, 적층 방향과 배선 통로를 수정한 래피드 프로토타이핑 결과이다. 제작 규모는 부품 재고와 조립 완료된 FC PCB가 있고 프린터 한 대에서 첫 출력이 성공한다는 일정 시나리오이다. 화면의 2~3일과 10~20일은 프린터 한 대 기준의 계획 경과이며 납기 약속이 아니다. 1대는 프린터 점유 24~48시간과 직접 작업 6~10인시, 10대는 프린터 점유 240~480시간과 직접 작업 60~100인시로 산정했다. 기체당 출력 질량 0.4~0.8kg과 시간당 유효 출력량 16.7g을 둔 계획 가정이며 실측이 아니다. 가격이 확인된 1대 참고 품목은 모터 7.8~8.2만 원, ESC 17.5만 원, MCU·센서 2.3만 원, 프레임 1.1~2.2만 원, 배터리·프로펠러 6.8만 원이다. 합계는 1대 약 35.5~37.1만 원, 10대 환산 약 355~371만 원이다. 완성기 총원가나 검증된 BOM이 아니며 FC PCB, 전원·보호 회로, 배선·커넥터·체결부품, 배송·관부가세·환전 수수료, 인건비·장비 감가, 재출력·재작업, 비행 튜닝은 포함하지 않았다. Maker Space 박근원 선생님의 장비·제작 지원에 감사드린다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="래피드 프로토타이핑">
-      <div class="fill" data-result-refresh="4" style="display:grid;grid-template-rows:minmax(0,1fr) auto 52px;gap:10px">
+      <div class="fill" data-result-refresh="4" style="display:grid;grid-template-rows:minmax(0,1fr) auto auto 48px;gap:8px">
         <div data-result-element style="display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:14px;min-height:0">
           <figure style="display:flex;flex-direction:column;gap:7px;min-height:0">
             <div class="panel" style="flex:1;display:grid;place-items:center;overflow:hidden"><img src="assets/cad-top.png" alt="자체 설계한 X자 프레임 CAD 상면" style="width:100%;height:100%;object-fit:contain"></div>
@@ -128,12 +128,20 @@
             <figcaption style="font-size:20.5337px;font-weight:750"><span style="color:var(--uos-blue)">조립</span> · 보드 위치와 배선 통로 확인</figcaption>
           </figure>
         </div>
-        <div data-result-element style="display:grid;grid-template-columns:auto 1fr 1fr;gap:12px;align-items:stretch">
-          <div style="background:var(--uos-blue);color:#fff;padding:11px 16px;border-radius:4px;display:grid;place-items:center;font-size:20.5337px;font-weight:800;white-space:nowrap">CAD → 출력 → 조립 → 수정</div>
-          <div style="border-left:6px solid var(--uos-blue);background:#eaf2fb;padding:9px 14px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center"><strong style="font-size:22px">1대 · 2–3일</strong><span style="font-size:18.7px;line-height:1.28">직접 작업 6–10인시<br>가격 확인 품목 <strong>35.5–37.1만 원</strong></span></div>
-          <div style="border-left:6px solid #7f8a9a;background:#f2f4f7;padding:9px 14px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center"><strong style="font-size:22px">10대 · 10–20일</strong><span style="font-size:18.7px;line-height:1.28">직접 작업 60–100인시<br>가격 확인 품목 <strong>355–371만 원</strong></span></div>
+        <div data-result-element style="display:grid;grid-template-columns:.72fr 1.14fr 1.14fr;gap:10px;align-items:stretch">
+          <div style="background:var(--uos-blue);color:#fff;padding:9px 14px;border-radius:4px;display:grid;place-items:center;font-size:20.5337px;font-weight:800;white-space:nowrap">CAD → 출력 → 조립 → 수정</div>
+          <div style="border-left:6px solid var(--uos-blue);background:#eaf2fb;padding:8px 13px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center"><strong style="font-size:22px">1대</strong><span style="font-size:18.7px;line-height:1.23"><strong>프린터 1대 기준 · 약 2–3일</strong><br>프린터 점유 24–48시간<br>직접 작업 6–10시간</span></div>
+          <div style="border-left:6px solid #7f8a9a;background:#f2f4f7;padding:8px 13px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center"><strong style="font-size:22px">10대</strong><span style="font-size:18.7px;line-height:1.23"><strong>프린터 1대 기준 · 약 10–20일</strong><br>프린터 점유 240–480시간<br>직접 작업 60–100시간</span></div>
         </div>
-        <div data-result-element style="display:flex;flex-direction:column;gap:3px;justify-content:center;font-size:18.7px;line-height:1.25;color:var(--uos-ink-muted);min-width:0">
+        <div data-result-element style="display:grid;grid-template-columns:1.15fr .85fr 1.15fr 1.25fr 1.4fr 1.7fr;gap:7px;align-items:stretch;font-size:18.7px;line-height:1.24;min-width:0">
+          <div style="border-top:5px solid var(--uos-blue);background:#eaf2fb;padding:8px 6px">모터 7.8–8.2만 원</div>
+          <div style="border-top:5px solid var(--uos-blue);background:#eaf2fb;padding:8px 6px">ESC 17.5만 원</div>
+          <div style="border-top:5px solid var(--uos-blue);background:#eaf2fb;padding:8px 6px">MCU·센서 2.3만 원</div>
+          <div style="border-top:5px solid var(--uos-blue);background:#eaf2fb;padding:8px 6px">프레임 1.1–2.2만 원</div>
+          <div style="border-top:5px solid var(--uos-blue);background:#eaf2fb;padding:8px 6px">배터리·프로펠러 6.8만 원</div>
+          <div style="background:var(--uos-blue);color:#fff;padding:8px 11px"><strong>1대 합계 35.5–37.1만 원</strong><br>10대 환산 355–371만 원</div>
+        </div>
+        <div data-result-element style="display:flex;flex-direction:column;gap:2px;justify-content:center;font-size:18.7px;line-height:1.22;color:var(--uos-ink-muted);min-width:0">
           <div style="min-width:0"><strong style="color:var(--uos-blue)">계획 추정</strong> · 부품 보유 · 조립 완료 FC PCB · 프린터 1대 · 첫 출력 성공</div>
           <div style="min-width:0;font-size:19.8px">참고 품목 합계 · 완성기 총액·확정 BOM 아님 · <span class="nowrap">FC PCB·전원·배선·배송·인건비</span> 등 별도</div>
         </div>
@@ -239,11 +247,11 @@
 
   <section data-label="SIL" data-screen-label="08" data-speaker-notes="SIL 하니스는 실제 비행 펌웨어 파일을 테스트에 직접 포함한 구조이다. 실제 제어 태스크가 1밀리초 대기 지점에 도달할 때마다 독립 물리 모델이 직전 모터 출력으로 기체를 움직이고, 그 상태에서 듀얼 IMU 원시값을 합성하는 구조이다. 정상 조건은 수렴하고 롤 믹서 배분 부호를 뒤집은 변이는 같은 판정에서 실패한 결과이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 펌웨어 기반 SIL">
-      <div class="fill" style="display:grid;grid-template-columns:.92fr 1.08fr;grid-template-rows:1fr auto;gap:20px 28px">
+      <div class="fill" data-result-refresh="8" style="display:grid;grid-template-columns:.98fr 1.02fr;grid-template-rows:1fr auto;gap:20px 28px">
         <div style="display:flex;flex-direction:column;gap:15px;min-height:0">
           <div style="background:#06152f;color:#fff;border-radius:4px;padding:20px 22px;flex:1" class="mono">
             <div style="font-size:18.7px;color:#72b7ff;margin-bottom:13px">test_sil_attitude.cpp · 실제 코드</div>
-            <div style="font-size:17.6px;line-height:1.5;white-space:nowrap"><span style="color:#6f7886">14</span>&nbsp; <span style="color:#9bdcff">#include</span> "dual_imu_cascade_pwm.ino"<br><br><span style="color:#6f7886">678</span> arduino_fake::<span style="color:#9bdcff">pre_tick_hook</span> = [&amp;](uint32_t tick) {<br><span style="color:#6f7886">679</span>&nbsp;&nbsp; if (tick &gt; 0) {<br><span style="color:#6f7886">680</span>&nbsp;&nbsp;&nbsp;&nbsp; plant_step = integratePlant(<br><span style="color:#6f7886">681</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; state, disturbanceAt(config, tick - 1U, state),<br><span style="color:#6f7886">682</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; config.inject_roll_sign_fault, config.vertical_enabled,<br><span style="color:#6f7886">683</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; config.plant_parameters);<br><span style="color:#6f7886">684</span>&nbsp;&nbsp; }</div>
+            <div data-result-element style="font-size:18.7px;line-height:1.47;white-space:nowrap"><span style="color:#6f7886">14</span>&nbsp; <span style="color:#9bdcff">#include</span> "dual_imu_cascade_pwm.ino"<br><br><span style="color:#6f7886">678</span> arduino_fake::<span style="color:#9bdcff">pre_tick_hook</span> = [&amp;](uint32_t tick) {<br><span style="color:#6f7886">679</span>&nbsp;&nbsp; if (tick &gt; 0) {<br><span style="color:#6f7886">680</span>&nbsp;&nbsp;&nbsp;&nbsp; plant_step = integratePlant(<br><span style="color:#6f7886">681</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; state, disturbanceAt(config, tick - 1U, state),<br><span style="color:#6f7886">682</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; config.inject_roll_sign_fault, config.vertical_enabled,<br><span style="color:#6f7886">683</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; config.plant_parameters);<br><span style="color:#6f7886">684</span>&nbsp;&nbsp; }</div>
           </div>
           <div class="caption">제어 코드를 다시 구현하지 않고 실기와 같은 파일을 컴파일</div>
         </div>
@@ -261,7 +269,7 @@
             <div style="border-left:6px solid #b04a55;padding:14px 16px;background:#fff0f1"><div class="eyebrow" style="color:#9b3f49">오류 주입</div><div style="font-size:22px;font-weight:750">Roll 배분 R→−R에서 실패</div></div>
           </div>
         </div>
-        <div class="keyline" style="grid-column:1 / 3">정상 빌드의 통과와 의도한 오류의 실패를 함께 확인하는 것이 검출력 검증이다.</div>
+        <div data-result-element class="keyline" style="grid-column:1 / 3">정상 빌드의 통과와 의도한 오류의 실패를 함께 확인하는 것이 검출력 검증이다.</div>
       </div>
     </x-import>
   </section>
