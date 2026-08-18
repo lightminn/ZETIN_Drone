@@ -294,6 +294,151 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                     scene.hold_and_clear = lambda *args, **kwargs: None
                     scene.render()
 
+    def test_helicopter_tail_force_opposes_main_rotor_reaction_torque(self) -> None:
+        from manim import tempconfig
+
+        module = load_significance_module()
+        self.assertIsNotNone(module)
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            scene = module.HelicopterQuadcopterTorqueAudience()
+            scene.hold_and_clear = lambda *args, **kwargs: None
+            scene.render()
+
+        objects = list(self._mobjects(scene))
+        reaction = next(
+            item
+            for item in objects
+            if type(item).__name__ == "CurvedArrow"
+            and str(item.get_color()) == module.ORANGE
+        )
+        tail_force = next(
+            item
+            for item in objects
+            if type(item).__name__ == "Arrow"
+            and str(item.get_color()) == module.CYAN
+            and item.get_center()[0] < 0
+        )
+
+        reaction_start = reaction.get_start()
+        reaction_end = reaction.get_end()
+        rightmost_endpoint = max(
+            (reaction_start, reaction_end), key=lambda point: point[0]
+        )
+        rotor_center = (tail_force.get_start()[0], rightmost_endpoint[1])
+        reaction_moment = (
+            (reaction_start[0] - rotor_center[0])
+            * (reaction_end[1] - rotor_center[1])
+            - (reaction_start[1] - rotor_center[1])
+            * (reaction_end[0] - rotor_center[0])
+        )
+        tail_arm = tail_force.get_start()[:2] - rotor_center
+        tail_vector = tail_force.get_end()[:2] - tail_force.get_start()[:2]
+        tail_moment = tail_arm[0] * tail_vector[1] - tail_arm[1] * tail_vector[0]
+
+        self.assertNotEqual(reaction_moment, 0)
+        self.assertNotEqual(tail_moment, 0)
+        self.assertLess(reaction_moment * tail_moment, 0)
+
+    def test_helicopter_tail_force_clears_explanation_labels(self) -> None:
+        from manim import tempconfig
+
+        module = load_significance_module()
+        self.assertIsNotNone(module)
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            scene = module.HelicopterQuadcopterTorqueAudience()
+            scene.hold_and_clear = lambda *args, **kwargs: None
+            scene.render()
+
+        objects = list(self._mobjects(scene))
+        tail_force = next(
+            item
+            for item in objects
+            if type(item).__name__ == "Arrow"
+            and str(item.get_color()) == module.CYAN
+            and item.get_center()[0] < 0
+        )
+        diagram_obstacles = [tail_force] + [
+            item
+            for item in objects
+            if type(item).__name__ in {"Line", "Ellipse"}
+            and item.get_center()[0] < 0
+        ]
+        for label_text in ("헬리콥터", "꼬리로터힘으로상쇄"):
+            label = self._text(scene, label_text)
+            for obstacle in diagram_obstacles:
+                horizontal_overlap = (
+                    obstacle.get_left()[0] < label.get_right()[0]
+                    and obstacle.get_right()[0] > label.get_left()[0]
+                )
+                vertical_overlap = (
+                    obstacle.get_bottom()[1] < label.get_top()[1]
+                    and obstacle.get_top()[1] > label.get_bottom()[1]
+                )
+                self.assertFalse(horizontal_overlap and vertical_overlap)
+
+    def test_swarm_unimplemented_badge_precedes_multi_aircraft_network(self) -> None:
+        from manim import tempconfig
+
+        module = load_significance_module()
+        self.assertIsNotNone(module)
+        snapshots = []
+        with tempconfig(
+            {
+                "dry_run": True,
+                "disable_caching": True,
+                "verbosity": "ERROR",
+                "frame_rate": 1,
+                "progress_bar": "none",
+            }
+        ):
+            scene = module.SwarmSystemAudience()
+            original_play = scene.play
+
+            def record_scene_state(*animations, **kwargs):
+                result = original_play(*animations, **kwargs)
+                objects = list(self._mobjects(scene))
+                motor_count = sum(
+                    type(item).__name__ == "Circle"
+                    and str(item.get_stroke_color()) == module.CYAN
+                    for item in objects
+                )
+                rendered_text = {
+                    item.text
+                    for item in objects
+                    if getattr(item, "text", None) is not None
+                }
+                snapshots.append((motor_count, rendered_text))
+                return result
+
+            scene.play = record_scene_state
+            scene.hold_and_clear = lambda *args, **kwargs: None
+            scene.render()
+
+        multi_aircraft_snapshots = [
+            rendered_text
+            for motor_count, rendered_text in snapshots
+            if motor_count >= 20
+        ]
+        self.assertTrue(multi_aircraft_snapshots)
+        for rendered_text in multi_aircraft_snapshots:
+            self.assertIn("후속목표·미구현·미검증", rendered_text)
+
 
 @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")
 class PresentationVisualizationDeliveryTests(unittest.TestCase):

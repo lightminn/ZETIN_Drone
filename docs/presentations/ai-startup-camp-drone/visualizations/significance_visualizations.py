@@ -396,15 +396,17 @@ class HelicopterQuadcopterTorqueAudience(ExplainerScene):
         )
         tail_force = Arrow(
             helicopter.get_center() + DOWN * 1.7,
-            helicopter.get_center() + DOWN * 1.7 + RIGHT * 1.25,
+            helicopter.get_center() + DOWN * 1.7 + LEFT * 1.25,
             buff=0,
             color=CYAN,
             stroke_width=7,
         )
         heli_labels = VGroup(
             text("헬리콥터", 28, WHITE, "BOLD"),
-            text("꼬리로터 힘으로 상쇄", 26, CYAN, "BOLD"),
-        ).arrange(DOWN, buff=0.18).move_to(left_panel.get_center() + DOWN * 1.55)
+            text("꼬리로터 힘으로\n상쇄", 26, CYAN, "BOLD"),
+        ).arrange(DOWN, buff=0.18).move_to(
+            left_panel.get_center() + LEFT * 1.85 + UP * 1.55
+        )
         self.play(
             FadeIn(helicopter), Create(reaction), GrowArrow(tail_force), FadeIn(heli_labels), run_time=1.0
         )
@@ -446,6 +448,11 @@ class SwarmSystemAudience(ExplainerScene):
 
     def construct(self) -> None:
         self.heading("군집 확장", "기체 수가 늘면 비행 제어 밖의 시스템 요구가 추가된다")
+        status = text("후속 목표 · 미구현 · 미검증", 27, RED, "BOLD")
+        status.move_to(RIGHT * 4.75 + UP * 2.15)
+        status_box = SurroundingRectangle(status, color=RED, buff=0.15, stroke_width=3)
+        self.play(FadeIn(status), Create(status_box), run_time=0.55)
+
         single = x_quadcopter_icon(0.62).move_to(LEFT * 4.9 + DOWN * 0.15)
         single_label = text("검증이 필요한 단일 기체", 27, WHITE, "BOLD")
         single_label.next_to(single, DOWN, buff=0.3)
@@ -483,9 +490,5 @@ class SwarmSystemAudience(ExplainerScene):
             self.play(ReplacementTransform(current, next_requirement), run_time=0.45)
             current = next_requirement
 
-        status = text("후속 목표 · 미구현 · 미검증", 27, RED, "BOLD")
-        status.move_to(RIGHT * 4.75 + UP * 2.15)
-        status_box = SurroundingRectangle(status, color=RED, buff=0.15, stroke_width=3)
-        self.play(FadeIn(status), Create(status_box), run_time=0.55)
         self.conclusion("군집은 단일 기체 검증 뒤에 좌표·통신·회피·안전을 더해야 하는 후속 목표이다", RED)
         self.hold_and_clear(1.25)
