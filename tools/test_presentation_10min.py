@@ -82,6 +82,16 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         self.parser = _DeckParser()
         self.parser.feed(self.source)
 
+    def slide_source(self, screen_label: str) -> str:
+        match = re.search(
+            rf'<section\b(?=[^>]*data-screen-label="{re.escape(screen_label)}")[^>]*>'
+            r".*?</section>",
+            self.source,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(match, f"missing slide {screen_label}")
+        return match.group(0)
+
     def test_deck_has_fourteen_numbered_slides_with_speaker_notes(self) -> None:
         self.assertEqual(len(self.parser.sections), EXPECTED_SLIDES)
         self.assertEqual(
@@ -91,6 +101,32 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         self.assertTrue(
             all(item.get("data-speaker-notes", "").strip() for item in self.parser.sections)
         )
+
+    def test_deck_identity_is_a_results_presentation(self) -> None:
+        self.assertIn("<title>자작 드론 비행 제어 개발 결과</title>", self.source)
+        slide = self.slide_source("01")
+        self.assertIn('title="자작 드론\n비행 제어 개발 결과"', slide)
+        self.assertIn('subtitle="기체·제어 보드·펌웨어·검증"', slide)
+
+    def test_technical_slide_titles_are_short_and_natural(self) -> None:
+        expected_titles = {
+            "03": "비행 제어 시스템",
+            "05": "쿼드콥터의 힘과 토크",
+            "06": "자이로와 가속도계 융합",
+            "08": "실제 펌웨어 기반 SIL",
+            "09": "캐스케이드 자세 제어",
+            "10": "Yaw 기준과 지자기 보정",
+            "11": "조종 신호 두절 시 안전 전환",
+            "12": "테더 자세 제어 시험",
+        }
+        for screen_label, expected_title in expected_titles.items():
+            with self.subTest(slide=screen_label):
+                slide = self.slide_source(screen_label)
+                self.assertIn(f'title="{expected_title}"', slide)
+
+        slide_08 = self.slide_source("08")
+        visible_markup = slide_08.split(">", 1)[1]
+        self.assertNotIn("1ms", visible_markup)
 
     def test_deck_avoids_team_dates_hashes_and_scheduled_duration_copy(self) -> None:
         folded = self.source.casefold()
@@ -148,9 +184,129 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
                     missing.append(source)
         self.assertEqual(missing, [])
 
+    def test_slide_02_distinguishes_operational_products_from_learning_system(self) -> None:
+        slide = self.slide_source("02")
+        for required in (
+            'title="상용 제품과 자작 학습"',
+            "현장 운용",
+            "학습·검증",
+            "오류 주입",
+            "디버깅",
+            "우열",
+        ):
+            self.assertIn(required, slide)
+        self.assertIn("data-teamless-crop", slide)
+        self.assertNotIn("왜 비행제어 컴퓨터까지 직접 만들었나", slide)
+
+    def test_slide_04_presents_rapid_prototyping_and_planning_bounds(self) -> None:
+        slide = self.slide_source("04")
+        for required in (
+            'title="래피드 프로토타이핑"',
+            'src="assets/cad-top.png"',
+            'src="assets/frame-iterations.jpeg"',
+            'src="assets/pcb-built.jpeg"',
+            "CAD → 출력 → 조립 → 수정",
+            "Maker Space 박근원 선생님의 장비·제작 지원에 감사드립니다.",
+            "계획 추정",
+            "부품 보유",
+            "조립 완료 FC PCB",
+            "프린터 1대",
+            "첫 출력 성공",
+            "1대 · 2–3일",
+            "직접 작업 6–10인시",
+            "35.5–37.1만 원",
+            "10대 · 10–20일",
+            "직접 작업 60–100인시",
+            "355–371만 원",
+            "참고 품목 합계",
+            "완성기 총액·확정 BOM 아님",
+            "FC PCB·전원·배선·배송·인건비",
+            "등 별도",
+            "data-teamless-crop",
+        ):
+            self.assertIn(required, slide)
+
+    def test_slide_07_uses_actual_roll_mixer_fault_debugging_path(self) -> None:
+        slide = self.slide_source("07")
+        for required in (
+            'title="문제 추적과 수정"',
+            "증상",
+            "로그·축 비교",
+            "원인",
+            "SIL 재현",
+            "수정 검증",
+            "Roll 믹서",
+            "R → −R",
+            "디버깅",
+            "오류 주입 스위치",
+        ):
+            self.assertIn(required, slide)
+        visible_markup = slide.split(">", 1)[1]
+        self.assertNotIn("SIL_INJECT_", visible_markup)
+        self.assertNotIn("자이로 부호를 반전", slide)
+
+    def test_slide_09_explains_relative_loop_rates_without_fixed_numbers(self) -> None:
+        slide = self.slide_source("09")
+        for required in ("바깥 자세 루프", "안쪽 각속도 루프", "더 빠르게", "현행 구현값"):
+            self.assertIn(required, slide)
+        for forbidden in ("250Hz", "1kHz", "250 Hz", "1 kHz"):
+            self.assertNotIn(forbidden, slide)
+
+    def test_slide_11_uses_condition_based_safety_and_evidence_boundaries(self) -> None:
+        slide = self.slide_source("11")
+        for required in (
+            "신호 유효",
+            "신호 두절",
+            "호버 추정 없음",
+            "저스로틀",
+            "호버 추정 유효",
+            "저스로틀 초과",
+            "host·SIL",
+            "보드 검증 전",
+            "착지 판단",
+        ):
+            self.assertIn(required, slide)
+        self.assertNotIn("500ms", slide)
+        self.assertNotIn("WDT panic 재부팅 후", slide)
+        self.assertNotIn("지상인가", slide)
+        self.assertNotIn("공중인가", slide)
+
+    def test_slide_13_separates_short_mid_and_long_term_goals(self) -> None:
+        slide = self.slide_source("13")
+        for required in (
+            'title="단기·중기·장기 목표"',
+            "단기",
+            "중기",
+            "장기",
+            "자세 제어",
+            "거리·광류",
+            "sim-to-real",
+            "군집 제어",
+            "구현 전",
+        ):
+            self.assertIn(required, slide)
+
+    def test_slide_14_closes_on_technical_results_and_learning_reuse(self) -> None:
+        slide = self.slide_source("14")
+        for required in (
+            'title="만든 것과 남긴 것"',
+            "하드웨어",
+            "소프트웨어",
+            "재현 가능한 검증",
+            "디버깅",
+            "기술 학습",
+        ):
+            self.assertIn(required, slide)
+
+    def test_audience_terms_use_plain_korean(self) -> None:
+        self.assertNotIn("지상국", self.source)
+        self.assertNotIn("센서를 오염", self.source)
+
 
 class Presentation10MinutePptxTests(unittest.TestCase):
-    def test_pptx_contains_fourteen_notes_and_one_h264_video(self) -> None:
+    """Structural check for the existing, intentionally stale PPTX snapshot."""
+
+    def test_existing_pptx_snapshot_contains_fourteen_notes_and_one_h264_video(self) -> None:
         self.assertTrue(PPTX_PATH.is_file(), f"missing generated PPTX: {PPTX_PATH}")
         presentation = Presentation(str(PPTX_PATH))
         self.assertEqual(len(presentation.slides), EXPECTED_SLIDES)
@@ -401,6 +557,117 @@ class Presentation10MinuteBrowserWrapTests(unittest.TestCase):
             """
         )
         self.assertEqual(splits, [], f"mid-token visual line breaks: {splits}")
+
+    def test_reworked_result_slides_fit_the_1280_by_720_content_frame(self) -> None:
+        result = self._evaluate(
+            """
+            (() => {
+              const stage = document.querySelector('deck-stage');
+              const targets = [2, 4, 7, 9, 11, 13, 14];
+              const findings = {};
+              for (const number of targets) {
+                stage.goTo(number - 1);
+                stage._fit();
+                const slide = stage._slides[number - 1];
+                const slideRect = slide.getBoundingClientRect();
+                const marker = slide.querySelector('[data-result-refresh]');
+                const elements = [...slide.querySelectorAll('[data-result-element]')];
+                const overflow = elements.flatMap(element => {
+                  const rect = element.getBoundingClientRect();
+                  return rect.left < slideRect.left - 1 || rect.top < slideRect.top - 1
+                    || rect.right > slideRect.right + 1 || rect.bottom > slideRect.bottom + 1
+                    ? [{text: element.textContent.trim().slice(0, 70)}]
+                    : [];
+                });
+                const smallText = elements.flatMap(element => {
+                  const style = getComputedStyle(element);
+                  const hasOwnText = [...element.childNodes].some(node =>
+                    node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+                  );
+                  const size = Number.parseFloat(style.fontSize);
+                  return hasOwnText && size < 18.7
+                    ? [{text: element.textContent.trim().slice(0, 70), size}]
+                    : [];
+                });
+                findings[number] = {
+                  marker: marker?.dataset.resultRefresh || null,
+                  markedElements: elements.length,
+                  overflow,
+                  smallText,
+                };
+              }
+              return findings;
+            })()
+            """
+        )
+        for number in (2, 4, 7, 9, 11, 13, 14):
+            with self.subTest(slide=number):
+                item = result[str(number)]
+                self.assertEqual(item["marker"], str(number), result)
+                self.assertGreater(item["markedElements"], 0, result)
+                self.assertEqual(item["overflow"], [], result)
+                self.assertEqual(item["smallText"], [], result)
+
+    def test_real_hover_video_autoplays_and_resets_after_leaving_slide(self) -> None:
+        self._evaluate("document.querySelector('deck-stage').goTo(11)")
+        deadline = time.monotonic() + 4.0
+        active = None
+        while time.monotonic() < deadline:
+            active = self._evaluate(
+                """
+                (() => {
+                  const video = document.querySelector(
+                    'video[src$="hover_demo.mp4"]'
+                  );
+                  if (!video) return null;
+                  return {
+                    paused: video.paused,
+                    currentTime: video.currentTime,
+                    muted: video.muted,
+                    controls: video.controls,
+                    loop: video.loop,
+                    playsInline: video.playsInline,
+                    readyState: video.readyState,
+                  };
+                })()
+                """
+            )
+            if active and not active["paused"] and active["currentTime"] > 0.2:
+                break
+            time.sleep(0.05)
+
+        self.assertIsNotNone(active)
+        self.assertFalse(active["paused"], active)
+        self.assertGreater(active["currentTime"], 0.2, active)
+        self.assertTrue(active["muted"], active)
+        self.assertTrue(active["controls"], active)
+        self.assertTrue(active["loop"], active)
+        self.assertTrue(active["playsInline"], active)
+
+        self._evaluate("document.querySelector('deck-stage').goTo(12)")
+        deadline = time.monotonic() + 2.0
+        previous = None
+        while time.monotonic() < deadline:
+            previous = self._evaluate(
+                """
+                (() => {
+                  const video = document.querySelector(
+                    'video[src$="hover_demo.mp4"]'
+                  );
+                  return video && {
+                    paused: video.paused,
+                    currentTime: video.currentTime,
+                  };
+                })()
+                """
+            )
+            if previous and previous["paused"] and previous["currentTime"] < 0.05:
+                break
+            time.sleep(0.05)
+
+        self.assertIsNotNone(previous)
+        self.assertTrue(previous["paused"], previous)
+        self.assertLess(previous["currentTime"], 0.05, previous)
 
 
 if __name__ == "__main__":
