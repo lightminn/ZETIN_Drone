@@ -92,9 +92,14 @@ class _DeckParser(HTMLParser):
                 "attrs": attributes,
                 "videos": [],
                 "images": [],
+                "elements": [],
+                "text": [],
             }
             self.sections.append(self.current_section)
-        elif tag == "video" and self.current_section is not None:
+        if self.current_section is not None:
+            self.current_section["elements"].append((tag, attributes))
+
+        if tag == "video" and self.current_section is not None:
             self.current_section["videos"].append(attributes)
         elif tag == "img" and self.current_section is not None:
             self.current_section["images"].append(attributes)
@@ -103,8 +108,156 @@ class _DeckParser(HTMLParser):
         if tag == "section":
             self.current_section = None
 
+    def handle_data(self, data: str) -> None:
+        if self.current_section is not None and data.strip():
+            self.current_section["text"].append(data.strip())
+
+
+def _slide_text(section: dict[str, object]) -> str:
+    return " ".join(str(item) for item in section["text"])
+
+
+def _slide_title(section: dict[str, object]) -> str | None:
+    for tag, attrs in section["elements"]:
+        if tag == "x-import" and attrs.get("title"):
+            return attrs["title"]
+    return None
+
 
 class PresentationVideoMarkupTests(unittest.TestCase):
+    def test_professor_feedback_slides_preserve_the_required_evidence_boundaries(self) -> None:
+        parser = _DeckParser()
+        parser.feed((DECK_DIR / "index.html").read_text(encoding="utf-8"))
+
+        self.assertEqual(len(parser.sections), 84)
+
+        slide14 = parser.sections[13]
+        slide14_text = _slide_text(slide14)
+        self.assertEqual(_slide_title(slide14), "상용 제품과 자작 학습")
+        for phrase in (
+            "빠른 운용",
+            "현장 적용",
+            "학습·검증",
+            "오류 재현",
+            "디버깅",
+            "우열이 아니라 목적의 차이",
+        ):
+            self.assertIn(phrase, slide14_text)
+        self.assertNotIn("듀얼 IMU 구성", slide14_text)
+        self.assertTrue(
+            any(
+                attrs.get("src") == "assets/image18.jpeg"
+                for attrs in slide14["images"]
+            )
+        )
+
+        slide22 = parser.sections[21]
+        slide22_text = _slide_text(slide22)
+        slide22_notes = str(slide22["attrs"].get("data-speaker-notes", ""))
+        self.assertEqual(_slide_title(slide22), "1대와 10대 제작 규모")
+        self.assertIn("예비 산정", slide22_text)
+        self.assertIn("완성 기체 총원가가 아니다", slide22_text)
+        self.assertTrue(
+            any(
+                attrs.get("src") == "assets/production-estimate.png"
+                for attrs in slide22["images"]
+            )
+        )
+        for phrase in (
+            "24~48시간",
+            "6~10인시",
+            "약 2~3일",
+            "240~480시간",
+            "60~100인시",
+            "약 10~20일",
+            "355,300~370,500원",
+            "3,553,000~3,705,000원",
+            "부품 재고",
+            "프린터 한 대",
+            "조립된 FC PCB",
+            "첫 출력 성공",
+            "검증된 BOM이 아니다",
+            "FC PCB",
+            "전원",
+            "배선",
+            "체결부품",
+            "배송·관부가세",
+            "인건비",
+            "재출력",
+            "비행 튜닝",
+        ):
+            self.assertIn(phrase, slide22_notes)
+
+        slide25 = parser.sections[24]
+        slide25_text = _slide_text(slide25)
+        self.assertEqual(_slide_title(slide25), "3D 프린팅 래피드 프로토타이핑")
+        for phrase in (
+            "CAD",
+            "출력",
+            "조립",
+            "수정",
+            "나사 간격",
+            "적층 방향",
+            "배선 통로",
+            "Maker Space 박근원 선생님의 장비·제작 지원에 감사드립니다.",
+        ):
+            self.assertIn(phrase, slide25_text)
+        self.assertNotIn("하루 안에", slide25_text)
+        self.assertTrue(
+            any(
+                attrs.get("src") == "assets/image14.jpeg"
+                for attrs in slide25["images"]
+            )
+        )
+
+        slide43 = parser.sections[42]
+        slide43_text = _slide_text(slide43)
+        slide43_notes = str(slide43["attrs"].get("data-speaker-notes", ""))
+        self.assertEqual(_slide_title(slide43), "문제 추적과 수정")
+        for phrase in (
+            "증상",
+            "기록·비교",
+            "원인 추적",
+            "오류 재현",
+            "수정 검증",
+            "Roll 믹서",
+            "실패를 재현",
+            "디버깅",
+        ):
+            self.assertIn(phrase, slide43_text)
+        self.assertIn("host SIL", slide43_notes)
+        self.assertIn("실기·비행 성능의 증거가 아니다", slide43_notes)
+
+        slide83 = parser.sections[82]
+        slide83_text = _slide_text(slide83)
+        slide83_notes = str(slide83["attrs"].get("data-speaker-notes", ""))
+        self.assertEqual(_slide_title(slide83), "단기·중기·장기 목표")
+        for phrase in (
+            "단기",
+            "반복 가능한 단일 기체 자세 제어",
+            "3901-L0X",
+            "착지 판단 검증",
+            "중기",
+            "반복 제작·교정",
+            "sim-to-real 경로 계획",
+            "다기체 운용 기반",
+            "장기",
+            "군집 제어",
+            "충돌 회피",
+            "집단 안전",
+            "통과 기준을 충족한 뒤",
+        ):
+            self.assertIn(phrase, slide83_text)
+        self.assertIn("아직 구현·검증하지 않은 계획", slide83_notes)
+
+        slide21_text = _slide_text(parser.sections[20])
+        self.assertIn("지상 제어 프로그램을 직접 설계·구현했다", slide21_text)
+        self.assertNotIn("지상국을 직접 설계·구현했다", slide21_text)
+
+        slide24_text = _slide_text(parser.sections[23])
+        self.assertIn("방위 센서 측정값에 간섭을 일으키기 때문이다", slide24_text)
+        self.assertNotIn("방위 센서를 오염시키기 때문이다", slide24_text)
+
     def test_deck_omits_zetin_team_name(self) -> None:
         source = (DECK_DIR / "index.html").read_text(encoding="utf-8")
 
@@ -504,6 +657,87 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         )
         self.assertTrue(result["timingVideoLoaded"], result)
         self.assertTrue(result["magChartLoaded"], result)
+
+    def test_professor_feedback_slides_render_visual_first_without_overflow(self) -> None:
+        self._open_deck()
+        result = self._evaluate(
+            r"""
+            (async () => {
+              const stage = document.querySelector('deck-stage');
+              const targets = [14, 22, 25, 43, 83];
+              const slides = {};
+              for (const number of targets) {
+                stage.goTo(number - 1);
+                stage._fit();
+                await new Promise(resolve => requestAnimationFrame(
+                  () => requestAnimationFrame(resolve)
+                ));
+                const slide = stage._slides[number - 1];
+                const slideRect = slide.getBoundingClientRect();
+                const scale = slideRect.width / 1280;
+                const marker = slide.querySelector('[data-professor-feedback]');
+                const markedElements = [...slide.querySelectorAll(
+                  '[data-purpose-column], [data-production-estimate], '
+                  + '[data-rapid-step], [data-debug-step], [data-goal-stage]'
+                )];
+                const overflow = markedElements.flatMap(element => {
+                  const rect = element.getBoundingClientRect();
+                  return rect.left < slideRect.left - 1 || rect.top < slideRect.top - 1
+                    || rect.right > slideRect.right + 1
+                    || rect.bottom > slideRect.bottom + 1
+                    ? [{text: element.textContent.trim().slice(0, 60)}]
+                    : [];
+                });
+                const image = slide.querySelector(
+                  'img[src$="image18.jpeg"], img[src$="production-estimate.png"], '
+                  + 'img[src$="image14.jpeg"]'
+                );
+                const imageRect = image?.getBoundingClientRect();
+                slides[number] = {
+                  marker: marker?.dataset.professorFeedback || null,
+                  text: slide.textContent.replace(/\s+/g, ' ').trim(),
+                  overflow,
+                  purposeColumns: slide.querySelectorAll('[data-purpose-column]').length,
+                  rapidSteps: slide.querySelectorAll('[data-rapid-step]').length,
+                  debugSteps: slide.querySelectorAll('[data-debug-step]').length,
+                  goalStages: slide.querySelectorAll('[data-goal-stage]').length,
+                  imageSource: image?.getAttribute('src') || null,
+                  imageLoaded: Boolean(image?.complete && image.naturalWidth),
+                  imageLogicalWidth: imageRect ? imageRect.width / scale : 0,
+                  imageLogicalHeight: imageRect ? imageRect.height / scale : 0,
+                  productionSize: image?.src.endsWith('production-estimate.png')
+                    ? [image.naturalWidth, image.naturalHeight] : null,
+                };
+              }
+              return slides;
+            })()
+            """,
+            await_promise=True,
+        )
+
+        for number in (14, 22, 25, 43, 83):
+            with self.subTest(slide=number):
+                self.assertEqual(result[str(number)]["marker"], str(number), result)
+                self.assertEqual(result[str(number)]["overflow"], [], result)
+
+        self.assertEqual(result["14"]["purposeColumns"], 2, result)
+        self.assertTrue(result["14"]["imageLoaded"], result)
+        self.assertGreaterEqual(result["14"]["imageLogicalWidth"], 360, result)
+
+        self.assertEqual(
+            result["22"]["imageSource"], "assets/production-estimate.png", result
+        )
+        self.assertTrue(result["22"]["imageLoaded"], result)
+        self.assertEqual(result["22"]["productionSize"], [1280, 720], result)
+        self.assertGreaterEqual(result["22"]["imageLogicalWidth"], 1040, result)
+
+        self.assertEqual(result["25"]["rapidSteps"], 4, result)
+        self.assertTrue(result["25"]["imageLoaded"], result)
+        self.assertGreaterEqual(result["25"]["imageLogicalWidth"], 600, result)
+        self.assertGreaterEqual(result["25"]["imageLogicalHeight"], 360, result)
+
+        self.assertEqual(result["43"]["debugSteps"], 5, result)
+        self.assertEqual(result["83"]["goalStages"], 3, result)
 
     def test_concept_slides_use_relative_physical_language(self) -> None:
         self._open_deck()

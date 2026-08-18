@@ -192,28 +192,31 @@
     </x-import>
   </section>
 
-  <section data-label="직접 만든 이유" data-screen-label="14" data-speaker-notes="기성 FC는 빠르게 운용할 수 있지만, 오류 주입과 제어 경로 계측에는 별도의 수정 환경이 필요하다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="자체 비행제어기를 만든 이유">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:40px;align-items:stretch">
-        <div style="display:flex;flex-direction:column;justify-content:center">
-          <div style="display:grid;grid-template-columns:170px 1fr;gap:26px;border-top:6px solid var(--uos-blue);padding:22px 0">
-            <div style="font-size:22px;font-weight:700;color:var(--uos-blue)">제어 과정 확인</div>
-            <div style="font-size:22px;line-height:1.55">기성 FC는 설정과 운용이 빠르지만, 부호·축 오류 주입과 제어 경로 계측에는 별도의 펌웨어 수정·검증 환경이 필요하다.</div>
+  <section data-label="상용 제품과 자작 학습" data-screen-label="14" data-speaker-notes="상용 비행제어기는 빠른 설정과 운용, 검증된 생태계, 현장 적용에 유리하다. 실제 운용이 목적이면 상용 제품을 쓰는 편이 더 적합하다. 이 프로젝트의 자작 비행제어기는 성능 우위를 주장하기 위한 제품이 아니라 센서 입력부터 모터 출력까지 관찰하고, 오류를 의도적으로 재현하며, 안전 설계와 테스트를 직접 실습하기 위한 학습·검증 플랫폼이다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="상용 제품과 자작 학습">
+      <div data-professor-feedback="14" style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr .92fr;gap:34px;align-items:stretch">
+        <div style="display:flex;flex-direction:column;justify-content:center;gap:16px;min-width:0">
+          <div data-purpose-column="operation" style="border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule);padding:18px 4px 20px;display:grid;grid-template-columns:128px 1fr;gap:20px;align-items:start">
+            <div>
+              <div style="font-size:19.8px;font-weight:700;color:var(--uos-ink-muted)">운용</div>
+              <div style="font-size:25.3px;font-weight:800;color:var(--uos-blue);margin-top:6px">상용 비행제어기</div>
+            </div>
+            <div style="font-size:22px;line-height:1.5">빠른 운용과 검증된 생태계가 강점이다. <strong>현장 적용과 즉시 비행</strong>이 목적이면 상용 제품이 더 적합하다.</div>
           </div>
-          <div style="display:grid;grid-template-columns:170px 1fr;gap:26px;border-top:1px solid var(--uos-rule);padding:22px 0">
-            <div style="font-size:22px;font-weight:700;color:var(--uos-blue)">고장 주입 가능</div>
-            <div style="font-size:22px;line-height:1.55">펌웨어를 직접 작성해 오류를 재현하고, 안전장치와 테스트가 실제로 반응하는지 확인할 수 있다.</div>
+          <div data-purpose-column="learning" style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px 22px;display:grid;grid-template-columns:128px 1fr;gap:20px;align-items:start">
+            <div>
+              <div style="font-size:19.8px;font-weight:700;opacity:.82">학습·검증</div>
+              <div style="font-size:25.3px;font-weight:800;margin-top:6px">자작 제어기</div>
+            </div>
+            <div style="font-size:22px;line-height:1.5">제어 경로를 관찰하고 <strong>오류 재현과 안전 설계</strong>를 실습한다. 실패 원인을 스스로 <strong>디버깅</strong>하는 능력을 기르는 플랫폼이다.</div>
           </div>
-          <div style="display:grid;grid-template-columns:170px 1fr;gap:26px;border-top:1px solid var(--uos-rule);border-bottom:1px solid var(--uos-rule);padding:22px 0">
-            <div style="font-size:22px;font-weight:700;color:var(--uos-blue)">듀얼 IMU 구성</div>
-            <div style="font-size:22px;line-height:1.55">IMU 두 개를 달아 서로 비교하는 구성과 그에 맞는 진단 로직을 직접 구현했다.</div>
-          </div>
+          <div style="font-size:22px;line-height:1.45;border-left:6px solid #d49b00;background:#fff5d9;padding:14px 18px"><strong>우열이 아니라 목적의 차이</strong>이다. 상용품이 필요한 현장과 자작이 필요한 학습의 목적이 다르다.</div>
         </div>
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
-          <div style="flex:1;background:var(--uos-surface);border-radius:4px;overflow:hidden;display:grid;place-items:center;min-height:0;padding:20px">
-            <img src="assets/image18.jpeg" alt="직접 설계하고 제작한 ESP32-S3 기반 비행 제어 보드" style="max-width:100%;max-height:100%;object-fit:contain" />
+          <div style="flex:1;background:var(--uos-surface);border-radius:4px;overflow:hidden;display:grid;place-items:center;min-height:0;padding:18px">
+            <img src="assets/image18.jpeg" alt="직접 설계하고 제작한 ESP32-S3 기반 비행 제어 보드" style="width:100%;height:100%;object-fit:contain" />
           </div>
-          <figcaption style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:16px 18px;font-size:20.5337px;line-height:1.45"><strong>실제 제작 보드</strong> — 프레임·FC 보드·펌웨어·검증 도구를 직접 설계·구현</figcaption>
+          <figcaption style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:14px 18px;font-size:20.5337px;line-height:1.4"><strong>실제 제작 보드</strong> · 제어 경로를 바꿔 보며 검증하는 학습 플랫폼</figcaption>
         </figure>
       </div>
     </x-import>
@@ -418,67 +421,17 @@
             <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">WiFi UDP · 조종 명령을 올리고 상태 텔레메트리와 고속 원시 IMU를 분리 기록</div>
           </div>
         </div>
-        <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">힘은 왼쪽에서 오른쪽으로, 정보는 아래에서 위로 흐른다. 모터·ESC·배터리와 센서는 상용 부품을 사용했고, 프레임·FC <span class="uos-nowrap">보드·펌웨어·지상국은</span> 직접 설계·구현했다.</div>
+        <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">힘은 왼쪽에서 오른쪽으로, 정보는 아래에서 위로 흐른다. 모터·ESC·배터리와 센서는 상용 부품을 사용했고, 프레임·FC <span class="uos-nowrap">보드·펌웨어·지상 제어 프로그램을</span> 직접 설계·구현했다.</div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="부품 구성" data-screen-label="22" data-speaker-notes="구동계는 초기 선정을 유지했고, MCU와 센서, 통신 방식은 전부 교체됐다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="부품 구성">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
-        <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px">
-          <thead>
-            <tr>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px;width:190px">구분</th>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">모델 / 스펙</th>
-              <th style="background:var(--uos-blue);color:#fff;font-weight:700;text-align:left;padding:12px 20px">역할</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">MCU</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">ESP32-S3-N16R8</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">제어 연산 · 통신 · 두 개 코어 분담</td>
-            </tr>
-            <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">자세 센서</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">ICM-42670-P ×2</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">가속도·각속도 측정, 두 개로 상호 감시</td>
-            </tr>
-            <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">방위 센서</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">BMM350</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">지자기 헤딩 측정, Yaw 드리프트 보정</td>
-            </tr>
-            <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">ESC</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">EMAX BLHeli 30A ×4</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">PWM 신호를 모터 회전으로 변환</td>
-            </tr>
-            <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">모터</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">BLDC CCRC 1750KV ×4</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">추진력 생성</td>
-            </tr>
-            <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">프로펠러</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">T-MOTOR T4944-3 (4.9×4.4″)</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">CW 2개 · CCW 2개 대각 배치</td>
-            </tr>
-            <tr>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">배터리</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">ECOFLUX 4S 3000mAh 120C</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">전원 공급 (벤치에서는 파워서플라이 사용)</td>
-            </tr>
-            <tr style="background:var(--uos-surface)">
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">프레임</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">자체 설계 · 3D 프린팅</td>
-              <td style="padding:12px 20px;border-bottom:1px solid var(--uos-rule)">트러스 암 + 샌드위치 바디 플레이트</td>
-            </tr>
-          </tbody>
-        </table>
-        <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">IMU를 <strong>두 개</strong> 사용해 측정값을 서로 비교하도록 구성했다. 뒤에서 두 센서의 축과 부호를 맞추는 과정을 설명한다.</div>
-      </div>
+  <section data-label="1대와 10대 제작 규모" data-screen-label="22" data-speaker-notes="조립된 FC PCB가 있고 부품 재고를 확보한 상태에서 프린터 한 대로 순차 출력하며 첫 출력 성공을 가정한 예비 산정이다. 1대는 프린터 점유 24~48시간, 직접 작업 6~10인시, 전체 경과 약 2~3일이다. 10대는 프린터 점유 240~480시간, 직접 작업 60~100인시, 출력과 조립을 병행할 때 프린터 최소 약 10~20일이다. 가격이 확인되는 참고 부품은 1대 355,300~370,500원, 10대 3,553,000~3,705,000원이다. 모터는 대체 참고가이고 실제 구매 SKU가 확정되지 않아 검증된 BOM이 아니다. 이 값은 완성 기체 총원가가 아니다. FC PCB·전원·배선·체결부품·배송·관부가세·인건비·재출력·비행 튜닝은 제외하며 실제 제작 전 다시 견적한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="1대와 10대 제작 규모">
+      <figure data-professor-feedback="22" data-production-estimate style="width:100%;height:100%;margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
+        <img src="assets/production-estimate.png" alt="조립된 FC PCB와 부품 재고, 첫 출력 성공을 가정해 1대와 10대의 프린터 점유시간, 직접 작업시간, 가격 확인 참고 부품비를 비교한 예비 산정" style="display:block;width:100%;height:100%;flex:1;min-height:0;object-fit:contain;background:#06152f;border-radius:4px" />
+        <figcaption style="font-size:19.8px;line-height:1.4;border-left:6px solid #d49b00;background:#fff5d9;padding:10px 16px"><strong>예비 산정이다. 완성 기체 총원가가 아니다. 검증된 BOM도 아니다.</strong> 조립된 FC PCB · 부품 재고 · 첫 출력 성공 가정, FC PCB · 전원 · 배선 · 배송 · 관부가세 · 인건비 · 재출력 · 비행 튜닝 제외</figcaption>
+      </figure>
     </x-import>
   </section>
 
@@ -523,30 +476,44 @@
             <li><strong>육각 패턴 타공</strong> — 하중 경로를 남기면서 면적을 덜어냈다</li>
             <li>제어 보드는 상판 위, 모터 배선에서 가장 먼 자리에 둔다</li>
           </ul>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:22px;line-height:1.55">보드 위치는 나중에 문제가 된다. 모터에 흐르는 전류가 자기장을 만들어 방위 센서를 오염시키기 때문이다. (세션 3에서 다룬다)</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:24px;font-size:22px;line-height:1.55">보드 위치는 나중에 문제가 된다. 모터 전류가 만드는 자기장이 방위 센서 측정값에 간섭을 일으키기 때문이다. 뒤에서 측정과 보정 과정을 설명한다.</div>
         </div>
       </div>
     </x-import>
   </section>
 
-  <section data-label="반복 제작" data-screen-label="25" data-speaker-notes="사진에 있는 부품들은 모두 버린 것이다. 설계는 출력해서 손으로 만져봐야 판단이 된다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="3D 프린팅 반복 제작">
-      <div style="width:100%;height:100%;display:grid;grid-template-columns:1.3fr 1fr;gap:32px">
-        <figure style="margin:0;display:flex;flex-direction:column;gap:12px;min-height:0">
-          <div style="flex:1;background:var(--uos-surface);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
-            <img src="assets/image14.jpeg" alt="출력한 프레임 부품들" style="width:100%;height:100%;object-fit:cover" />
+  <section data-label="3D 프린팅 래피드 프로토타이핑" data-screen-label="25" data-speaker-notes="실제 출력물을 조립하면서 나사 간격, 적층 방향, 배선 통로 문제를 찾고 CAD에 다시 반영했다. 사진은 형상을 바꿔 출력한 프레임 부품이다. 특정 출력시간이나 성공 횟수는 확인된 기록이 없어 주장하지 않는다. Maker Space 박근원 선생님의 장비·제작 지원에 감사드린다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="3D 프린팅 래피드 프로토타이핑">
+      <div data-professor-feedback="25" style="width:100%;height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:12px">
+        <div style="display:grid;grid-template-columns:1.42fr .68fr;gap:28px;min-height:0">
+          <figure style="margin:0;display:flex;flex-direction:column;gap:9px;min-height:0">
+            <div style="flex:1;background:var(--uos-surface);border-radius:4px;display:grid;place-items:center;overflow:hidden;min-height:0">
+              <img src="assets/image14.jpeg" alt="형상을 바꿔 반복 출력한 자작 드론 프레임 부품" style="width:100%;height:100%;object-fit:cover" />
+            </div>
+            <figcaption style="font-size:19.8px;color:var(--uos-ink-muted);text-align:center">실제 출력물 · 조립하면서 간섭과 강성을 확인한 프레임 부품</figcaption>
+          </figure>
+          <div style="display:flex;flex-direction:column;justify-content:center;gap:22px;min-width:0">
+            <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr;align-items:center;gap:7px">
+              <div data-rapid-step="cad" style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:13px 8px;text-align:center;font-size:20.5337px;font-weight:700">CAD</div>
+              <div style="font-size:22px;color:var(--uos-blue)">→</div>
+              <div data-rapid-step="print" style="background:var(--uos-surface);border-radius:4px;padding:13px 8px;text-align:center;font-size:20.5337px;font-weight:700">출력</div>
+              <div style="font-size:22px;color:var(--uos-blue)">→</div>
+              <div data-rapid-step="assemble" style="background:var(--uos-surface);border-radius:4px;padding:13px 8px;text-align:center;font-size:20.5337px;font-weight:700">조립</div>
+              <div style="font-size:22px;color:var(--uos-blue)">→</div>
+              <div data-rapid-step="revise" style="background:#fff5d9;border-radius:4px;padding:13px 8px;text-align:center;font-size:20.5337px;font-weight:700">수정</div>
+            </div>
+            <div style="border-top:6px solid var(--uos-blue);padding-top:15px">
+              <div style="font-size:22px;font-weight:800;color:var(--uos-blue);margin-bottom:13px">조립에서 찾은 수정 지점</div>
+              <div style="display:flex;flex-wrap:wrap;gap:10px">
+                <span style="background:var(--uos-surface);border-radius:999px;padding:10px 15px;font-size:20.5337px;font-weight:700">나사 간격</span>
+                <span style="background:var(--uos-surface);border-radius:999px;padding:10px 15px;font-size:20.5337px;font-weight:700">적층 방향</span>
+                <span style="background:var(--uos-surface);border-radius:999px;padding:10px 15px;font-size:20.5337px;font-weight:700">배선 통로</span>
+              </div>
+            </div>
+            <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">출력물을 직접 조립하고 문제를 다시 CAD에 반영하는 반복 과정이다.</div>
           </div>
-          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">출력한 프레임 부품 — 형상을 바꿔가며 반복 제작한 결과</figcaption>
-        </figure>
-        <div style="display:flex;flex-direction:column;justify-content:center;gap:28px">
-          <div style="font-size:35.2px;font-weight:700;line-height:1.3">화면에서 괜찮아 보이던 형상이, 손에 쥐면 아닌 경우가 많았다.</div>
-          <ul style="margin:0;padding-left:28px;font-size:22px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
-            <li>모터 마운트 나사 간격이 실제 모터와 어긋난 경우</li>
-            <li>층 방향(적층 방향)과 하중 방향이 어긋나 암이 쪼개진 경우</li>
-            <li>배선 통로가 없어 조립 후에 선을 넣을 수 없던 경우</li>
-          </ul>
-          <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">암을 세 번 수정했고, 바꾼 형상은 하루 안에 다시 출력해 비교했다.</div>
         </div>
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:11px 18px;font-size:20.5337px;line-height:1.4;text-align:center">Maker Space 박근원 선생님의 장비·제작 지원에 감사드립니다.</div>
       </div>
     </x-import>
   </section>
@@ -953,25 +920,41 @@
     </x-import>
   </section>
 
-  <section data-label="세 버그의 공통점" data-screen-label="43" data-speaker-notes="세 사고는 모두 센서축과 기체축의 부호 약속이 어긋난 문제였다. 게인 튜닝 전에 SIL에서 이 오류부터 검사했다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="센서축 오류의 공통 원인">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
-        <div style="font-size:35.2px;font-weight:700;line-height:1.35;max-width:1020px">세 번 모두 <strong>센서축과 기체축의 부호 약속</strong>이 어긋난 문제였다.</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
-          <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:22px;font-weight:700">코드는 정상으로 보인다</div>
-            <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">식 자체보다 센서축과 기체축의 부호 약속이 어긋난 오류였다. 컴파일은 되고 값도 나왔다.</div>
+  <section data-label="문제 추적과 수정" data-screen-label="43" data-speaker-notes="실제 프로젝트에서 센서축과 기체축의 부호 약속이 어긋난 오류를 기록과 비교로 좁혔다. host SIL에서는 Roll 믹서 보정항 R을 반대 방향인 −R로 바꾸어 같은 오류 유형을 의도적으로 재현했고 테스트 실패를 확인했다. 이는 host SIL에서 해당 부호 오류를 검출한 결과이며 실기·비행 성능의 증거가 아니다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 추적과 수정">
+      <div data-professor-feedback="43" style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
+        <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr auto 1fr;align-items:stretch;gap:9px">
+          <div data-debug-step="symptom" style="background:var(--uos-surface);border-top:6px solid var(--uos-blue);padding:16px 14px;font-size:22px;font-weight:800;text-align:center">증상</div>
+          <div style="display:grid;place-items:center;font-size:24.2px;color:var(--uos-blue)">→</div>
+          <div data-debug-step="record" style="background:var(--uos-surface);border-top:6px solid var(--uos-blue);padding:16px 14px;font-size:22px;font-weight:800;text-align:center">기록·비교</div>
+          <div style="display:grid;place-items:center;font-size:24.2px;color:var(--uos-blue)">→</div>
+          <div data-debug-step="trace" style="background:var(--uos-surface);border-top:6px solid var(--uos-blue);padding:16px 14px;font-size:22px;font-weight:800;text-align:center">원인 추적</div>
+          <div style="display:grid;place-items:center;font-size:24.2px;color:var(--uos-blue)">→</div>
+          <div data-debug-step="reproduce" style="background:#fff5d9;border-top:6px solid #d49b00;padding:16px 14px;font-size:22px;font-weight:800;text-align:center">오류 재현</div>
+          <div style="display:grid;place-items:center;font-size:24.2px;color:var(--uos-blue)">→</div>
+          <div data-debug-step="verify" style="background:var(--uos-blue);color:#fff;border-top:6px solid var(--uos-blue);padding:16px 14px;font-size:22px;font-weight:800;text-align:center">수정 검증</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1;min-height:0">
+          <div style="border:1px solid var(--uos-rule);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:15px">
+            <div style="font-size:20.5337px;font-weight:800;color:var(--uos-blue)">실제 문제 · 축과 부호</div>
+            <div style="font-size:29.7px;font-weight:800;line-height:1.3">기울기 보정이 반대 방향으로 작동</div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:14px;font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">
+              <strong style="color:var(--uos-blue)">기록·비교</strong>
+              <span>두 IMU의 축별 각속도와 자세 변화 비교</span>
+            </div>
+            <div style="display:grid;grid-template-columns:118px 1fr;gap:14px;font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">
+              <strong style="color:var(--uos-blue)">원인 추적</strong>
+              <span>센서축 → 기체축 변환의 부호 약속 확인</span>
+            </div>
           </div>
-          <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:22px;font-weight:700">증상이 원인을 가리키지 않는다</div>
-            <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">"과도 기울기 경보"라는 증상에서 "IMU2 실장 방향"으로 거슬러 올라가야 한다.</div>
-          </div>
-          <div style="border-top:6px solid var(--uos-blue);padding-top:20px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:22px;font-weight:700">실기로 확인하면 위험하다</div>
-            <div style="font-size:22px;line-height:1.5;color:var(--uos-ink-muted)">부호가 뒤집힌 상태에서는 보정이 반대로 작동해 실기에서 즉시 발산할 수 있다.</div>
+          <div style="background:#06152f;color:#fff;border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:15px">
+            <div style="font-size:20.5337px;font-weight:800;color:#5fd5e9">host SIL · 오류 재현</div>
+            <div style="font-size:29.7px;font-weight:800;line-height:1.3">Roll 믹서 보정 방향<br><span style="color:#5fd5e9">R → −R</span></div>
+            <div style="font-size:22px;line-height:1.5">보정 방향을 뒤집자 가상 기체의 Roll이 발산했고, 정상 판정 테스트가 실패했다.</div>
+            <div style="margin-top:auto;border-top:1px solid rgba(255,255,255,.35);padding-top:14px;font-size:19.8px;line-height:1.45;color:#dce7f8">확인 범위 · 해당 Roll 믹서 부호 오류 유형에 대한 host SIL 검출</div>
           </div>
         </div>
-        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;font-size:26.4px;line-height:1.5">게인 튜닝 전에, 부호·축 오류를 비행 없이 검출하는 <strong>SIL 하니스</strong>를 먼저 만들었다.</div>
+        <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:15px 20px;font-size:24.2px;font-weight:700;line-height:1.4;text-align:center">실패를 재현하고 원인을 좁혀 수정 검증까지 연결하는 <strong>디버깅 학습</strong>이다.</div>
       </div>
     </x-import>
   </section>
@@ -2027,30 +2010,33 @@
     </x-import>
   </section>
 
-  <section data-label="다음 단계" data-screen-label="83" data-speaker-notes="먼저 단일 기체의 안정 호버와 거리·광류 제어를 검증한다. 그 기반 다음에 다중 드론 sim-to-real 경로 계획과 군집 제어로 확장한다. 다중 드론 단계는 아직 검증하지 않은 목표이며 현재 성과처럼 말하지 않는다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="다음 개발 단계">
-      <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:24px">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1">
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;opacity:.85">STEP 1 · 지금</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">안정 호버를 재현하기</div>
-            <div style="font-size:22px;line-height:1.55">첫 실비행 기록을 출발점으로, <span class="uos-nowrap">자세·Yaw·비대칭</span> 보정을 반복 가능한 조건에서 다시 검증한다.</div>
-            <div style="font-size:20.5337px;line-height:1.4;opacity:.85;margin-top:auto">통과 기준 — 정한 시험 구간 동안 자세 유지 · 안전 고장 없음</div>
+  <section data-label="단기·중기·장기 목표" data-screen-label="83" data-speaker-notes="이 장은 모두 아직 구현·검증하지 않은 계획이다. 단기에는 반복 가능한 단일 기체 자세 제어와 3901-L0X 연결, 착지 판단을 검증한다. 중기에는 반복 제작·교정 절차를 정리하고 sim-to-real 경로 계획과 다기체 운용 기반을 만든다. 장기에는 군집 제어, 충돌 회피, 통신 이상 시 집단 안전으로 확장한다. 각 단계는 이전 단계의 통과 기준을 충족한 뒤 순서대로 진행한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="단기·중기·장기 목표">
+      <div data-professor-feedback="83" style="width:100%;height:100%;display:flex;flex-direction:column;gap:18px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;flex:1;min-height:0">
+          <div data-goal-stage="short" style="border:1px solid var(--uos-rule);border-top:8px solid var(--uos-blue);border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:20.5337px;font-weight:800;color:var(--uos-blue)">단기</div>
+            <div style="font-size:27.5px;font-weight:800;line-height:1.3">단일 기체 재현성</div>
+            <div style="font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">반복 가능한 단일 기체 자세 제어</div>
+            <div style="font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">3901-L0X 연결과 착지 판단 검증</div>
+            <div style="font-size:19.8px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 · 반복 시험에서 자세 · 센서 · 안전 전환 확인</div>
           </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue)">STEP 2</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">거리·광류를 제어에 쓰기</div>
-            <div style="font-size:22px;line-height:1.55">수신 경로를 구현한 <strong>3901-L0X</strong>를 기체에 장착하고, 거리와 광류를 폐루프 제어에 연결해 고도·위치를 잡는다.</div>
-            <div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 — 센서 이상 시 안전 전환 · 무입력 위치 유지</div>
+          <div data-goal-stage="medium" style="border:1px solid var(--uos-rule);border-top:8px solid #34afc8;border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:20.5337px;font-weight:800;color:#16758b">중기</div>
+            <div style="font-size:27.5px;font-weight:800;line-height:1.3">반복 제작과 경로</div>
+            <div style="font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">반복 제작·교정 절차</div>
+            <div style="font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">sim-to-real 경로 계획과 다기체 운용 기반</div>
+            <div style="font-size:19.8px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 · 같은 제작·교정 절차로 기체별 상태 확인</div>
           </div>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:28px;display:flex;flex-direction:column;gap:14px">
-            <div style="font-size:20.5337px;font-weight:700;color:var(--uos-blue)">STEP 3</div>
-            <div style="font-size:26.4px;font-weight:700;line-height:1.3">다중 드론 sim-to-real</div>
-            <div style="font-size:22px;line-height:1.55">시뮬레이션에서 경로 계획과 군집 제어를 검증한 뒤, 여러 실제 기체로 옮겨 시뮬레이션과 실기의 차이를 줄인다.</div>
-            <div style="font-size:20.5337px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">현재 상태 — 아직 검증하지 않음 · 단일 기체 기반 검증이 선행</div>
+          <div data-goal-stage="long" style="border:1px solid var(--uos-rule);border-top:8px solid #d49b00;border-radius:4px;padding:22px;display:flex;flex-direction:column;gap:14px">
+            <div style="font-size:20.5337px;font-weight:800;color:#8b6500">장기</div>
+            <div style="font-size:27.5px;font-weight:800;line-height:1.3">군집 안전</div>
+            <div style="font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">군집 제어와 충돌 회피</div>
+            <div style="font-size:22px;line-height:1.45;border-top:1px solid var(--uos-rule);padding-top:14px">통신 이상 시 집단 안전</div>
+            <div style="font-size:19.8px;line-height:1.4;color:var(--uos-ink-muted);margin-top:auto">통과 기준 · 다기체 시험에서 분리 · 회피 · 안전 전환 확인</div>
           </div>
         </div>
-        <div style="font-size:22px;line-height:1.55;border-top:1px solid var(--uos-rule);padding-top:20px">각 단계는 표에 적은 <strong>통과 기준을 충족한 뒤</strong> 다음 단계로 진행한다.</div>
+        <div style="background:#fff5d9;border-left:6px solid #d49b00;padding:14px 20px;font-size:21.2663px;line-height:1.45"><strong>현재 경계 · 모두 계획 단계</strong>　각 단계는 이전 단계의 <strong>통과 기준을 충족한 뒤</strong> 순서대로 진행한다.</div>
       </div>
     </x-import>
   </section>
