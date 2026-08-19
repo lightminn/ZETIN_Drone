@@ -152,7 +152,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         )
         for phrase in (
             "첫째 교시",
-            "의의 · 비행 원리 · CAD",
+            "사업성·의의 비행 원리·CAD",
             "둘째 교시",
             "PCB · 배선 · 센서 융합 · 제어",
             "셋째 교시",
@@ -160,14 +160,15 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             "질문과 답변",
         ):
             self.assertIn(phrase, agenda_visible)
-        self.assertNotRegex(agenda_visible, r"(?:3\s*시간|45\s*분|15\s*분)")
+        self.assertNotRegex(agenda_visible, r"(?:2\s*시간|40\s*분|10\s*분)")
 
         agenda_notes = str(agenda["attrs"].get("data-speaker-notes", ""))
         for phrase in (
-            "첫째 교시는 45분",
-            "15분 휴식 후 둘째 교시",
-            "다시 15분 휴식 후 셋째 교시",
-            "발표 종료 뒤 15분",
+            "전체 진행은 2시간 30분",
+            "첫째 교시는 40분",
+            "10분 휴식 후 둘째 교시",
+            "다시 10분 휴식 후 셋째 교시",
+            "발표 종료 뒤 10분",
         ):
             self.assertIn(phrase, agenda_notes)
 
@@ -183,7 +184,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         ):
             self.assertIn(phrase, first_break_visible)
         self.assertIn(
-            "첫째 교시가 끝났다. 15분 휴식 후",
+            "첫째 교시가 끝났다. 10분 휴식 후",
             str(first_break["attrs"].get("data-speaker-notes", "")),
         )
 
@@ -199,7 +200,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         ):
             self.assertIn(phrase, second_break_visible)
         self.assertIn(
-            "둘째 교시가 끝났다. 15분 휴식 후",
+            "둘째 교시가 끝났다. 10분 휴식 후",
             str(second_break["attrs"].get("data-speaker-notes", "")),
         )
 
@@ -207,9 +208,9 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         self.assertEqual(_slide_title(parser.sections[32]), "제어 소프트웨어 구성")
         self.assertEqual(_slide_title(parser.sections[54]), "Yaw의 기준 문제")
         self.assertEqual(_slide_title(parser.sections[74]), "시연 안전 규칙")
-        self.assertEqual(_slide_title(parser.sections[2]), "의의\n비행제어기를 직접 만든 이유")
+        self.assertEqual(_slide_title(parser.sections[2]), "사업성·의의\n비행제어기를 직접 만든 이유")
         self.assertEqual(_slide_title(parser.sections[19]), "기체 설계\nCAD에서 실물 프레임까지")
-        self.assertEqual(parser.sections[2]["attrs"].get("data-label"), "의의")
+        self.assertEqual(parser.sections[2]["attrs"].get("data-label"), "사업성·의의")
         self.assertEqual(parser.sections[19]["attrs"].get("data-label"), "기체 설계")
 
         closing = parser.sections[83]
@@ -221,9 +222,29 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         self.assertNotIn("기체 관람", closing_visible)
         self.assertEqual(closing["videos"], [])
         self.assertIn(
-            "마지막 15분은 질문과 답변 시간이다.",
+            "마지막 10분은 질문과 답변 시간이다.",
             str(closing["attrs"].get("data-speaker-notes", "")),
         )
+
+    def test_session_one_script_covers_all_slides_and_business_half(self) -> None:
+        script = (DECK_DIR / "SESSION1_SCRIPT.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            [int(number) for number in re.findall(r"^## (\d+)쪽", script, re.MULTILINE)],
+            list(range(1, 27)),
+        )
+        for phrase in (
+            "발화 목표는 39분",
+            "사업성·의의에 약 20분",
+            "비행 원리·CAD에 약 19분",
+            "학교, 캠프, 메이커스페이스",
+            "진행자 동반형 수업",
+            "강사용 운영 자료",
+            "기관의 시간·공간·예산 배정 의사",
+            "마지막 1분",
+        ):
+            self.assertIn(phrase, script)
+        for unsupported_claim in ("시장 규모는", "예상 매출은", "투자 수익률"):
+            self.assertNotIn(unsupported_claim, script)
 
     @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")
     def test_hover_demo_source_is_chrome_compatible_h264(self) -> None:
@@ -1349,7 +1370,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
               const title = deepFind(slides[0], '.uos-title-slide__title-text');
               const body = [...slides[1].querySelectorAll('div')].find(
                 element => element.textContent.trim() ===
-                  '드론의 쓰임과 작동 원리부터 프레임 제작까지'
+                  '교육 아이템의 가치와 드론 원리부터 프레임 제작까지'
               );
               const chartLabel = [...slides[58].querySelectorAll('svg text')].find(
                 element => element.textContent.trim() === '기준 근처'

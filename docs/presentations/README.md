@@ -5,7 +5,7 @@
 
 ## AI 창업캠프 드론 기술 교안
 
-- 대상: 드론·제어 입문자를 위한 3시간 기술 발표와 실습
+- 대상: 드론·제어 입문자를 위한 2시간 30분 기술 발표와 실습
 - 편집 원본: [ai-startup-camp-drone/index.html](ai-startup-camp-drone/index.html)
 - 실행·편집 방법: [ai-startup-camp-drone/README.md](ai-startup-camp-drone/README.md)
 - 주장·근거 목록: [ai-startup-camp-drone/SOURCES.md](ai-startup-camp-drone/SOURCES.md)

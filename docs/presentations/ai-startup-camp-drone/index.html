@@ -25,19 +25,19 @@
 
 <x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1280" height="720" hint-size="100%,100%">
 
-  <section data-label="표지" data-screen-label="01" data-speaker-notes="창업지원단 대상 발표이지만 본론은 비행제어 기술이다. 앞부분에서 이 기술 과정을 교육 아이템으로 확장할 수 있는 이유만 짧게 짚고, 하드웨어·소프트웨어·시연으로 들어간다. 마지막에는 진행자 시연을 보고 스마트폰 균형잡기 체험에 참여한다." style="background:#fff">
+  <section data-label="표지" data-screen-label="01" data-speaker-notes="창업지원단 대상 발표이다. 첫째 교시에서는 사업성·의의와 비행 원리·CAD를 약 절반씩 다루고, 이후 교시에서 하드웨어·소프트웨어·검증·시연으로 들어간다. 마지막에는 진행자 시연을 보고 스마트폰 균형잡기 체험에 참여한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.TitleSlide" hint-size="100%,100%" subtitle="AI 창업 캠프 · 기술 발표 및 체험" title="자작 드론
 비행 제어 시스템
 직접 만들기"></x-import>
   </section>
 
-  <section data-label="진행 순서" data-screen-label="02" data-speaker-notes="첫째 교시는 45분 동안 의의·비행 원리 25분, CAD 20분으로 진행한다. 15분 휴식 후 둘째 교시는 PCB·배선 15분, 센서 융합·제어 30분으로 진행한다. 다시 15분 휴식 후 셋째 교시는 검증·안전 20분, 시연·모바일 체험 25분으로 진행한다. 발표 종료 뒤 15분은 질문과 답변에 사용한다." style="background:#fff">
+  <section data-label="진행 순서" data-screen-label="02" data-speaker-notes="전체 진행은 2시간 30분이다. 첫째 교시는 40분 동안 사업성·의의와 비행 원리·CAD를 약 절반씩 다룬다. 10분 휴식 후 둘째 교시는 PCB·배선 10분, 센서 융합·제어 30분으로 진행한다. 다시 10분 휴식 후 셋째 교시는 검증·안전 20분, 시연·모바일 체험 20분으로 진행한다. 발표 종료 뒤 10분은 질문과 답변에 사용한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="오늘의 진행 순서">
       <div data-three-session-agenda style="width:100%;height:100%;display:grid;grid-template-rows:repeat(3,1fr) auto;gap:0;min-height:0">
         <div style="display:grid;grid-template-columns:180px 390px 1fr;align-items:stretch;border-top:6px solid var(--uos-blue);border-bottom:1px solid var(--uos-rule)">
           <div style="background:var(--uos-blue);color:#fff;padding:20px 24px;display:flex;align-items:center;font-size:24.2px;font-weight:800;white-space:nowrap">첫째 교시</div>
-          <div style="background:var(--uos-surface);padding:20px 28px;display:flex;align-items:center;font-size:30.8px;font-weight:800;line-height:1.28;color:var(--uos-blue)">의의 · 비행 원리 · CAD</div>
-          <div style="padding:20px 28px;display:flex;align-items:center;font-size:22px;line-height:1.5">드론의 쓰임과 작동 원리부터 프레임 제작까지</div>
+          <div style="background:var(--uos-surface);padding:20px 28px;display:flex;align-items:center;font-size:28.6px;font-weight:800;line-height:1.28;color:var(--uos-blue)">사업성·의의<br>비행 원리·CAD</div>
+          <div style="padding:20px 28px;display:flex;align-items:center;font-size:22px;line-height:1.5">교육 아이템의 가치와 드론 원리부터 프레임 제작까지</div>
         </div>
         <div style="display:grid;grid-template-columns:180px 390px 1fr;align-items:stretch;border-bottom:1px solid var(--uos-rule)">
           <div style="background:var(--uos-blue);color:#fff;padding:20px 24px;display:flex;align-items:center;font-size:24.2px;font-weight:800;white-space:nowrap">둘째 교시</div>
@@ -54,8 +54,8 @@
     </x-import>
   </section>
 
-  <section data-label="의의" data-screen-label="03" data-speaker-notes="첫째 교시의 앞 25분은 의의와 비행 원리이다. 비행 제어를 직접 만든 이유부터 설명한다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" title="의의
+  <section data-label="사업성·의의" data-screen-label="03" data-speaker-notes="첫째 교시 40분 가운데 사업성·의의에 약 20분을 배분한다. 비행제어기를 직접 만든 이유와 이 개발 과정을 교육 아이템으로 구성할 수 있는 근거부터 설명한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" title="사업성·의의
 비행제어기를 직접 만든 이유"></x-import>
   </section>
 
@@ -299,7 +299,7 @@
     </x-import>
   </section>
 
-  <section data-label="사업 근거" data-screen-label="17" data-speaker-notes="사업 연결은 이 장과 다음 장에서만 짚고, 이후에는 기술 구현으로 넘어간다. 교육 아이템의 근거는 재사용할 수 있는 개발 기록과 SIL 환경이다." style="background:#fff">
+  <section data-label="사업 근거" data-screen-label="17" data-speaker-notes="앞에서 제시한 사업 가설을 실제 수업 자산과 연결한다. 교육 아이템의 근거는 재사용할 수 있는 개발 기록과 SIL 환경이다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="교육 아이템으로의 확장 근거">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;flex:1;min-height:0">
@@ -363,7 +363,7 @@
     </x-import>
   </section>
 
-  <section data-label="가져갈 것" data-screen-label="19" data-speaker-notes="여기까지가 의의 부분이다. 다음부터 실제 하드웨어를 보겠다." style="background:#fff">
+  <section data-label="가져갈 것" data-screen-label="19" data-speaker-notes="여기까지가 사업성·의의 부분이다. 다음부터 실제 하드웨어와 CAD를 보겠다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="의의 요약">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;gap:30px">
         <div style="display:grid;grid-template-columns:180px 1fr;gap:28px;border-top:6px solid var(--uos-blue);padding-top:22px">
@@ -382,7 +382,7 @@
     </x-import>
   </section>
 
-  <section data-label="기체 설계" data-screen-label="20" data-speaker-notes="첫째 교시의 남은 20분은 CAD와 조립 기체이다. 직접 설계하고 제작한 기체 프레임으로 넘어간다." style="background:#fff">
+  <section data-label="기체 설계" data-screen-label="20" data-speaker-notes="첫째 교시의 마지막 약 10분은 CAD와 조립 기체이다. 직접 설계하고 제작한 기체 프레임으로 넘어간다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ChapterSlide" hint-size="100%,100%" title="기체 설계
 CAD에서 실물 프레임까지"></x-import>
   </section>
@@ -537,7 +537,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="둘째 교시" data-screen-label="27" data-session-break="1" data-speaker-notes="첫째 교시가 끝났다. 15분 휴식 후 PCB·배선 15분과 센서 융합·제어 30분을 다루는 둘째 교시로 이어간다. 재개할 때 다음 장으로 넘긴다." style="background:#fff">
+  <section data-label="둘째 교시" data-screen-label="27" data-session-break="1" data-speaker-notes="첫째 교시가 끝났다. 10분 휴식 후 PCB·배선 10분과 센서 융합·제어 30분을 다루는 둘째 교시로 이어간다. 재개할 때 다음 장으로 넘긴다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="잠시 쉽니다">
       <div data-break-transition style="width:100%;height:100%;display:flex;align-items:center">
         <div style="width:100%;border-left:10px solid var(--uos-blue);padding:8px 0 8px 36px;display:flex;flex-direction:column;gap:16px">
@@ -549,7 +549,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="보드 회로" data-screen-label="28" data-speaker-notes="둘째 교시의 앞 15분은 PCB와 배선이다. 보드에 들어오는 12V는 ESC의 BEC가 5V로 낮춰 ESP32-S3에 공급한다. ESP32-S3의 3.3V 출력은 IMU와 지자기센서 등 다른 소자에 공급한다. 회로도의 핀 이름은 펌웨어 상수와 1:1로 맞춘다." style="background:#fff">
+  <section data-label="보드 회로" data-screen-label="28" data-speaker-notes="둘째 교시의 앞 10분은 PCB와 배선이다. 보드에 들어오는 12V는 ESC의 BEC가 5V로 낮춰 ESP32-S3에 공급한다. ESP32-S3의 3.3V 출력은 IMU와 지자기센서 등 다른 소자에 공급한다. 회로도의 핀 이름은 펌웨어 상수 이름과 맞춘다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행제어 보드 회로">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1.1fr;gap:32px">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -1241,7 +1241,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="셋째 교시" data-screen-label="54" data-session-break="2" data-speaker-notes="둘째 교시가 끝났다. 15분 휴식 후 검증·안전 20분과 시연·모바일 체험 25분을 다루는 셋째 교시로 이어간다. 재개할 때 다음 장으로 넘긴다." style="background:#fff">
+  <section data-label="셋째 교시" data-screen-label="54" data-session-break="2" data-speaker-notes="둘째 교시가 끝났다. 10분 휴식 후 검증·안전 20분과 시연·모바일 체험 20분을 다루는 셋째 교시로 이어간다. 재개할 때 다음 장으로 넘긴다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="잠시 쉽니다">
       <div data-break-transition style="width:100%;height:100%;display:flex;align-items:center">
         <div style="width:100%;border-left:10px solid var(--uos-blue);padding:8px 0 8px 36px;display:flex;flex-direction:column;gap:16px">
@@ -1824,7 +1824,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="시연 안전 규칙" data-screen-label="75" data-speaker-notes="셋째 교시의 남은 25분은 진행자 시연과 모바일 체험이다. 시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
+  <section data-label="시연 안전 규칙" data-screen-label="75" data-speaker-notes="셋째 교시의 남은 20분은 진행자 시연과 모바일 체험이다. 시연 전에 프로펠러 안전거리와 진행자 통제 원칙을 먼저 설명한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="시연 안전 규칙">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.04fr .96fr;gap:36px;align-items:stretch">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-height:0">
@@ -2057,7 +2057,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="마무리" data-screen-label="84" data-speaker-notes="마지막 15분은 질문과 답변 시간이다. 발표를 마치고 질문을 받는다." style="background:#fff">
+  <section data-label="마무리" data-screen-label="84" data-speaker-notes="마지막 10분은 질문과 답변 시간이다. 발표를 마치고 질문을 받는다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="감사합니다">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:22px">
         <div style="width:112px;height:8px;background:var(--uos-blue)"></div>

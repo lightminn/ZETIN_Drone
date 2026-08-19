@@ -205,49 +205,69 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         self.assertIn("data-teamless-crop", slide)
         self.assertNotIn("왜 비행제어 컴퓨터까지 직접 만들었나", slide)
 
-    def test_slide_04_presents_rapid_prototyping_and_planning_bounds(self) -> None:
+    def test_slide_03_shows_the_actual_power_path(self) -> None:
+        slide = self.slide_source("03")
+        rendered = slide.split(">", 1)[1]
+        for required in (
+            "전원 경로",
+            "12V → ESC BEC → 5V → ESP32-S3 → 3.3V → 센서",
+        ):
+            self.assertIn(required, rendered)
+        for absent in ("보호용 MOSFET", "5V 레귤레이터"):
+            self.assertNotIn(absent, slide)
+
+    def test_slide_04_presents_rapid_prototyping_and_modular_repair(self) -> None:
         slide = self.slide_source("04")
         for required in (
             'title="래피드 프로토타이핑"',
             'src="assets/cad-top.png"',
             'src="assets/frame-iterations.jpeg"',
-            'src="assets/pcb-built.jpeg"',
+            'src="assets/modular-arm.png"',
             "CAD → 출력 → 조립 → 수정",
+            "모듈형 암",
+            "손상된 부분만 다시 출력해 교체",
             "Maker Space 박근원 선생님의 장비·제작 지원에 감사드립니다.",
-            "계획 추정",
-            "부품 보유",
-            "조립 완료 FC PCB",
             "프린터 1대",
-            "첫 출력 성공",
             "프린터 1대 기준",
             "직접 작업 6–10시간",
-            "모터 8.0만 원",
-            "ESC 4.0만 원",
+            "모터 4개",
+            "8.0만 원",
+            "ESC 4개",
+            "4.0만 원",
             "22.2–23.3만 원",
             "직접 작업 60–100시간",
             "222–233만 원",
-            "참고 품목 합계",
-            "완성기 총액·확정 BOM 아님",
-            "FC PCB·전원·배선·배송·인건비",
-            "등 별도",
-            "data-teamless-crop",
+            "3901-L0X 옵션",
+            "+4.8–4.9만 원/대",
+            "기본 합계에서 제외",
         ):
             self.assertIn(required, slide)
 
         visible_markup = slide.split(">", 1)[1]
-        self.assertNotIn("인시", visible_markup)
+        for absent in (
+            "인시",
+            "계획 추정",
+            "참고 품목 합계",
+            "완성기 총액",
+            "확정 BOM",
+            "사용자 확인 프로젝트 추정",
+        ):
+            self.assertNotIn(absent, visible_markup)
 
     def test_slide_04_uses_user_confirmed_cost_estimate(self) -> None:
         slide = self.slide_source("04")
         rendered = slide.split(">", 1)[1]
         for expected in (
-            "모터 8.0만 원",
-            "ESC 4.0만 원",
-            "MCU·센서 2.3만 원",
-            "프레임 1.1–2.2만 원",
-            "배터리·프로펠러 6.8만 원",
-            "1대 합계 22.2–23.3만 원",
-            "10대 환산 222–233만 원",
+            "모터 4개",
+            "8.0만 원",
+            "ESC 4개",
+            "4.0만 원",
+            "기본 합계",
+            "1대 22.2–23.3만 원",
+            "10대 222–233만 원",
+            "3901-L0X 옵션",
+            "+4.8–4.9만 원/대",
+            "기본 합계에서 제외",
         ):
             self.assertIn(expected, rendered)
         for stale in (
@@ -260,9 +280,11 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
 
         notes = re.search(r'data-speaker-notes="([^"]+)"', slide)
         self.assertIsNotNone(notes)
-        self.assertIn("사용자 확인 프로젝트 추정", notes.group(1))
+        self.assertIn("현재 부품비 산정", notes.group(1))
         self.assertIn("221,900~233,100원", notes.group(1))
         self.assertIn("2,219,000~2,331,000원", notes.group(1))
+        self.assertIn("48,000~49,000원", notes.group(1))
+        self.assertIn("기본 합계에서 제외", notes.group(1))
 
     def test_slide_04_time_values_follow_production_estimate_json(self) -> None:
         estimate = json.loads(PRODUCTION_ESTIMATE_PATH.read_text(encoding="utf-8"))
@@ -321,21 +343,43 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
     def test_slide_11_uses_condition_based_safety_and_evidence_boundaries(self) -> None:
         slide = self.slide_source("11")
         for required in (
-            "신호 유효",
+            "신호가 유효",
             "신호 두절",
             "호버 추정 없음",
             "저스로틀",
             "호버 추정 유효",
             "저스로틀 초과",
-            "host·SIL",
-            "보드 검증 전",
-            "착지 판단",
+            'src="assets/landing-probe-evidence.png"',
+            "공중 2회 0.061·0.097g",
+            "접지 10회 0.059~1.147g",
+            "기록만 하고",
+            "착지 판정에서는 제외",
+            "landed=false",
+            "host와 SIL",
+            "보드에서",
+            "착지 판정",
         ):
             self.assertIn(required, slide)
         self.assertNotIn("500ms", slide)
         self.assertNotIn("WDT panic 재부팅 후", slide)
         self.assertNotIn("지상인가", slide)
         self.assertNotIn("공중인가", slide)
+
+    def test_slide_12_uses_full_tether_motor_means_and_scoped_interpretation(self) -> None:
+        slide = self.slide_source("12")
+        for required in (
+            'src="assets/telemetry-motor-balance.png"',
+            "2,135행",
+            "M3는 1360.0마이크로초",
+            "M1은 1334.2마이크로초",
+            "25.8마이크로초",
+            "M3 쪽에 연결된 테더 줄",
+            "확정 원인으로 단정하지 않는다",
+        ):
+            self.assertIn(required, slide)
+        rendered = slide.split(">", 1)[1]
+        self.assertIn("M3 평균이 M1보다 25.8µs 높았다", rendered)
+        self.assertNotIn('src="assets/chart-attitude.png"', rendered)
 
     def test_slide_13_separates_short_mid_and_long_term_goals(self) -> None:
         slide = self.slide_source("13")
@@ -348,21 +392,23 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "거리·광류",
             "sim-to-real",
             "군집 제어",
-            "구현 전",
+            "현재 경계 · 모두 계획 단계",
         ):
             self.assertIn(required, slide)
+        rendered = slide.split(">", 1)[1]
+        self.assertEqual(rendered.count("계획 단계"), 4)
+        self.assertNotIn("현재 검증 단계", rendered)
 
-    def test_slide_14_closes_on_technical_results_and_learning_reuse(self) -> None:
+    def test_slide_14_is_a_clean_thanks_and_questions_close(self) -> None:
         slide = self.slide_source("14")
         for required in (
-            'title="만든 것과 남긴 것"',
-            "하드웨어",
-            "소프트웨어",
-            "재현 가능한 검증",
-            "디버깅",
-            "기술 학습",
+            'title="감사합니다"',
+            "Q &amp; A",
+            "질문을 받겠습니다.",
         ):
             self.assertIn(required, slide)
+        for absent in ("만든 것과 남긴 것", "하드웨어", "소프트웨어", "자유비행"):
+            self.assertNotIn(absent, slide)
 
     def test_audience_terms_use_plain_korean(self) -> None:
         self.assertNotIn("지상국", self.source)
@@ -629,7 +675,7 @@ class Presentation10MinuteBrowserWrapTests(unittest.TestCase):
             """
             (() => {
               const stage = document.querySelector('deck-stage');
-              const targets = [2, 4, 7, 8, 9, 11, 13, 14];
+              const targets = [2, 3, 4, 7, 8, 9, 11, 12, 13, 14];
               const findings = {};
               for (const number of targets) {
                 stage.goTo(number - 1);
@@ -666,7 +712,7 @@ class Presentation10MinuteBrowserWrapTests(unittest.TestCase):
             })()
             """
         )
-        for number in (2, 4, 7, 8, 9, 11, 13, 14):
+        for number in (2, 3, 4, 7, 8, 9, 11, 12, 13, 14):
             with self.subTest(slide=number):
                 item = result[str(number)]
                 self.assertEqual(item["marker"], str(number), result)
