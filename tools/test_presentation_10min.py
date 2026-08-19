@@ -104,8 +104,8 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "유선 드론",
             "다기체 군집",
             "통신 이상",
-            "현재 성과가 아니라 후속 계획",
-            "RC 안전 전환 로직은 host에서 확인",
+            "다음 개발은 단기·중기·장기로",
+            "보드 워치독과 실제 착지 조건",
         ):
             self.assertIn(phrase, normalized)
         self.assertNotIn("네 ESC의 BEC 출력을 모두 병렬", normalized)
@@ -316,7 +316,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
 
         notes = re.search(r'data-speaker-notes="([^"]+)"', slide)
         self.assertIsNotNone(notes)
-        self.assertIn("현재 부품비 산정", notes.group(1))
+        self.assertIn("현재 부품비", notes.group(1))
         self.assertIn("221,900~233,100원", notes.group(1))
         self.assertIn("2,219,000~2,331,000원", notes.group(1))
         self.assertIn("48,000~49,000원", notes.group(1))
@@ -350,7 +350,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             rendered,
         )
 
-    def test_slide_07_separates_actual_axis_debugging_from_sil_mixer_mutation(self) -> None:
+    def test_slide_07_covers_actual_axis_debugging_and_sil_mixer_mutation(self) -> None:
         slide = self.slide_source("07")
         for required in (
             'title="실제 디버깅과 SIL 검출력"',
@@ -360,9 +360,9 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "host SIL 검출력",
             "Roll R → −R",
             "정상 조건 수렴",
-            "별도 오류 주입",
+            "오류 주입 시험",
             "R → −R",
-            "같은 사건을 재현한 것이 아니라",
+            "제어 방향 오류를 검출",
         ):
             self.assertIn(required, slide)
         visible_markup = slide.split(">", 1)[1]
@@ -377,7 +377,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         for forbidden in ("250Hz", "1kHz", "250 Hz", "1 kHz"):
             self.assertNotIn(forbidden, slide)
 
-    def test_slide_11_uses_condition_based_safety_and_evidence_boundaries(self) -> None:
+    def test_slide_11_uses_condition_based_safety_transition(self) -> None:
         slide = self.slide_source("11")
         for required in (
             "신호가 유효",
@@ -392,8 +392,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "기록만 하고",
             "착지 판정에서는 제외",
             "landed=false",
-            "host와 SIL",
-            "보드에서",
+            "보드 워치독과 실제 착지 조건",
             "착지 판정",
         ):
             self.assertIn(required, slide)
@@ -402,7 +401,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         self.assertNotIn("지상인가", slide)
         self.assertNotIn("공중인가", slide)
 
-    def test_slide_12_uses_full_tether_motor_means_and_scoped_interpretation(self) -> None:
+    def test_slide_12_uses_full_tether_motor_means_and_followup_check(self) -> None:
         slide = self.slide_source("12")
         for required in (
             'src="assets/telemetry-motor-balance.png"',
@@ -411,7 +410,8 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "M1은 1334.2마이크로초",
             "25.8마이크로초",
             "M3 쪽에 연결된 테더 줄",
-            "확정 원인으로 단정하지 않는다",
+            "다음 반복 시험",
+            "모터별 추력 차이",
         ):
             self.assertIn(required, slide)
         rendered = slide.split(">", 1)[1]
