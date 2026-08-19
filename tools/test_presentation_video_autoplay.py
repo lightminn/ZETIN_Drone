@@ -233,7 +233,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             list(range(1, 27)),
         )
         for phrase in (
-            "발화 목표는 39분",
+            "진행 목표는 39분",
             "사업성·의의에 약 20분",
             "비행 원리·CAD에 약 19분",
             "학교, 캠프, 메이커스페이스",
@@ -243,6 +243,10 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             "마지막 1분",
         ):
             self.assertIn(phrase, script)
+        self.assertGreaterEqual(len(script), 19000)
+        self.assertLessEqual(len(script), 20500)
+        for segmented_label in ("핵심 발화", "확장 발화", "선택 발화"):
+            self.assertNotIn(segmented_label, script)
         for unsupported_claim in ("시장 규모는", "예상 매출은", "투자 수익률"):
             self.assertNotIn(unsupported_claim, script)
 
