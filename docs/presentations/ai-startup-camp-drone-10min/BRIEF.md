@@ -53,4 +53,4 @@
 - 편집 기준본 `index.html`
 - 로컬 발표 실행기 `present.sh`
 - 재생성 가능한 PPTX 변환기 `export_pptx.cjs`
-- 이전 변환 산출물 `드론_10분_요약본.pptx` — 현재 HTML 개편은 미반영
+- 최신 HTML을 반영한 변환 산출물 `드론_10분_요약본.pptx`

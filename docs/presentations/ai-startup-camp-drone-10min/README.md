@@ -32,16 +32,16 @@ Chrome 발표 창이 닫히면 로컬 서버도 함께 종료된다. 실기 영�
 FC PCB, 프린터 한 대와 첫 출력 성공을 가정한 상세 계산과 제외 범위는
 [`../ai-startup-camp-drone/PRODUCTION_ESTIMATE.md`](../ai-startup-camp-drone/PRODUCTION_ESTIMATE.md)에 있다.
 
-## 기존 PPTX
+## PPTX
 
 ```bash
 cd docs/presentations/ai-startup-camp-drone-10min
 node export_pptx.cjs
 ```
 
-`드론_10분_요약본.pptx`는 이전 HTML에서 만든 산출물이다. 이번 결과발표 개편에서는
-PPTX와 PDF를 재생성하지 않았으므로, 기존 파일의 구조 검사는 최신 HTML 내용이
-포함되었다는 증거가 아니다. 사용자가 요청한 시점에만 다시 변환한다.
+`드론_10분_요약본.pptx`는 현재 `index.html`을 기준으로 다시 생성한 최신
+산출물이다. 14장 발표자 노트와 실기 영상 1개를 포함하며, HTML을 다시 수정한
+뒤에는 위 명령으로 PPTX도 함께 갱신한다.
 
 ## 검증
 
@@ -50,4 +50,5 @@ PPTX와 PDF를 재생성하지 않았으므로, 기존 파일의 구조 검사�
 ```
 
 슬라이드 수, 발표자 노트, 필수 결과 메시지, 로컬 자산, 줄 쪼개짐과 1280×720
-렌더 경계를 검사한다. 한 개의 실제 테더 영상과 자동재생 계약도 유지한다.
+렌더 경계를 검사한다. PPTX가 최신 발표자 노트와 한 개의 실제 테더 영상을
+포함하는지도 함께 확인한다.

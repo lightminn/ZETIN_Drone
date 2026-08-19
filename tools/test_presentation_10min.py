@@ -416,9 +416,9 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
 
 
 class Presentation10MinutePptxTests(unittest.TestCase):
-    """Structural check for the existing, intentionally stale PPTX snapshot."""
+    """Structural and content checks for the current PPTX delivery artifact."""
 
-    def test_existing_pptx_snapshot_contains_fourteen_notes_and_one_h264_video(self) -> None:
+    def test_current_pptx_contains_latest_notes_and_one_h264_video(self) -> None:
         self.assertTrue(PPTX_PATH.is_file(), f"missing generated PPTX: {PPTX_PATH}")
         presentation = Presentation(str(PPTX_PATH))
         self.assertEqual(len(presentation.slides), EXPECTED_SLIDES)
@@ -428,6 +428,23 @@ class Presentation10MinutePptxTests(unittest.TestCase):
             names = archive.namelist()
             self.assertEqual(sum(bool(SLIDE_NAME.fullmatch(name)) for name in names), EXPECTED_SLIDES)
             self.assertEqual(sum(bool(NOTE_NAME.fullmatch(name)) for name in names), EXPECTED_SLIDES)
+
+            notes_text = " ".join(
+                element.text or ""
+                for name in names
+                if NOTE_NAME.fullmatch(name)
+                for element in ElementTree.fromstring(archive.read(name)).iter()
+                if element.tag.endswith("}t")
+            )
+            for current_phrase in (
+                "12V 입력에서 ESC의 BEC를 거쳐 5V",
+                "모터 4개 80,000원, ESC 4개 40,000원",
+                "접지 10회는 0.059~1.147g",
+                "M3는 1360.0마이크로초, M1은 1334.2마이크로초",
+                "세 단계는 모두 이후 계획이다.",
+                "발표를 마치고 질문을 받는다.",
+            ):
+                self.assertIn(current_phrase, notes_text)
 
             root = ElementTree.fromstring(archive.read("ppt/presentation.xml"))
             slide_size = root.find("p:sldSz", PRESENTATION_NS)
