@@ -260,7 +260,6 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "설계 → 출력 → 시험·파손 → 측정 → 개선",
             "모듈형 암",
             "손상된 부분만 다시 출력해 교체",
-            "Maker Space 박근원 선생님의 장비·제작 지원에 감사드립니다.",
             "프린터 1대",
             "프린터 1대 기준",
             "직접 작업 6–10시간",
@@ -276,6 +275,9 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             "기본 합계에서 제외",
         ):
             self.assertIn(required, slide)
+
+        for removed in ("Maker Space", "박근원", "장비·제작 지원"):
+            self.assertNotIn(removed, slide)
 
         visible_markup = slide.split(">", 1)[1]
         for absent in (
