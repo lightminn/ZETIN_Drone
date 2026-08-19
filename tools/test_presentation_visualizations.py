@@ -27,6 +27,7 @@ VISUALIZATION_SOURCE_PATH = GEOMETRY_PATH.with_name("audience_visualizations.py"
 SIGNIFICANCE_SOURCE_PATH = GEOMETRY_PATH.with_name("significance_visualizations.py")
 ENGINEERING_SOURCE_PATH = GEOMETRY_PATH.with_name("engineering_visualizations.py")
 STATIC_SOURCE_PATH = GEOMETRY_PATH.with_name("static_diagram_visualizations.py")
+MOTOR_CHART_SOURCE_PATH = GEOMETRY_PATH.with_name("render_chart_motor.py")
 PRODUCTION_ESTIMATE_PATH = (
     REPO_ROOT
     / "docs"
@@ -121,6 +122,7 @@ STATIC_REQUIRED_TEXT = {
         "보안·내환경성",
     },
     "QuadcopterForceMotionStatic": {
+        "측면도",
         "상승",
         "합추력>무게",
         "합추력T",
@@ -130,9 +132,10 @@ STATIC_REQUIRED_TEXT = {
         "하강",
         "합추력<무게",
         "수평이동",
-        "수평성분",
+        "앞으로미는힘",
     },
     "HelicopterQuadcopterTorqueStatic": {
+        "위에서본모습",
         "메인로터회전",
         "동체반작용토크",
         "꼬리로터힘",
@@ -184,15 +187,14 @@ STATIC_REQUIRED_TEXT = {
         "폐루프착지판정미검증",
     },
     "LandingProbeEvidenceStatic": {
-        "지상데이터셋A",
-        "0.0070~0.1340g",
-        "지상데이터셋B",
-        "0.0590~0.1930g",
-        "공중",
-        "미측정",
-        "공중비교없음",
+        "공중프로브2회",
+        "0.061g·0.097g",
+        "접지프로브10회",
+        "0.059~1.147g",
+        "값이겹침",
+        "지면이면무반응전제실패",
         "로깅전용",
-        "착지판정아님",
+        "착지판정제외",
     },
     "SharedStateRaceStatic": {
         "통신코어",
@@ -208,10 +210,12 @@ STATIC_REQUIRED_TEXT = {
         "M1",
         "M3",
         "M3평균>M1평균",
-        "추정",
+        "M1·1334.2µs",
+        "M3·1360.0µs",
+        "차이약25.8µs",
         "M3근처테더",
-        "M3의테더하중지지가능성",
-        "원인확정아님",
+        "줄무게까지함께지지",
+        "관측과현장조건해석·M3가테더줄무게까지함께지지",
     },
     "ProductionEstimateStatic": {
         "1대",
@@ -220,23 +224,20 @@ STATIC_REQUIRED_TEXT = {
         "직접작업",
         "6~10시간",
         "60~100시간",
-        "부품비예비합계",
+        "부품비",
         "1대약22.2~23.3만원",
         "10대약222~233만원",
         "모터4개",
         "약8.0만원",
         "ESC4개",
         "약4.0만원",
-        "프로젝트추정",
         "MCU·센서IC",
         "약2.3만원",
         "프레임재료",
         "1.1~2.2만원",
         "배터리·프로펠러",
         "약6.8만원",
-        "3901-L0X선택·+4.8~4.9만원/대",
-        "시간:PCB조립완료·첫출력성공·비용:FCPCB·전원·배선등별도",
-        "배송·인건비·재출력·비행튜닝제외",
+        "3901-L0X추가·+4.8~4.9만원/대",
     },
 }
 STATIC_FORBIDDEN_TEXT = {
@@ -256,6 +257,12 @@ STATIC_FORBIDDEN_TEXT = {
     "고정시간·보편출력값없음",
     "HOSTSIL·실제비행증거아님",
     "가능한race·관측사고아님",
+    "예비산정·실측기록아님",
+    "프로젝트추정",
+    "배송·인건비·재출력·비행튜닝제외",
+    "시간:PCB조립완료·첫출력성공·비용:FCPCB·전원·배선등별도",
+    "추정",
+    "원인확정아님",
 }
 
 
@@ -779,7 +786,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         component = next(
             item
             for item in horizontal.submobjects
-            if getattr(item, "text", None) == "수평성분"
+            if getattr(item, "text", None) == "앞으로미는힘"
         )
         self.assertGreater(component.width, component.height)
         horizontal_text = {
@@ -794,6 +801,17 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         self.assertFalse(self._bbox_overlaps(component, horizontal_drone, gap=0.04))
         self.assertFalse(
             self._bbox_overlaps(component, horizontal_text["무게W"], gap=0.08)
+        )
+
+        rotor_ellipses = [
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "Ellipse" and item.width > item.height * 2.0
+        ]
+        self.assertGreaterEqual(
+            len(rotor_ellipses),
+            8,
+            "each side-view state should show the front and rear rotor discs",
         )
 
     def test_static_force_vectors_share_origin_and_encode_physical_relations(self) -> None:
@@ -925,6 +943,19 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         self.assertNotEqual(tail_force_moment, 0.0)
         self.assertLess(reaction_moment * tail_force_moment, 0.0)
 
+        main_rotor_blades = [
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "Line"
+            and item.get_center()[0] < 0
+            and item.get_length() > 1.4
+        ]
+        self.assertGreaterEqual(
+            len(main_rotor_blades),
+            2,
+            "the helicopter main rotor needs visible crossing blades in top view",
+        )
+
     def test_static_helicopter_arrows_have_adjacent_labels_and_yaw_example(self) -> None:
         import math
 
@@ -977,23 +1008,17 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         for mechanism in ("A읽기", "B쓰기", "옛A기반C쓰기", "B갱신손실가능"):
             self.assertIn(mechanism, race_text)
 
-    def test_static_landing_probe_separates_ground_ranges_from_airborne_unknown(self) -> None:
+    def test_static_landing_probe_shows_why_the_threshold_could_not_separate_states(self) -> None:
         scene = self._rendered_static_scene("LandingProbeEvidenceStatic")
-        rows = (
-            ("지상데이터셋A", "0.0070~0.1340g"),
-            ("지상데이터셋B", "0.0590~0.1930g"),
-            ("공중", "미측정"),
-        )
-        row_y = []
-        for name_text, value_text in rows:
-            name = self._text(scene, name_text)
-            value = self._text(scene, value_text)
-            self.assertLess(name.get_right()[0] + 0.5, value.get_left()[0])
-            self.assertAlmostEqual(name.get_center()[1], value.get_center()[1], delta=0.12)
-            row_y.append(name.get_center()[1])
-        self.assertGreater(row_y[0], row_y[1])
-        self.assertGreater(row_y[1], row_y[2])
-        for boundary in ("공중비교없음", "로깅전용", "착지판정아님"):
+        air_value = self._text(scene, "0.061g·0.097g")
+        ground_value = self._text(scene, "0.059~1.147g")
+        overlap = self._text(scene, "값이겹침")
+        premise = self._text(scene, "지면이면무반응전제실패")
+        self.assertLess(air_value.get_center()[0], ground_value.get_center()[0])
+        self.assertGreater(air_value.get_center()[1], premise.get_center()[1])
+        self.assertGreater(ground_value.get_center()[1], premise.get_center()[1])
+        self.assertLess(abs(overlap.get_center()[0]), 1.2)
+        for boundary in ("로깅전용", "착지판정제외"):
             self._text(scene, boundary)
 
     def test_static_tether_inference_is_explicit_and_bounded(self) -> None:
@@ -1006,12 +1031,13 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
             if getattr(item, "text", None) is not None
         }
         for required in (
-            "추정",
             "M3근처테더",
-            "M3의테더하중지지가능성",
-            "원인확정아님",
+            "줄무게까지함께지지",
+            "관측과현장조건해석·M3가테더줄무게까지함께지지",
         ):
             self.assertIn(required, rendered_text)
+        self.assertNotIn("추정", rendered_text)
+        self.assertNotIn("원인확정아님", rendered_text)
         self.assertNotIn("질량배분·추력차이·테더·프레임·공력", rendered_text)
 
         m3 = self._text(scene, "M3")
@@ -1239,7 +1265,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                         self.assertGreaterEqual(mobject.get_bottom()[1], -4.46)
                         self.assertLessEqual(mobject.get_top()[1], 4.46)
 
-    def test_production_estimate_keeps_scale_and_caveat_zones_separate(self) -> None:
+    def test_production_estimate_keeps_scale_and_costs_clear_without_visible_caveats(self) -> None:
         scene = self._rendered_static_scene("ProductionEstimateStatic")
         texts = [
             item
@@ -1258,56 +1284,14 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
             printer_labels[1].get_left()[0],
         )
 
-        excluded = next(
-            item
-            for item in texts
-            if item.text == "배송·인건비·재출력·비행튜닝제외"
-        )
-        optional = next(
-            item
-            for item in texts
-            if item.text == "3901-L0X선택·+4.8~4.9만원/대"
-        )
-        horizontal_overlap = (
-            excluded.get_left()[0] < optional.get_right()[0]
-            and excluded.get_right()[0] > optional.get_left()[0]
-        )
-        vertical_overlap = (
-            excluded.get_bottom()[1] < optional.get_top()[1]
-            and excluded.get_top()[1] > optional.get_bottom()[1]
-        )
-        self.assertFalse(horizontal_overlap and vertical_overlap)
-
-        for category_text in (
-            "모터4개",
-            "ESC4개",
-            "MCU·센서IC",
-            "프레임재료",
-            "배터리·프로펠러",
+        rendered_text = {item.text for item in texts}
+        for removed in (
+            "예비산정·실측기록아님",
+            "프로젝트추정",
+            "배송·인건비·재출력·비행튜닝제외",
+            "시간:PCB조립완료·첫출력성공·비용:FCPCB·전원·배선등별도",
         ):
-            category = next(item for item in texts if item.text == category_text)
-            horizontal_overlap = (
-                category.get_left()[0] < optional.get_right()[0]
-                and category.get_right()[0] > optional.get_left()[0]
-            )
-            vertical_overlap = (
-                category.get_bottom()[1] < optional.get_top()[1]
-                and category.get_top()[1] > optional.get_bottom()[1]
-            )
-            self.assertFalse(
-                horizontal_overlap and vertical_overlap,
-                f"optional sensor badge overlaps {category_text}",
-            )
-            if horizontal_overlap:
-                vertical_gap = max(
-                    optional.get_bottom()[1] - category.get_top()[1],
-                    category.get_bottom()[1] - optional.get_top()[1],
-                )
-                self.assertGreaterEqual(
-                    vertical_gap,
-                    0.18,
-                    f"optional sensor badge crowds {category_text}",
-                )
+            self.assertNotIn(removed, rendered_text)
 
         paired_cost_text = {
             "모터4개": "약8.0만원",
@@ -1344,20 +1328,6 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
                 )
                 self.assertLessEqual(label.get_top()[1], card.get_top()[1] - 0.04)
 
-        project_estimate_labels = [
-            item for item in texts if item.text == "프로젝트추정"
-        ]
-        self.assertEqual(len(project_estimate_labels), 2)
-        for category_text in ("모터4개", "ESC4개"):
-            category = next(item for item in texts if item.text == category_text)
-            evidence = min(
-                project_estimate_labels,
-                key=lambda item: abs(item.get_center()[0] - category.get_center()[0]),
-            )
-            self.assertAlmostEqual(
-                evidence.get_center()[0], category.get_center()[0], delta=0.08
-            )
-            self.assertLess(evidence.get_center()[1], category.get_center()[1])
 
     def test_telemetry_evidence_badge_clears_content_panels(self) -> None:
         from manim import tempconfig
@@ -1544,6 +1514,22 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
 
 
 class PresentationStaticDiagramDeliveryTests(unittest.TestCase):
+    def test_motor_chart_uses_display_samples_without_conflicting_legend_averages(self) -> None:
+        from PIL import Image
+
+        source = MOTOR_CHART_SOURCE_PATH.read_text(encoding="utf-8")
+        self.assertIn('label="M1 · 전-좌"', source)
+        self.assertIn('label="M3 · 전-우"', source)
+        self.assertNotIn("avg 1338", source)
+        self.assertNotIn("avg 1365", source)
+        self.assertIn('series["t"]', source)
+        self.assertIn('series["m1"]', source)
+        self.assertIn('series["m3"]', source)
+
+        with Image.open(ASSET_DIR / "chart_motor.png") as chart:
+            self.assertEqual(chart.size, (1280, 720))
+            self.assertIn(chart.mode, {"RGB", "RGBA"})
+
     def test_static_python_diagrams_are_nonblank_hd_pngs(self) -> None:
         from PIL import Image, ImageChops
 

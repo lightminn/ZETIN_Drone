@@ -10,6 +10,7 @@
 - 실행·편집 방법: [ai-startup-camp-drone/README.md](ai-startup-camp-drone/README.md)
 - 주장·근거 목록: [ai-startup-camp-drone/SOURCES.md](ai-startup-camp-drone/SOURCES.md)
 
-현재 자료는 84장 HTML 덱이며 개념 영상 12개와 테더 시험 영상 2회 배치를 로컬
-자산으로 포함한다. 저장소만 복제하면 네트워크 없이 발표할 수 있다. 내용이
-동결되기 전에는 HTML을 계속 고치고, PPTX/PDF는 배포 시점에 별도 산출한다.
+현재 자료는 84장 HTML 덱이며 12개의 개념 영상과 76번의 테더 호버 영상 1개,
+총 13개 영상을 로컬 자산으로 포함한다. 저장소만 복제하면 네트워크 없이
+발표할 수 있다. 내용이 동결되기 전에는 HTML을 계속 고치고, PPTX/PDF는
+배포 시점에 별도 산출한다.

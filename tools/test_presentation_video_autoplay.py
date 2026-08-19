@@ -46,7 +46,7 @@ PYTHON_STATIC_IMAGES = {
     64: "failsafe-timeline.png",
     70: "landing-probe-evidence.png",
     72: "shared-state-race.png",
-    81: "telemetry-motor-balance.png",
+    80: "telemetry-motor-balance.png",
 }
 
 GENERATED_DIAGRAM_VIDEOS = {
@@ -157,7 +157,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             "PCB · 배선 · 센서 융합 · 제어",
             "셋째 교시",
             "검증 · 안전 · 시연 · 모바일 체험",
-            "질문과 기체 관람",
+            "질문과 답변",
         ):
             self.assertIn(phrase, agenda_visible)
         self.assertNotRegex(agenda_visible, r"(?:3\s*시간|45\s*분|15\s*분)")
@@ -216,9 +216,12 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         closing_visible = " ".join(
             filter(None, (_slide_title(closing), _slide_text(closing)))
         )
-        self.assertIn("질문과 답변 · 기체 관람", closing_visible)
+        self.assertIn("감사합니다", closing_visible)
+        self.assertIn("Q & A", closing_visible)
+        self.assertNotIn("기체 관람", closing_visible)
+        self.assertEqual(closing["videos"], [])
         self.assertIn(
-            "마지막 15분은 질문과 실물 기체 관람 시간이다.",
+            "마지막 15분은 질문과 답변 시간이다.",
             str(closing["attrs"].get("data-speaker-notes", "")),
         )
 
@@ -280,18 +283,17 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         slide60 = parser.sections[59]
         slide60_text = _slide_text(slide60)
         slide60_notes = str(slide60["attrs"].get("data-speaker-notes", ""))
+        self.assertEqual(_slide_title(slide60), "제어와 안전 전환")
         for phrase in (
-            "첫 실비행 무장 구간",
-            "명령이 실제로 수락",
-            "초기화 실패",
-            "지자기 보정 중",
-            "드리프트 감소를 단독으로 입증하지 않는다",
-            "다음 장의 ON/OFF host SIL",
+            "센서 측정",
+            "자세 추정",
+            "모터 제어",
+            "안전 전환",
+            "흐름이 끊겼을 때",
         ):
-            self.assertIn(phrase, slide60_text)
-            self.assertIn(phrase, slide60_notes)
-        self.assertNotIn("별도 ON/OFF 벤치·SIL 비교", slide60_text + slide60_notes)
-        self.assertNotIn("Yaw와 MagHeading이 함께 움직였다", slide60_text + slide60_notes)
+            self.assertIn(phrase, slide60_text + " " + slide60_notes)
+        self.assertNotIn("Mag_Enabled", slide60_text)
+        self.assertNotIn("mag 1", slide60_text)
 
         slide65 = parser.sections[64]
         self.assertEqual(
@@ -321,10 +323,12 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             slide70["attrs"].get("data-speaker-notes", "")
         )
         for phrase in (
-            "두 분포 모두 지면 데이터",
-            "공중 분포는 미측정",
+            "공중 프로브 2회",
+            "접지 프로브 10회",
+            "값이 겹쳤다",
+            "지면이면 무반응",
             "기록 전용",
-            "착지 결정에 사용하지 않는다",
+            "착지 판정에서 제외",
         ):
             self.assertIn(phrase, slide70_text_and_notes)
 
@@ -335,21 +339,28 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         self.assertIn("가능한 경쟁", slide72_boundary)
         self.assertIn("관측된 비행사고는 아니다", slide72_boundary)
 
-        slide81 = parser.sections[80]
-        slide81_text = _slide_text(slide81)
-        slide81_notes = str(slide81["attrs"].get("data-speaker-notes", ""))
-        slide81_alt = " ".join(str(image.get("alt", "")) for image in slide81["images"])
-        slide81_boundary = " ".join((slide81_text, slide81_notes, slide81_alt))
+        slide80 = parser.sections[79]
+        slide80_text = _slide_text(slide80)
+        slide80_notes = str(slide80["attrs"].get("data-speaker-notes", ""))
+        slide80_alt = " ".join(str(image.get("alt", "")) for image in slide80["images"])
+        slide80_boundary = " ".join((slide80_text, slide80_notes, slide80_alt))
         for phrase in (
             "M3>M1",
             "M3 근처",
-            "테더 하중을 지지했을 가능성이 높다",
-            "추정",
+            "줄 무게까지",
+            "해석",
             "한 구간",
             "추력·프레임·공력 차이",
         ):
-            self.assertIn(phrase, slide81_boundary)
-        self.assertNotIn("테더가 원인임을 증명", slide81_boundary)
+            self.assertIn(phrase, slide80_boundary)
+        self.assertNotIn("추정", slide80_text)
+        self.assertNotIn("확정 아님", slide80_text)
+
+        slide81 = parser.sections[80]
+        self.assertEqual(_slide_title(slide81), "FC의 균형잡기 체험")
+        slide81_text = _slide_text(slide81)
+        self.assertIn("비행제어기가 빠르게 반복하는 균형잡기", slide81_text)
+        self.assertNotIn("설치·로그인 없이", slide81_text)
 
         sources = (DECK_DIR / "SOURCES.md").read_text(encoding="utf-8")
         self.assertNotIn("PCB 주문·납땜·부품 납기 상태", sources)
@@ -387,8 +398,14 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         slide22_text = _slide_text(slide22)
         slide22_notes = str(slide22["attrs"].get("data-speaker-notes", ""))
         self.assertEqual(_slide_title(slide22), "1대와 10대 제작 규모")
-        self.assertIn("예비 산정", slide22_text)
-        self.assertIn("완성 기체 총원가가 아니다", slide22_text)
+        for hidden_caveat in (
+            "예비 산정",
+            "실측 기록 아님",
+            "프로젝트 추정",
+            "판매처 가격 증빙",
+            "완성 기체 총원가가 아니다",
+        ):
+            self.assertNotIn(hidden_caveat, slide22_text)
         self.assertTrue(
             any(
                 attrs.get("src") == "assets/production-estimate.png"
@@ -427,8 +444,16 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         slide23 = parser.sections[22]
         slide23_text = _slide_text(slide23)
         slide23_notes = str(slide23["attrs"].get("data-speaker-notes", ""))
-        self.assertEqual(_slide_title(slide23), "트러스 암 설계")
-        self.assertIn("형상을 수정해 다시 출력·비교", slide23_text)
+        self.assertEqual(_slide_title(slide23), "모듈형 프레임 설계")
+        for phrase in (
+            "손상된 부품만",
+            "다시 출력",
+            "교체",
+            "테스트 중 수리",
+        ):
+            self.assertIn(phrase, slide23_text)
+        self.assertEqual(len(slide23["images"]), 1)
+        self.assertNotIn("트러스", slide23_text + slide23_notes)
         for unsupported_detail in ("세 번", "하루 안에"):
             self.assertNotIn(unsupported_detail, slide23_text + slide23_notes)
 
@@ -499,8 +524,104 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         self.assertNotIn("지상국을 직접 설계·구현했다", slide21_text)
 
         slide24_text = _slide_text(parser.sections[23])
+        self.assertIn("배터리와 배선, ESC", slide24_text)
+        self.assertNotIn("육각 패턴", slide24_text)
         self.assertIn("방위 센서 측정값에 간섭을 일으키기 때문이다", slide24_text)
         self.assertNotIn("방위 센서를 오염시키기 때문이다", slide24_text)
+        self.assertTrue(
+            any(
+                "data-component-bay-label" in attrs
+                for _, attrs in parser.sections[23]["elements"]
+            )
+        )
+
+        slide60 = parser.sections[59]
+        self.assertIn("데이터 상태 확인", _slide_text(slide60))
+        self.assertTrue(
+            any(
+                "data-safety-branch" in attrs
+                for _, attrs in slide60["elements"]
+            )
+        )
+
+    def test_requested_slide_revisions_match_the_audience_contract(self) -> None:
+        parser = _DeckParser()
+        source = (DECK_DIR / "index.html").read_text(encoding="utf-8")
+        parser.feed(source)
+
+        slide8 = parser.sections[7]
+        self.assertEqual(len(slide8["images"]), 4)
+        self.assertEqual(
+            sum(
+                1
+                for tag, attrs in slide8["elements"]
+                if tag == "figcaption" and "data-evidence-label" in attrs
+            ),
+            4,
+        )
+        cad = next(image for image in slide8["images"] if "data-cad-evidence" in image)
+        self.assertEqual(cad.get("src"), "assets/image13.png")
+        self.assertIn("object-fit:contain", re.sub(r"\s+", "", str(cad.get("style", ""))))
+
+        slide28 = parser.sections[27]
+        slide28_text = _slide_text(slide28)
+        for phrase in (
+            "12V 입력",
+            "ESC의 BEC",
+            "5V를 ESP32에 공급",
+            "ESP32의 3.3V 출력",
+        ):
+            self.assertIn(phrase, slide28_text)
+        self.assertNotIn("보호용 MOSFET", slide28_text)
+        self.assertNotIn("12V → 5V / 3.3V", source)
+
+        slide29 = parser.sections[28]
+        self.assertTrue(
+            any(image.get("src") == "assets/pcb-render-current.png" for image in slide29["images"])
+        )
+        self.assertIn("실물", _slide_text(slide29))
+        self.assertNotIn("비행제어 보드 v1.4.3", _slide_text(slide29))
+        self.assertTrue((DECK_DIR / "assets" / "pcb-render-current.png").is_file())
+
+        slide30_text = _slide_text(parser.sections[29])
+        self.assertIn("외부 센서 보드와 점퍼선", slide30_text)
+        self.assertIn("신호 경로 단축", slide30_text)
+        self.assertNotIn("센서를 교체하면 배선을 다시 만들어야 했다", slide30_text)
+
+        slide32 = parser.sections[31]
+        self.assertEqual(slide32["images"], [])
+        for phrase in (
+            "프로펠러 제거",
+            "극성·핀·모터 순서",
+            "전류 제한 전원",
+            "한 번에 한 모터",
+            "USB 명령",
+        ):
+            self.assertIn(phrase, _slide_text(slide32))
+
+        slide66_text = _slide_text(parser.sections[65])
+        self.assertIn("바닥까지 거리 h", slide66_text)
+
+        self.assertNotIn("“스톱” 후", _slide_text(parser.sections[74]))
+
+        self.assertEqual(_slide_title(parser.sections[79]), "텔레메트리 로그 해석")
+        self.assertEqual(_slide_title(parser.sections[80]), "FC의 균형잡기 체험")
+
+        closing = parser.sections[83]
+        closing_visible = " ".join(filter(None, (_slide_title(closing), _slide_text(closing))))
+        self.assertEqual(_slide_title(closing), "감사합니다")
+        self.assertIn("Q & A", closing_visible)
+        for removed in (
+            "기체 관람",
+            "궁금한 점을 질문하고",
+            "프레임과 조립 구조",
+            "비행제어 보드와 배선",
+            "센서와 안전 설계",
+            "프로펠러를 분리하고",
+            "테더 시험 기록",
+        ):
+            self.assertNotIn(removed, closing_visible)
+        self.assertEqual(closing["videos"], [])
 
     def test_deck_omits_zetin_team_name(self) -> None:
         source = (DECK_DIR / "index.html").read_text(encoding="utf-8")
@@ -527,7 +648,7 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             for section in parser.sections
             for video in section["videos"]
         ]
-        self.assertEqual(len(all_videos), 14)
+        self.assertEqual(len(all_videos), 13)
         invalid_autoplay_markup = [
             attrs.get("src", "<unknown>")
             for attrs in all_videos
@@ -843,7 +964,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         qr = self._evaluate(
             """
             (() => {
-              const slide = document.querySelector('deck-stage')._slides[79];
+              const slide = document.querySelector('deck-stage')._slides[80];
               const image = slide.querySelector('img[src$="mobile-lab-qr.svg"]');
               return {
                 count: slide.querySelectorAll(
@@ -895,7 +1016,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             sorted(Path(source).name for source in result["collageSources"]),
             sorted(
                 [
-                    "image5.png",
+                    "image13.png",
                     "image12.png",
                     "chart_attitude.png",
                     "mobile-lab-student.png",
@@ -907,7 +1028,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertTrue(result["magChartLoaded"], result)
         self.assertGreaterEqual(result["magChartLogicalWidth"], 1000, result)
 
-    def test_torque_comparison_fits_and_mag_command_does_not_split(self) -> None:
+    def test_torque_comparison_fits_and_safety_transition_replaces_mag_command(self) -> None:
         self._open_deck()
         result = self._evaluate(
             r"""
@@ -933,8 +1054,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
               );
               const torqueRect = torqueImage?.getBoundingClientRect();
 
-              const magSlide = await inspect(60);
-              const magCommand = magSlide.querySelector('[data-command="mag-1"]');
+              const safetySlide = await inspect(60);
               return {
                 torqueLoaded: Boolean(
                   torqueImage?.complete && torqueImage.naturalWidth
@@ -964,11 +1084,10 @@ class PresentationVideoBrowserTests(unittest.TestCase):
                       maxWidth: getComputedStyle(torqueImage).maxWidth,
                       maxHeight: getComputedStyle(torqueImage).maxHeight,
                     } : null,
-                magCommandCount: magSlide.querySelectorAll(
+                magCommandCount: safetySlide.querySelectorAll(
                   '[data-command="mag-1"]'
                 ).length,
-                magCommandWhiteSpace: magCommand
-                  ? getComputedStyle(magCommand).whiteSpace : null,
+                safetyText: safetySlide.textContent,
               };
             })()
             """,
@@ -977,8 +1096,8 @@ class PresentationVideoBrowserTests(unittest.TestCase):
 
         self.assertTrue(result["torqueLoaded"], result)
         self.assertTrue(result["torqueInside"], result)
-        self.assertEqual(result["magCommandCount"], 1, result)
-        self.assertEqual(result["magCommandWhiteSpace"], "nowrap", result)
+        self.assertEqual(result["magCommandCount"], 0, result)
+        self.assertIn("안전 전환", result["safetyText"])
 
     def test_slide_28_schematic_is_contained_without_cropping(self) -> None:
         self._open_deck()
@@ -1035,6 +1154,68 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertEqual(result["objectFit"], "contain", result)
         self.assertTrue(result["insideFrame"], result)
         self.assertTrue(result["insideSlide"], result)
+
+    def test_tof_label_clears_vector_and_legacy_board_silkscreen_is_cropped(self) -> None:
+        self._open_deck()
+        result = self._evaluate(
+            r"""
+            (async () => {
+              const stage = document.querySelector('deck-stage');
+              const inspect = async number => {
+                stage.goTo(number - 1);
+                stage._fit();
+                await new Promise(resolve => requestAnimationFrame(
+                  () => requestAnimationFrame(resolve)
+                ));
+                return stage._slides[number - 1];
+              };
+
+              const tofSlide = await inspect(66);
+              const vector = tofSlide.querySelector('[data-tof-distance-vector]');
+              const label = tofSlide.querySelector('[data-tof-distance-label]');
+              const vectorRect = vector.getBoundingClientRect();
+              const labelRect = label.getBoundingClientRect();
+
+              const pcbSlide = await inspect(29);
+              const layout = pcbSlide.querySelector('img[src$="pcb_layout.png"]');
+              const photo = pcbSlide.querySelector('img[src$="image18.jpeg"]');
+              const layoutRect = layout.getBoundingClientRect();
+              const layoutFrameRect = layout.parentElement.getBoundingClientRect();
+              const photoRect = photo.getBoundingClientRect();
+              const frameRect = photo.parentElement.getBoundingClientRect();
+
+              const cycleSlide = await inspect(13);
+              const benchMask = cycleSlide.querySelector('[data-legacy-silk-mask="bench"]');
+              const purposeSlide = await inspect(14);
+              const purposeBoard = purposeSlide.querySelector('[data-legacy-silk-crop="board-purpose"]');
+              const layerSlide = await inspect(15);
+              const layerBoard = layerSlide.querySelector('[data-legacy-silk-crop="board-layer"]');
+              return {
+                tofGap: labelRect.left - vectorRect.right,
+                tofScale: tofSlide.getBoundingClientRect().width / 1280,
+                layoutCropFraction:
+                  (layoutRect.right - layoutFrameRect.right) / layoutFrameRect.width,
+                photoCropFraction: (photoRect.right - frameRect.right) / frameRect.width,
+                benchMaskVisible: Boolean(
+                  benchMask && benchMask.getBoundingClientRect().width > 40
+                ),
+                purposeScale: new DOMMatrix(
+                  getComputedStyle(purposeBoard).transform
+                ).a,
+                layerScale: new DOMMatrix(
+                  getComputedStyle(layerBoard).transform
+                ).a,
+              };
+            })()
+            """,
+            await_promise=True,
+        )
+        self.assertGreaterEqual(result["tofGap"] / result["tofScale"], 8.0, result)
+        self.assertGreaterEqual(result["layoutCropFraction"], 0.14, result)
+        self.assertGreaterEqual(result["photoCropFraction"], 0.25, result)
+        self.assertTrue(result["benchMaskVisible"], result)
+        self.assertGreaterEqual(result["purposeScale"], 1.44, result)
+        self.assertGreaterEqual(result["layerScale"], 1.17, result)
 
     def test_professor_feedback_slides_render_visual_first_without_overflow(self) -> None:
         self._open_deck()
@@ -1456,7 +1637,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertTrue(landing_previous["paused"])
         self.assertLess(landing_previous["currentTime"], 0.05)
 
-    def test_both_hover_demo_instances_decode_autoplay_and_reset(self) -> None:
+    def test_hover_demo_instance_decodes_autoplays_and_resets(self) -> None:
         self._open_deck()
         slide_indices = self._evaluate(
             r"""
@@ -1468,7 +1649,7 @@ class PresentationVideoBrowserTests(unittest.TestCase):
             })()
             """
         )
-        self.assertEqual(len(slide_indices), 2, slide_indices)
+        self.assertEqual(slide_indices, [75], slide_indices)
 
         for index in slide_indices:
             with self.subTest(slide=index + 1):
