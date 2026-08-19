@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover - environment-dependent skip
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DECK_DIR = REPO_ROOT / "docs" / "presentations" / "ai-startup-camp-drone-10min"
 HTML_PATH = DECK_DIR / "index.html"
+SCRIPT_PATH = DECK_DIR / "SCRIPT.md"
 PPTX_PATH = DECK_DIR / "드론_10분_요약본.pptx"
 PRODUCTION_ESTIMATE_PATH = (
     REPO_ROOT
@@ -84,6 +85,33 @@ class _DeckParser(HTMLParser):
 
 
 class Presentation10MinuteHtmlTests(unittest.TestCase):
+    def test_ten_minute_script_matches_the_current_deck_and_time_budget(self) -> None:
+        script = SCRIPT_PATH.read_text(encoding="utf-8")
+        normalized = re.sub(r"\s+", " ", script)
+        self.assertEqual(
+            [int(number) for number in re.findall(r"^## (\d+)쪽", script, re.MULTILINE)],
+            list(range(1, 15)),
+        )
+        self.assertGreaterEqual(len(script), 4500)
+        self.assertLessEqual(len(script), 5500)
+        for phrase in (
+            "직접 설계한 범위와 조달한 범위",
+            "설계 → 출력 → 시험·파손 → 측정 → 개선",
+            "3901-L0X",
+            "BMS 상태 공유와 충전 도크",
+            "sim-to-real 경로 계획",
+            "로봇개나 지상 로봇",
+            "유선 드론",
+            "다기체 군집",
+            "통신 이상",
+            "현재 성과가 아니라 후속 계획",
+            "RC 안전 전환 로직은 host에서 확인",
+        ):
+            self.assertIn(phrase, normalized)
+        self.assertNotIn("네 ESC의 BEC 출력을 모두 병렬", normalized)
+        for segmented_label in ("핵심 발화", "확장 발화", "선택 발화"):
+            self.assertNotIn(segmented_label, script)
+
     def setUp(self) -> None:
         self.source = HTML_PATH.read_text(encoding="utf-8")
         self.parser = _DeckParser()
@@ -117,7 +145,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
 
     def test_technical_slide_titles_are_short_and_natural(self) -> None:
         expected_titles = {
-            "03": "비행 제어 시스템",
+            "03": "설계한 하드웨어와 조달 부품",
             "05": "쿼드콥터의 힘과 토크",
             "06": "자이로와 가속도계 융합",
             "08": "실제 펌웨어 기반 SIL",
@@ -205,11 +233,17 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
         self.assertIn("data-teamless-crop", slide)
         self.assertNotIn("왜 비행제어 컴퓨터까지 직접 만들었나", slide)
 
-    def test_slide_03_shows_the_actual_power_path(self) -> None:
+    def test_slide_03_shows_designed_hardware_integrated_parts_and_power_path(self) -> None:
         slide = self.slide_source("03")
         rendered = slide.split(">", 1)[1]
         for required in (
-            "전원 경로",
+            'src="assets/assembled-bench.jpeg"',
+            "직접 설계",
+            "모듈형 프레임 · 비행제어 PCB",
+            "조달·통합",
+            "모터 4개 · ESC 4개",
+            "ESP32-S3 · 듀얼 IMU · BMM350",
+            "실제 전원 경로",
             "12V → ESC BEC → 5V → ESP32-S3 → 3.3V → 센서",
         ):
             self.assertIn(required, rendered)
@@ -223,7 +257,7 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             'src="assets/cad-top.png"',
             'src="assets/frame-iterations.jpeg"',
             'src="assets/modular-arm.png"',
-            "CAD → 출력 → 조립 → 수정",
+            "설계 → 출력 → 시험·파손 → 측정 → 개선",
             "모듈형 암",
             "손상된 부분만 다시 출력해 교체",
             "Maker Space 박근원 선생님의 장비·제작 지원에 감사드립니다.",
@@ -314,24 +348,25 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
             rendered,
         )
 
-    def test_slide_07_uses_actual_roll_mixer_fault_debugging_path(self) -> None:
+    def test_slide_07_separates_actual_axis_debugging_from_sil_mixer_mutation(self) -> None:
         slide = self.slide_source("07")
         for required in (
-            'title="문제 추적과 수정"',
-            "증상",
-            "로그·축 비교",
-            "원인",
-            "SIL 재현",
-            "수정 검증",
-            "Roll 믹서",
+            'title="실제 디버깅과 SIL 검출력"',
+            "실제 디버깅",
+            "센서축 ↔ 기체축 부호",
+            "두 IMU 원시값 비교",
+            "host SIL 검출력",
+            "Roll R → −R",
+            "정상 조건 수렴",
+            "별도 오류 주입",
             "R → −R",
-            "디버깅",
-            "오류 주입 스위치",
+            "같은 사건을 재현한 것이 아니라",
         ):
             self.assertIn(required, slide)
         visible_markup = slide.split(">", 1)[1]
         self.assertNotIn("SIL_INJECT_", visible_markup)
         self.assertNotIn("자이로 부호를 반전", slide)
+        self.assertNotIn("같은 결함 재현", slide)
 
     def test_slide_09_explains_relative_loop_rates_without_fixed_numbers(self) -> None:
         slide = self.slide_source("09")
@@ -384,19 +419,25 @@ class Presentation10MinuteHtmlTests(unittest.TestCase):
     def test_slide_13_separates_short_mid_and_long_term_goals(self) -> None:
         slide = self.slide_source("13")
         for required in (
-            'title="단기·중기·장기 목표"',
+            'title="지상 로봇과 함께 쓰는 다음 단계"',
             "단기",
             "중기",
             "장기",
-            "자세 제어",
-            "거리·광류",
-            "sim-to-real",
-            "군집 제어",
-            "현재 경계 · 모두 계획 단계",
+            "단일 기체 기준선",
+            "3901-L0X 거리·광류 제어 연결",
+            "배터리 전압·전류·온도 계측",
+            "제작·충전 인프라",
+            "BMS 상태 공유·충전 도크 검증",
+            "sim-to-real 경로 검증",
+            "지상 로봇 협업",
+            "로봇개 상부에 드론을 싣고 이동",
+            "작업 지점에서 유선 드론 전개",
+            "군집·충돌 회피·통신 이상 안전",
+            "경량화·저가화",
         ):
             self.assertIn(required, slide)
         rendered = slide.split(">", 1)[1]
-        self.assertEqual(rendered.count("계획 단계"), 4)
+        self.assertEqual(rendered.count("후속 계획"), 1)
         self.assertNotIn("현재 검증 단계", rendered)
 
     def test_slide_14_is_a_clean_thanks_and_questions_close(self) -> None:
@@ -438,10 +479,11 @@ class Presentation10MinutePptxTests(unittest.TestCase):
             )
             for current_phrase in (
                 "12V 입력에서 ESC의 BEC를 거쳐 5V",
+                "모듈형 프레임과 비행제어 PCB",
                 "모터 4개 80,000원, ESC 4개 40,000원",
                 "접지 10회는 0.059~1.147g",
                 "M3는 1360.0마이크로초, M1은 1334.2마이크로초",
-                "세 단계는 모두 이후 계획이다.",
+                "로봇개 또는 지상 로봇이 드론을 싣고 작업 지점까지 이동",
                 "발표를 마치고 질문을 받는다.",
             ):
                 self.assertIn(current_phrase, notes_text)

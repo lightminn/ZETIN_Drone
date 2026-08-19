@@ -63,50 +63,26 @@
     </x-import>
   </section>
 
-  <section data-label="시스템 큰 그림" data-screen-label="03" data-speaker-notes="비행제어는 센서, 상태 추정, 목표 생성, 캐스케이드 제어, 모터 배분이 닫힌 고리로 연결된 시스템이다. 기체가 움직이면 센서가 다시 읽는 순환 구조이다. 전원은 12V 입력에서 ESC의 BEC를 거쳐 5V로 ESP32-S3에 공급하고, ESP32-S3의 3.3V 출력을 센서에 공급한다. 직접 만든 범위는 기체와 보드, 제어 코드, 지상 제어 프로그램, 검증 하니스까지이다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="비행 제어 시스템">
-      <div class="fill" data-result-refresh="3" style="display:grid;grid-template-rows:auto 1fr auto;gap:19px">
-        <div data-result-element style="font-size:24.2px;line-height:1.45">비행은 한 번의 계산이 아니라 <strong>측정 → 추정 → 제어 → 움직임</strong>의 폐루프이다.</div>
-        <div data-result-element style="display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr 34px 1fr 34px 1fr;align-items:stretch;min-height:0">
-          <div class="rule-panel" style="display:flex;flex-direction:column;gap:11px">
-            <div class="eyebrow">SENSE</div>
-            <div style="font-size:25px;font-weight:800">센서</div>
-            <div style="font-size:20.5337px;line-height:1.48">듀얼 IMU<br>지자기센서<br>조종 명령</div>
-            <div class="caption" style="margin-top:auto">원시 가속도·각속도</div>
+  <section data-label="하드웨어 설계와 부품 통합" data-screen-label="03" data-speaker-notes="실제 조립 기체에서 직접 설계한 범위와 조달해 통합한 범위를 구분한다. 모듈형 프레임과 비행제어 PCB, 전원·신호 배선 구조, 펌웨어와 SIL 하니스는 직접 설계했다. 모터와 ESC 각 네 개, 배터리와 프로펠러, ESP32-S3와 듀얼 IMU·BMM350은 상용 부품을 조달해 통합했다. 전원은 12V 입력에서 ESC의 BEC를 거쳐 5V로 ESP32-S3에 공급하고, ESP32-S3의 3.3V 출력을 센서에 공급한다. 사진은 실제 벤치 조립 상태이며 정확한 구매 SKU와 영수증 목록을 뜻하지 않는다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="설계한 하드웨어와 조달 부품">
+      <div class="fill" data-result-refresh="3" style="display:grid;grid-template-columns:1.12fr .88fr;grid-template-rows:1fr auto;gap:16px 24px">
+        <figure data-result-element class="panel" style="display:flex;flex-direction:column;gap:8px;padding:12px;min-height:0;overflow:hidden">
+          <div style="flex:1;min-height:0;overflow:hidden"><img src="assets/assembled-bench.jpeg" alt="모듈형 프레임에 모터, ESC, 배터리와 센서를 조립한 실제 벤치 기체" style="width:100%;height:100%;object-fit:cover;object-position:center center"></div>
+          <figcaption class="caption">실제 벤치 조립 기체 · 설계 부품과 상용 부품을 한 시스템으로 통합</figcaption>
+        </figure>
+        <div data-result-element style="display:grid;grid-template-rows:1fr 1fr;gap:14px;min-height:0">
+          <div style="border-left:8px solid var(--uos-blue);background:#eaf2fb;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;gap:10px">
+            <div class="eyebrow">직접 설계</div>
+            <div style="font-size:26px;font-weight:800">기체·보드·검증 환경</div>
+            <div style="font-size:20.5337px;line-height:1.5">모듈형 프레임 · 비행제어 PCB<br>전원·신호 배선 구조<br>펌웨어 · 지상 제어 프로그램 · SIL</div>
           </div>
-          <div style="display:grid;place-items:center;font-size:28px;color:var(--uos-blue)">→</div>
-          <div class="rule-panel" style="display:flex;flex-direction:column;gap:11px">
-            <div class="eyebrow">ESTIMATE</div>
-            <div style="font-size:25px;font-weight:800">상태 추정</div>
-            <div style="font-size:20.5337px;line-height:1.48">축·부호 변환<br>상보필터<br>Yaw 기준 융합</div>
-            <div class="caption" style="margin-top:auto">Roll · Pitch · Yaw</div>
-          </div>
-          <div style="display:grid;place-items:center;font-size:28px;color:var(--uos-blue)">→</div>
-          <div class="rule-panel" style="display:flex;flex-direction:column;gap:11px">
-            <div class="eyebrow">CONTROL</div>
-            <div style="font-size:25px;font-weight:800">캐스케이드 PID</div>
-            <div style="font-size:20.5337px;line-height:1.48">각도 바깥 루프<br>각속도 안쪽 루프<br>anti-windup</div>
-            <div class="caption" style="margin-top:auto">축별 보정량</div>
-          </div>
-          <div style="display:grid;place-items:center;font-size:28px;color:var(--uos-blue)">→</div>
-          <div class="rule-panel" style="display:flex;flex-direction:column;gap:11px">
-            <div class="eyebrow">ALLOCATE</div>
-            <div style="font-size:25px;font-weight:800">믹서</div>
-            <div style="font-size:20.5337px;line-height:1.48">Roll · Pitch · Yaw<br>네 모터에 배분<br>포화 시 동시 축소</div>
-            <div class="caption" style="margin-top:auto">PWM 4채널</div>
-          </div>
-          <div style="display:grid;place-items:center;font-size:28px;color:var(--uos-blue)">→</div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:11px">
-            <div style="font-size:20.5337px;font-weight:800;opacity:.82">PLANT</div>
-            <div style="font-size:25px;font-weight:800">기체</div>
-            <div style="font-size:20.5337px;line-height:1.48">모터·프로펠러<br>추력과 토크<br>자세 변화</div>
-            <div class="caption" style="color:#fff;opacity:.82;margin-top:auto">움직임이 다시 센서로</div>
+          <div style="border-left:8px solid #42c7d9;background:#eef9fb;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;gap:10px">
+            <div class="eyebrow" style="color:#16889a">조달·통합</div>
+            <div style="font-size:26px;font-weight:800">비행·센서 부품</div>
+            <div style="font-size:20.5337px;line-height:1.5">모터 4개 · ESC 4개<br>배터리 · 프로펠러<br>ESP32-S3 · 듀얼 IMU · BMM350</div>
           </div>
         </div>
-        <div data-result-element style="display:grid;grid-template-columns:.9fr 1.1fr;gap:14px;align-items:stretch">
-          <div class="keyline" style="display:grid;align-items:center">프레임·PCB·펌웨어·제어 프로그램·SIL을 한 폐루프로 연결하였다.</div>
-          <div class="panel" style="border-left:7px solid #42c7d9;padding:12px 16px;display:flex;align-items:center;gap:13px;font-size:20.5337px;line-height:1.35;min-width:0"><strong style="color:var(--uos-blue);white-space:nowrap">전원 경로</strong><span class="nowrap">12V → ESC BEC → 5V → ESP32-S3 → 3.3V → 센서</span></div>
-        </div>
+        <div data-result-element class="panel" style="grid-column:1 / 3;border-left:7px solid var(--uos-blue);padding:13px 18px;display:flex;justify-content:center;align-items:center;gap:18px;font-size:22px;line-height:1.35"><strong style="color:var(--uos-blue);white-space:nowrap">실제 전원 경로</strong><span class="nowrap">12V → ESC BEC → 5V → ESP32-S3 → 3.3V → 센서</span></div>
       </div>
     </x-import>
   </section>
@@ -132,7 +108,7 @@
           </figure>
         </div>
         <div data-result-element style="display:grid;grid-template-columns:.72fr 1.14fr 1.14fr;gap:10px;align-items:stretch">
-          <div style="background:var(--uos-blue);color:#fff;padding:9px 14px;border-radius:4px;display:grid;place-items:center;font-size:20.5337px;font-weight:800;white-space:nowrap">CAD → 출력 → 조립 → 수정</div>
+          <div style="background:var(--uos-blue);color:#fff;padding:9px 14px;border-radius:4px;display:grid;place-items:center;text-align:center;font-size:18.7px;line-height:1.28;font-weight:800">설계 → 출력 → 시험·파손 → 측정 → 개선</div>
           <div style="border-left:6px solid var(--uos-blue);background:#eaf2fb;padding:8px 13px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center"><strong style="font-size:22px">1대</strong><span style="font-size:18.7px;line-height:1.23"><strong>프린터 1대 기준 · 약 2–3일</strong><br>프린터 점유 24–48시간<br>직접 작업 6–10시간</span></div>
           <div style="border-left:6px solid #7f8a9a;background:#f2f4f7;padding:8px 13px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center"><strong style="font-size:22px">10대</strong><span style="font-size:18.7px;line-height:1.23"><strong>프린터 1대 기준 · 약 10–20일</strong><br>프린터 점유 240–480시간<br>직접 작업 60–100시간</span></div>
         </div>
@@ -222,22 +198,25 @@
     </x-import>
   </section>
 
-  <section data-label="문제 추적과 수정" data-screen-label="07" data-speaker-notes="Roll 자세 오차가 줄지 않는 증상을 기록한 뒤 명령과 기체축 반응을 비교해 믹서 보정 방향을 원인으로 좁혔다. SIL_INJECT_SIGN_FAULT는 자이로 입력이 아니라 Roll 믹서 보정 R의 방향을 뒤집어 같은 실패를 재현하는 시험이다. 정상 조건은 수렴하고 오류 주입 조건은 실패하는지 함께 확인해 수정의 검출력을 검증했다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 추적과 수정">
-      <div class="fill" data-result-refresh="7" style="display:grid;grid-template-rows:auto 1fr auto;gap:20px">
-        <div data-result-element style="font-size:28px;font-weight:750;line-height:1.35">실패를 관찰한 뒤 같은 조건을 다시 만들어 <span style="color:var(--uos-blue)">원인과 수정 효과를 분리한 과정</span>이다.</div>
-        <div data-result-element style="display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr 26px 1fr 26px 1fr;align-items:stretch;min-height:0">
-          <div style="border-top:7px solid #b04a55;background:#fff0f1;padding:20px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow" style="color:#9b3f49">증상</div><div style="font-size:24px;font-weight:800">자세 오차 증가</div><div style="font-size:20.5337px;line-height:1.45">되돌려야 할 보정이 기울기를 키우는 현상</div></div>
-          <div style="display:grid;place-items:center;font-size:26px;color:var(--uos-blue)">→</div>
-          <div class="panel" style="border-top:7px solid var(--uos-blue);padding:20px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">로그·축 비교</div><div style="font-size:24px;font-weight:800">명령과 반응 대조</div><div style="font-size:20.5337px;line-height:1.45">Roll 오차 · 보정량 · 모터 출력의 방향 확인</div></div>
-          <div style="display:grid;place-items:center;font-size:26px;color:var(--uos-blue)">→</div>
-          <div class="panel" style="border-top:7px solid var(--uos-blue);padding:20px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">원인</div><div style="font-size:24px;font-weight:800">Roll 믹서 부호</div><div style="font-size:20.5337px;line-height:1.45">보정 R이 음의 피드백과 반대 방향</div></div>
-          <div style="display:grid;place-items:center;font-size:26px;color:var(--uos-blue)">→</div>
-          <div class="panel" style="border-top:7px solid var(--uos-blue);padding:20px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow">SIL 재현</div><div class="mono" style="font-size:21px;font-weight:800">R → −R</div><div style="font-size:18.7px;line-height:1.42">오류 주입 스위치로 같은 결함 재현</div></div>
-          <div style="display:grid;place-items:center;font-size:26px;color:#2c7a5b">→</div>
-          <div style="background:#e9f5ef;border-top:7px solid #2c7a5b;padding:20px;display:flex;flex-direction:column;gap:12px"><div class="eyebrow" style="color:#2c7a5b">수정 검증</div><div style="font-size:24px;font-weight:800">정상 수렴·변이 실패</div><div style="font-size:20.5337px;line-height:1.45">수정과 오류 검출력을 같은 판정으로 확인</div></div>
+  <section data-label="문제 추적과 수정" data-screen-label="07" data-speaker-notes="실제 프로젝트에서는 두 IMU의 센서축과 기체축 부호 약속이 어긋난 문제를 원시값 비교와 축 정렬로 좁혔다. 별도의 host SIL에서는 Roll 믹서 보정 R을 R→−R로 뒤집어 테스트가 해당 오류 유형에 반응하는지 확인했다. 두 사례는 같은 사건이 아니며, 실제 디버깅 과정과 테스트 검출력 증거를 구분한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="실제 디버깅과 SIL 검출력">
+      <div class="fill" data-result-refresh="7" style="display:grid;grid-template-rows:auto 1fr auto;gap:18px">
+        <div data-result-element style="font-size:27px;font-weight:750;line-height:1.35">실제 문제의 원인 추적과 host SIL의 오류 검출은 <span style="color:var(--uos-blue)">서로 다른 증거</span>이다.</div>
+        <div data-result-element style="display:grid;grid-template-columns:1fr 1fr;gap:24px;min-height:0">
+          <div style="border-top:7px solid var(--uos-blue);background:#f5f8fc;padding:24px 26px;display:flex;flex-direction:column;gap:16px">
+            <div class="eyebrow">실제 디버깅</div>
+            <div style="font-size:29px;font-weight:850">센서축 ↔ 기체축 부호</div>
+            <div style="font-size:22px;line-height:1.45">과도 기울기 관측 → 두 IMU 원시값 비교 → 축·부호 정렬</div>
+            <div style="margin-top:auto;border-top:1px solid #aac7e8;padding-top:14px;font-size:20.5337px;line-height:1.45">확인 · 실제 프로젝트에서 원인을 좁힌 과정</div>
+          </div>
+          <div style="border-top:7px solid #2c7a5b;background:#eef8f3;padding:24px 26px;display:flex;flex-direction:column;gap:16px">
+            <div class="eyebrow" style="color:#2c7a5b">host SIL 검출력</div>
+            <div class="mono" style="font-size:29px;font-weight:850">Roll R → −R</div>
+            <div style="font-size:22px;line-height:1.45">정상 조건 수렴 ↔ 믹서 부호 변이 조건 실패</div>
+            <div style="margin-top:auto;border-top:1px solid #a9d5be;padding-top:14px;font-size:20.5337px;line-height:1.45">확인 · 해당 Roll 믹서 오류 유형을 잡는 판정</div>
+          </div>
         </div>
-        <div data-result-element class="keyline">실패를 재현하고 원인을 좁혀 수정 검증까지 연결한 디버깅 학습이다.</div>
+        <div data-result-element class="keyline">같은 사건을 재현한 것이 아니라, 실제 디버깅과 별도 오류 주입을 각각 검증한 결과이다.</div>
       </div>
     </x-import>
   </section>
@@ -383,30 +362,34 @@
     </x-import>
   </section>
 
-  <section data-label="단기·중기·장기 목표" data-screen-label="13" data-speaker-notes="세 단계는 모두 이후 계획이다. 단기에는 단일 기체의 자세 제어를 반복 가능하게 만들고 3901-L0X 거리와 광류를 제어에 연결하며 착지 판단을 검증한다. 중기에는 반복 제작과 교정 절차를 정리하고 sim-to-real 경로 계획과 다기체 운용 기반을 구현한다. 장기에는 군집 제어, 충돌 회피와 통신 이상 시 집단 안전으로 확장한다. 앞 단계의 검증 기준을 통과한 뒤 다음 단계로 진행한다." style="background:#fff">
-    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="단기·중기·장기 목표">
-      <div class="fill" data-result-refresh="13" style="display:grid;grid-template-columns:1fr 46px 1fr 46px 1fr;grid-template-rows:1fr auto;gap:18px 12px">
-        <div data-result-element style="border-top:8px solid var(--uos-blue);background:#eaf2fb;padding:25px;display:flex;flex-direction:column;gap:14px">
-          <div class="eyebrow">단기 · 계획 단계</div>
-          <div style="font-size:29px;font-weight:800">단일 기체 완성도</div>
-          <ul style="margin:0;padding-left:25px;font-size:21px;line-height:1.55;display:flex;flex-direction:column;gap:9px"><li>반복 가능한 자세 제어</li><li>3901-L0X 거리·광류 연결</li><li>착지 판단의 벤치·실기 검증</li></ul>
-          <div style="margin-top:auto;border-top:1px solid #aac7e8;padding-top:12px;font-size:19.8px;font-weight:750">통과 기준 · 테더와 자유비행 기록의 반복성</div>
+  <section data-label="단기·중기·장기 목표" data-screen-label="13" data-speaker-notes="이 장은 현재 성과가 아니라 단계별 후속 계획이다. 단기에는 현재 기체의 자세 제어와 안전 전환을 같은 절차로 반복 검증하고, 3901-L0X 거리·광류를 제어에 연결하며 배터리 전압·전류·온도를 계측한다. 중기에는 설계·출력·시험 파손·측정·재설계 절차와 기체별 교정을 표준화하고, BMS 상태 공유와 충전 도크를 무전원 정렬과 접촉·차단 시험부터 검증한다. 동시에 프로펠러를 제거한 벤치, 출입을 분리한 테더 공간, 승인된 자유비행 장소를 마련해 sim-to-real 경로 계획을 검증한다. 장기에는 로봇개 또는 지상 로봇이 드론을 싣고 작업 지점까지 이동한 뒤 유선 드론을 전개하는 협업 개념을 검증하고, 다기체 군집·충돌 회피·통신 이상 안전으로 확장한다. 정지 플랫폼과 무추력 테더, 격리된 테더 상승, 협업 임무 순서로 진행하고 명령 권한, 비상정지, 테더 장력·엉킴, 통신 이상 안전 상태를 통과 기준으로 둔다. 반복 제작 기록에서 무게·부품 수·출력시간을 비교해 경량화와 저가화를 판단한다." style="background:#fff">
+    <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="지상 로봇과 함께 쓰는 다음 단계">
+      <div class="fill" data-result-refresh="13" style="display:grid;grid-template-rows:auto 1fr auto auto;gap:12px">
+        <div data-result-element style="font-size:22px;line-height:1.4"><strong style="color:var(--uos-blue)">후속 계획</strong> · 기능 목록이 아니라, 다음 단계로 넘어가기 위한 검증 관문이다.</div>
+        <div data-result-element style="display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr;align-items:stretch;min-height:0">
+          <div style="border-top:7px solid var(--uos-blue);padding:16px 17px 10px;display:flex;flex-direction:column;gap:9px;background:#f6f9fd">
+            <div class="eyebrow">단기</div>
+            <div style="font-size:27px;font-weight:850">단일 기체 기준선</div>
+            <div style="font-size:19.8px;line-height:1.46">자세 제어·안전 전환 반복 시험<br>3901-L0X 거리·광류 제어 연결<br>배터리 전압·전류·온도 계측</div>
+            <div style="margin-top:auto;border-top:1px solid #aac7e8;padding-top:9px;font-size:18.7px;font-weight:750">통과 · 같은 절차에서 결과 재현</div>
+          </div>
+          <div style="display:grid;place-items:center;font-size:30px;color:var(--uos-blue)">→</div>
+          <div style="border-top:7px solid #42c7d9;padding:16px 17px 10px;display:flex;flex-direction:column;gap:9px;background:#f1fbfc">
+            <div class="eyebrow" style="color:#16889a">중기</div>
+            <div style="font-size:27px;font-weight:850">제작·충전 인프라</div>
+            <div style="font-size:19.8px;line-height:1.46">제작·교정과 시험·파손 반복 표준화<br>BMS 상태 공유·충전 도크 검증<br>분리된 공간에서 sim-to-real 경로 검증</div>
+            <div style="margin-top:auto;border-top:1px solid #9edbe3;padding-top:9px;font-size:18.7px;font-weight:750">통과 · 접촉·차단·비상 절차 확인</div>
+          </div>
+          <div style="display:grid;place-items:center;font-size:30px;color:#7f8a9a">→</div>
+          <div style="border-top:7px solid #d39b2a;padding:16px 17px 10px;display:flex;flex-direction:column;gap:9px;background:#fffaf0">
+            <div class="eyebrow" style="color:#9b6a12">장기</div>
+            <div style="font-size:27px;font-weight:850">지상 로봇 협업</div>
+            <div style="font-size:19.8px;line-height:1.46">로봇개 상부에 드론을 싣고 이동<br>작업 지점에서 유선 드론 전개<br>군집·충돌 회피·통신 이상 안전</div>
+            <div style="margin-top:auto;border-top:1px solid #e3c983;padding-top:9px;font-size:18.7px;font-weight:750">통과 · 정지 플랫폼 → 테더 상승 → 협업 임무</div>
+          </div>
         </div>
-        <div style="display:grid;place-items:center;font-size:32px;color:var(--uos-blue)">→</div>
-        <div data-result-element style="border-top:8px solid #7f8a9a;background:#f2f4f7;padding:25px;display:flex;flex-direction:column;gap:14px">
-          <div class="eyebrow" style="color:var(--uos-ink-muted)">중기 · 계획 단계</div>
-          <div style="font-size:29px;font-weight:800">반복 제작과 경로</div>
-          <ul style="margin:0;padding-left:25px;font-size:21px;line-height:1.55;display:flex;flex-direction:column;gap:9px"><li>제작·교정 절차 표준화</li><li>sim-to-real 경로 계획</li><li>다기체 통신·동기화 기반</li></ul>
-          <div style="margin-top:auto;border-top:1px solid var(--uos-rule);padding-top:12px;font-size:19.8px;font-weight:750">진입 조건 · 단일 기체 위치 제어 통과</div>
-        </div>
-        <div style="display:grid;place-items:center;font-size:32px;color:#7f8a9a">→</div>
-        <div data-result-element style="border-top:8px solid #d39b2a;background:#fff7e2;padding:25px;display:flex;flex-direction:column;gap:14px">
-          <div class="eyebrow" style="color:#9b6a12">장기 · 계획 단계</div>
-          <div style="font-size:29px;font-weight:800">군집 안전 제어</div>
-          <ul style="margin:0;padding-left:25px;font-size:21px;line-height:1.55;display:flex;flex-direction:column;gap:9px"><li>군집 제어</li><li>기체 간 충돌 회피</li><li>통신 이상 시 집단 안전</li></ul>
-          <div style="margin-top:auto;border-top:1px solid #e3c983;padding-top:12px;font-size:19.8px;font-weight:750">진입 조건 · 다기체 운용 기반 검증</div>
-        </div>
-        <div data-result-element class="keyline" style="grid-column:1 / 6"><strong>현재 경계 · 모두 계획 단계</strong> — 이전 단계의 검증 기준을 통과한 뒤 다음 단계로 진행한다.</div>
+        <div data-result-element style="display:grid;grid-template-columns:150px 1fr;gap:15px;align-items:center;border-left:7px solid var(--uos-blue);background:#eaf2fb;padding:10px 15px;font-size:19.8px;line-height:1.35"><strong style="font-size:21px;color:var(--uos-blue)">에너지 기반</strong><span>배터리 계측 → BMS 상태 공유 → 충전 도크</span></div>
+        <div data-result-element style="display:grid;grid-template-columns:150px 1fr;gap:15px;align-items:center;border-left:7px solid #42c7d9;background:#eef9fb;padding:10px 15px;font-size:19.8px;line-height:1.35"><strong style="font-size:21px;color:#16889a">제작·검증 기반</strong><span>CAD·출력·수리 → 분리된 시험 공간 → 무게·부품 수·출력시간 비교로 경량화·저가화</span></div>
       </div>
     </x-import>
   </section>
