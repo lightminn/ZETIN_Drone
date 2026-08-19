@@ -93,6 +93,7 @@ if ((server_ready == 0)); then
 fi
 
 echo "발표자료를 엽니다: $url"
+echo "전체화면 버튼 또는 F 키로 발표를 시작하고, Esc로 종료할 수 있습니다."
 echo "Chrome 창을 닫으면 서버도 자동으로 종료됩니다."
 
 "$chrome_bin" \

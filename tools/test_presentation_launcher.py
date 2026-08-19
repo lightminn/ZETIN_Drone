@@ -94,6 +94,7 @@ class PresentationLauncherTests(unittest.TestCase):
         self.assertIn(
             f"--app=http://127.0.0.1:{port}/", browser_args.read_text()
         )
+        self.assertIn("전체화면 버튼 또는 F 키", result.stdout)
         self.assertFalse(_port_accepts_connections(port))
         self.assertEqual(list(runtime_root.iterdir()), [])
 

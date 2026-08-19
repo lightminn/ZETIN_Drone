@@ -983,6 +983,37 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         raise AssertionError(f"{filename} did not autoplay; last state={state}")
 
     @classmethod
+    def _dispatch_f_key(cls) -> None:
+        for event_type in ("keyDown", "keyUp"):
+            params = {
+                "type": event_type,
+                "key": "f",
+                "code": "KeyF",
+                "windowsVirtualKeyCode": 70,
+                "nativeVirtualKeyCode": 70,
+            }
+            if event_type == "keyDown":
+                params["text"] = "f"
+            cls._call("Input.dispatchKeyEvent", params)
+
+    @classmethod
+    def _fullscreen_state(cls) -> dict:
+        return cls._evaluate(
+            """
+            (() => {
+              const stage = document.querySelector('deck-stage');
+              const button = stage.shadowRoot.querySelector('.fullscreen');
+              return {
+                fullscreen: Boolean(document.fullscreenElement),
+                presenting: Boolean(stage._presenting),
+                label: button && button.getAttribute('aria-label'),
+                overlayVisible: stage._overlay.hasAttribute('data-visible'),
+              };
+            })()
+            """
+        )
+
+    @classmethod
     def _open_deck(cls) -> None:
         deadline = time.monotonic() + 6.0
         while time.monotonic() < deadline:
@@ -1752,6 +1783,69 @@ class PresentationVideoBrowserTests(unittest.TestCase):
         self.assertIsNotNone(landing_previous)
         self.assertTrue(landing_previous["paused"])
         self.assertLess(landing_previous["currentTime"], 0.05)
+
+    def test_fullscreen_control_and_f_key_toggle_presentation_mode(self) -> None:
+        """Catch a missing or broken presenter fullscreen entry and exit path."""
+        self._open_deck()
+        initial = self._evaluate(
+            """
+            (() => {
+              const stage = document.querySelector('deck-stage');
+              const button = stage.shadowRoot.querySelector('.fullscreen');
+              return {
+                button: Boolean(button),
+                label: button && button.getAttribute('aria-label'),
+                fullscreen: Boolean(document.fullscreenElement),
+                presenting: Boolean(stage._presenting),
+              };
+            })()
+            """
+        )
+        self.assertEqual(
+            initial,
+            {
+                "button": True,
+                "label": "전체화면 보기",
+                "fullscreen": False,
+                "presenting": False,
+            },
+        )
+
+        self._dispatch_f_key()
+        deadline = time.monotonic() + 3.0
+        entered = None
+        while time.monotonic() < deadline:
+            entered = self._fullscreen_state()
+            if entered["fullscreen"] and entered["presenting"]:
+                break
+            time.sleep(0.05)
+        self.assertEqual(
+            entered,
+            {
+                "fullscreen": True,
+                "presenting": True,
+                "label": "전체화면 종료",
+                "overlayVisible": False,
+            },
+        )
+
+        self._dispatch_f_key()
+        deadline = time.monotonic() + 3.0
+        exited = None
+        while time.monotonic() < deadline:
+            exited = self._fullscreen_state()
+            if not exited["fullscreen"] and not exited["presenting"]:
+                break
+            time.sleep(0.05)
+        self.assertEqual(
+            exited,
+            {
+                "fullscreen": False,
+                "presenting": False,
+                "label": "전체화면 보기",
+                "overlayVisible": False,
+            },
+        )
 
     def test_hover_demo_instance_decodes_autoplays_and_resets(self) -> None:
         self._open_deck()

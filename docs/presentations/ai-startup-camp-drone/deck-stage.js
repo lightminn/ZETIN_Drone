@@ -296,6 +296,47 @@
       background: rgba(255,255,255,0.12);
       border-radius: 4px;
     }
+    .btn.fullscreen {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 0 10px;
+      gap: 6px;
+      color: rgba(255,255,255,0.82);
+    }
+    .btn.fullscreen[data-active] { color: #fff; background: rgba(255,255,255,0.12); }
+    .btn.fullscreen .kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1;
+      color: rgba(255,255,255,0.88);
+      background: rgba(255,255,255,0.12);
+      border-radius: 4px;
+    }
+    .fullscreen-status {
+      position: fixed;
+      left: 50%;
+      bottom: 64px;
+      transform: translate(-50%, 5px);
+      max-width: min(520px, calc(100vw - 32px));
+      padding: 9px 14px;
+      border-radius: 6px;
+      background: #000;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.4;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+      z-index: 2147483001;
+    }
+    .fullscreen-status[data-visible] { opacity: 1; transform: translate(-50%, 0); }
 
     .count {
       font-variant-numeric: tabular-nums;
@@ -626,7 +667,7 @@
         page-break-after: auto;
       }
       ::slotted([data-deck-skip]) { display: none !important; }
-      .overlay, .rail, .rail-resize, .ctxmenu, .confirm-backdrop { display: none !important; }
+      .overlay, .fullscreen-status, .rail, .rail-resize, .ctxmenu, .confirm-backdrop { display: none !important; }
     }
   `;
 
@@ -657,6 +698,10 @@
       // normal idle fade.
       this._overlayHover = false;
       this._overlayFocus = false;
+      this._presenting = false;
+      this._hostPresenting = false;
+      this._fullscreenPresenting = false;
+      this._fullscreenStatusTimer = null;
       // Capability marker for the host's injected guest bundle. Copies
       // WITHOUT _navArrowsUpDown are frozen per-project builds that
       // predate native ArrowUp/ArrowDown slide nav — the bundle translates
@@ -686,6 +731,7 @@
       this._onMouseMove = this._onMouseMove.bind(this);
       this._onTap = this._onTap.bind(this);
       this._onMessage = this._onMessage.bind(this);
+      this._onFullscreenChange = this._onFullscreenChange.bind(this);
       // Capture-phase close so a click anywhere dismisses the menu, but
       // ignore clicks that land inside the menu itself — otherwise the
       // capture handler runs before the menu's own (bubble) handler and
@@ -717,6 +763,7 @@
       window.addEventListener('resize', this._onResize);
       window.addEventListener('mousemove', this._onMouseMove, { passive: true });
       window.addEventListener('message', this._onMessage);
+      document.addEventListener('fullscreenchange', this._onFullscreenChange);
       window.addEventListener('click', this._onDocClick, true);
       this.addEventListener('click', this._onTap);
       // Print lays every slide out as its own page, so [data-deck-active]-
@@ -1048,6 +1095,7 @@
       window.removeEventListener('resize', this._onResize);
       window.removeEventListener('mousemove', this._onMouseMove);
       window.removeEventListener('message', this._onMessage);
+      document.removeEventListener('fullscreenchange', this._onFullscreenChange);
       window.removeEventListener('click', this._onDocClick, true);
       window.removeEventListener('beforeprint', this._onBeforePrint);
       window.removeEventListener('afterprint', this._onAfterPrint);
@@ -1059,6 +1107,7 @@
       if (this._liveTimer) clearTimeout(this._liveTimer);
       if (this._tweakTimer) clearTimeout(this._tweakTimer);
       if (this._railAnimTimer) clearTimeout(this._railAnimTimer);
+      if (this._fullscreenStatusTimer) clearTimeout(this._fullscreenStatusTimer);
       if (this._scaleRaf) cancelAnimationFrame(this._scaleRaf);
       if (this._liveObserver) this._liveObserver.disconnect();
       if (this._railObserver) this._railObserver.disconnect();
@@ -1130,11 +1179,16 @@
         </button>
         <span class="divider"></span>
         <button class="btn reset" type="button" aria-label="Reset to first slide" title="Reset (R)">Reset<span class="kbd">R</span></button>
+        <button class="btn fullscreen" type="button" aria-label="전체화면 보기" title="전체화면 보기 (F)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2H2v4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
+          <span class="action-label">전체화면</span><span class="kbd">F</span>
+        </button>
       `;
 
       overlay.querySelector('.prev').addEventListener('click', () => this._advance(-1, 'click'));
       overlay.querySelector('.next').addEventListener('click', () => this._advance(1, 'click'));
       overlay.querySelector('.reset').addEventListener('click', () => this._go(0, 'click'));
+      overlay.querySelector('.fullscreen').addEventListener('click', () => this._toggleFullscreen());
 
       // Pin the controls while the user is interacting with them —
       // hovering, or keyboard focus on a control. The hidden overlay is
@@ -1292,17 +1346,25 @@
         this._focusCurrentThumb();
       });
 
-      this._root.append(style, rail, resize, stage, overlay, menu, confirm);
+      const fullscreenStatus = document.createElement('div');
+      fullscreenStatus.className = 'fullscreen-status export-hidden';
+      fullscreenStatus.setAttribute('role', 'status');
+      fullscreenStatus.setAttribute('aria-live', 'polite');
+      fullscreenStatus.setAttribute('data-omelette-chrome', '');
+
+      this._root.append(style, rail, resize, stage, fullscreenStatus, overlay, menu, confirm);
       this._canvas = canvas;
       this._stage = stage;
       this._slot = slot;
       this._overlay = overlay;
+      this._fullscreenStatus = fullscreenStatus;
       this._rail = rail;
       this._resize = resize;
       this._menu = menu;
       this._confirm = confirm;
       this._countEl = overlay.querySelector('.current');
       this._totalEl = overlay.querySelector('.total');
+      this._syncFullscreenControl();
 
       // Restore persisted rail width.
       let rw = 188;
@@ -1647,6 +1709,65 @@
       this._flashOverlay('pointer');
     }
 
+    _setPresenting(next) {
+      next = !!next;
+      if (next === this._presenting) return;
+      this._presenting = next;
+      this._overlayHover = false;
+      this._overlayFocus = false;
+      if (this._overlay) {
+        this._overlay.removeAttribute('data-visible');
+        if (this._hideTimer) clearTimeout(this._hideTimer);
+      }
+      this._syncRailHidden();
+      this._closeMenu();
+      this._closeConfirm();
+      this._fit();
+      this._scaleThumbs();
+    }
+
+    _syncFullscreenControl() {
+      if (!this._overlay) return;
+      const button = this._overlay.querySelector('.fullscreen');
+      if (!button) return;
+      const active = !!document.fullscreenElement;
+      button.toggleAttribute('data-active', active);
+      button.setAttribute('aria-label', active ? '전체화면 종료' : '전체화면 보기');
+      button.title = active ? '전체화면 종료 (F 또는 Esc)' : '전체화면 보기 (F)';
+      const label = button.querySelector('.action-label');
+      if (label) label.textContent = active ? '창 보기' : '전체화면';
+    }
+
+    _showFullscreenStatus(message) {
+      if (!this._fullscreenStatus) return;
+      this._fullscreenStatus.textContent = message;
+      this._fullscreenStatus.setAttribute('data-visible', '');
+      if (this._fullscreenStatusTimer) clearTimeout(this._fullscreenStatusTimer);
+      this._fullscreenStatusTimer = setTimeout(() => {
+        this._fullscreenStatus.removeAttribute('data-visible');
+      }, 4000);
+    }
+
+    async _toggleFullscreen() {
+      try {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        } else if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        } else {
+          throw new Error('Fullscreen API unavailable');
+        }
+      } catch (error) {
+        this._showFullscreenStatus('전체화면을 시작할 수 없습니다. Chrome 메뉴의 전체화면을 사용해 주세요.');
+      }
+    }
+
+    _onFullscreenChange() {
+      this._fullscreenPresenting = !!document.fullscreenElement;
+      this._syncFullscreenControl();
+      this._setPresenting(this._hostPresenting || this._fullscreenPresenting);
+    }
+
     _onMessage(e) {
       const d = e.data;
       if (d && typeof d.__omelette_presenting === 'boolean') {
@@ -1657,28 +1778,8 @@
         // overlay under a hovering cursor and close menus on every slide
         // change. Mirrors the preview_mode branch's unchanged-value guard
         // below.
-        if (d.__omelette_presenting !== !!this._presenting) {
-          this._presenting = d.__omelette_presenting;
-          // A presenting transition invalidates interaction pins: carried
-          // across the flip, a stale pin would hold the first summoned
-          // overlay open with no pointer anywhere near it. Hide on BOTH
-          // transitions: entry cleans the audience's screen, and on exit a
-          // pin-skipped hide timeout may have left data-visible set with
-          // no timer armed — without this, the footer would linger in the
-          // editor until the next mousemove. The next interaction
-          // re-summons it either way.
-          this._overlayHover = false;
-          this._overlayFocus = false;
-          if (this._overlay) {
-            this._overlay.removeAttribute('data-visible');
-            if (this._hideTimer) clearTimeout(this._hideTimer);
-          }
-          this._syncRailHidden();
-          this._closeMenu();
-          this._closeConfirm();
-          this._fit();
-          this._scaleThumbs();
-        }
+        this._hostPresenting = d.__omelette_presenting;
+        this._setPresenting(this._hostPresenting || this._fullscreenPresenting);
       }
       // Host's Preview segment (ViewerMode='none'): the rail's drag-reorder /
       // right-click skip-delete affordances are editing chrome, so hide it
@@ -1829,6 +1930,8 @@
         this._go(0, 'keyboard');
       } else if (key === 'End') {
         this._go(this._slides.length - 1, 'keyboard');
+      } else if (key === 'f' || key === 'F') {
+        this._toggleFullscreen();
       } else if (key === 'r' || key === 'R') {
         this._go(0, 'keyboard');
       } else if (/^[0-9]$/.test(key)) {
