@@ -136,16 +136,17 @@ STATIC_REQUIRED_TEXT = {
     },
     "HelicopterQuadcopterTorqueStatic": {
         "위에서본모습",
-        "메인로터회전",
-        "동체반작용토크",
+        "메인로터반작용",
+        "동체회전",
         "꼬리로터힘",
-        "CW",
-        "CCW",
-        "CW·CCW=로터회전방향",
-        "평상시토크상쇄",
-        "M3·M4출력↑",
-        "M1·M2출력↓",
-        "기체YawCW",
+        "반작용상쇄",
+        "CW·CCW는로터회전방향",
+        "M1·M2CW",
+        "M3·M4CCW",
+        "두쌍의출력이같음",
+        "→토크상쇄",
+        "두쌍의출력이다름",
+        "→Yaw회전",
     },
     "SwarmSystemStatic": {
         "단일기체",
@@ -870,23 +871,13 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         )
 
     def test_static_rotor_mapping_and_helicopter_torques_have_correct_signs(self) -> None:
-        import math
-
         scene = self._rendered_static_scene("HelicopterQuadcopterTorqueStatic")
-        self._text(scene, "CW·CCW=로터회전방향")
-        rendered_text = [
-            item
-            for item in self._mobjects(scene)
-            if getattr(item, "text", None) is not None
-        ]
-        rotation_labels = [
-            item for item in rendered_text if item.text in {"CW", "CCW"}
-        ]
+        self._text(scene, "CW·CCW는로터회전방향")
         expected_mapping = {
-            "M1": (-1, 1, "CW"),
-            "M3": (1, 1, "CCW"),
-            "M4": (-1, -1, "CCW"),
-            "M2": (1, -1, "CW"),
+            "M1": (-1, 1, "#FF9F43"),
+            "M3": (1, 1, "#5FE3F3"),
+            "M4": (-1, -1, "#5FE3F3"),
+            "M2": (1, -1, "#FF9F43"),
         }
         motor_labels = {
             name: self._text(scene, name) for name in expected_mapping
@@ -897,25 +888,29 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         quad_center_y = (
             sum(label.get_center()[1] for label in motor_labels.values()) / 4
         )
-        for name, (x_sign, y_sign, rotation) in expected_mapping.items():
+        rotor_rings = [
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "Circle"
+            and item.get_center()[0] > 0
+            and 0.65 < item.width < 0.85
+        ]
+        self.assertEqual(len(rotor_rings), 4)
+        for name, (x_sign, y_sign, color) in expected_mapping.items():
             motor = motor_labels[name]
             self.assertGreater((motor.get_center()[0] - quad_center_x) * x_sign, 0)
             self.assertGreater((motor.get_center()[1] - quad_center_y) * y_sign, 0)
-            nearest_rotation = min(
-                rotation_labels,
-                key=lambda item: math.dist(
-                    item.get_center()[:2], motor.get_center()[:2]
-                ),
+            nearest_ring = min(
+                rotor_rings,
+                key=lambda item: abs(item.get_center()[0] - motor.get_center()[0])
+                + abs(item.get_center()[1] - motor.get_center()[1]),
             )
-            self.assertEqual(nearest_rotation.text, rotation)
+            self.assertEqual(str(nearest_ring.get_color()), color)
 
-        rotor_disk = max(
-            (
-                item
-                for item in self._mobjects(scene)
-                if type(item).__name__ == "Circle" and item.get_center()[0] < 0
-            ),
-            key=lambda item: item.width,
+        helicopter_body = max(
+            item
+            for item in self._mobjects(scene)
+            if type(item).__name__ == "Ellipse" and item.get_center()[0] < 0
         )
         reaction = next(
             item
@@ -933,7 +928,7 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
         )
 
         def moment_sign(arrow) -> float:
-            radius = arrow.get_start() - rotor_disk.get_center()
+            radius = arrow.get_start() - helicopter_body.get_center()
             force = arrow.get_end() - arrow.get_start()
             return float(radius[0] * force[1] - radius[1] * force[0])
 
@@ -956,37 +951,56 @@ class PresentationVisualizationLayoutTests(unittest.TestCase):
             "the helicopter main rotor needs visible crossing blades in top view",
         )
 
-    def test_static_helicopter_arrows_have_adjacent_labels_and_yaw_example(self) -> None:
-        import math
-
+    def test_static_torque_diagram_keeps_arrows_clear_and_explanation_below(self) -> None:
         scene = self._rendered_static_scene("HelicopterQuadcopterTorqueStatic")
         objects = list(self._mobjects(scene))
-        labeled_arrows = (
-            ("메인로터회전", "CurvedArrow", "#48A8FF"),
-            ("동체반작용토크", "CurvedArrow", "#FF9F43"),
-            ("꼬리로터힘", "Arrow", "#5FE3F3"),
+        arrows = [
+            item
+            for item in objects
+            if type(item).__name__ in {"Arrow", "CurvedArrow"}
+        ]
+        self.assertEqual(len(arrows), 2, "keep only reaction torque and tail force")
+        explanation_labels = [
+            self._text(scene, label)
+            for label in (
+                "메인로터반작용",
+                "동체회전",
+                "꼬리로터힘",
+                "반작용상쇄",
+                "M1·M2CW",
+                "M3·M4CCW",
+                "두쌍의출력이같음",
+                "→토크상쇄",
+                "두쌍의출력이다름",
+                "→Yaw회전",
+            )
+        ]
+        for label in explanation_labels:
+            for arrow in arrows:
+                self.assertFalse(self._bbox_overlaps(label, arrow, gap=0.05))
+        for label in explanation_labels[:4]:
+            self.assertLess(label.get_top()[1], -1.5)
+        helicopter_body = next(
+            item
+            for item in objects
+            if type(item).__name__ == "Ellipse" and item.get_center()[0] < 0
         )
-        for label_text, arrow_type, color in labeled_arrows:
-            label = self._text(scene, label_text)
-            arrow = next(
-                item
-                for item in objects
-                if type(item).__name__ == arrow_type
-                and str(item.get_color()) == color
-                and item.get_center()[0] < 0
-            )
-            self.assertLess(
-                math.dist(label.get_center()[:2], arrow.get_center()[:2]), 2.05
-            )
-            self.assertFalse(self._bbox_overlaps(label, arrow, gap=0.04))
-
-        for required_example in (
-            "M3·M4출력↑",
-            "M1·M2출력↓",
-            "기체YawCW",
-            "평상시토크상쇄",
-        ):
-            self._text(scene, required_example)
+        main_rotor_blades = [
+            item
+            for item in objects
+            if type(item).__name__ == "Line"
+            and item.get_center()[0] < 0
+            and item.get_length() > 1.4
+        ]
+        for arrow in arrows:
+            self.assertFalse(self._bbox_overlaps(arrow, helicopter_body, gap=0.03))
+            for blade in main_rotor_blades:
+                self.assertFalse(self._bbox_overlaps(arrow, blade, gap=0.03))
+        self.assertEqual(
+            len([item for item in objects if type(item).__name__ == "RoundedRectangle"]),
+            0,
+            "the simplified comparison should not use decorative cards",
+        )
 
     def test_static_removed_top_badges_keep_in_diagram_evidence(self) -> None:
         sil = self._rendered_static_scene("SilClosedLoopStatic")

@@ -250,6 +250,56 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         for unsupported_claim in ("시장 규모는", "예상 매출은", "투자 수익률"):
             self.assertNotIn(unsupported_claim, script)
 
+    def test_session_two_script_covers_pcb_sensors_sil_and_pid(self) -> None:
+        script = (DECK_DIR / "SESSION2_SCRIPT.md").read_text(encoding="utf-8")
+        normalized = re.sub(r"\s+", " ", script)
+        self.assertEqual(
+            [int(number) for number in re.findall(r"^## (\d+)쪽", script, re.MULTILINE)],
+            list(range(28, 54)),
+        )
+        for phrase in (
+            "PCB·배선에 약 10분",
+            "센서 융합·자세 제어에 약 29분",
+            "12볼트",
+            "ESC의 BEC",
+            "M1은 GPIO 4의 전방 왼쪽 모터이고 CW",
+            "같은 물리 방향을 같은 부호로 표현하도록 먼저 축을 정렬",
+            "Roll 믹서의 보정항",
+            "host SIL",
+            "실제 기체에서 확정한 최종 게인이 아니",
+            "마지막 1분",
+        ):
+            self.assertIn(phrase, normalized)
+        self.assertGreaterEqual(len(script), 19500)
+        self.assertLessEqual(len(script), 22000)
+        for segmented_label in ("핵심 발화", "확장 발화", "선택 발화"):
+            self.assertNotIn(segmented_label, script)
+
+    def test_session_three_script_covers_safety_evidence_experience_and_qna(self) -> None:
+        script = (DECK_DIR / "SESSION3_SCRIPT.md").read_text(encoding="utf-8")
+        normalized = re.sub(r"\s+", " ", script)
+        self.assertEqual(
+            [int(number) for number in re.findall(r"^## (\d+)쪽", script, re.MULTILINE)],
+            list(range(55, 85)),
+        )
+        for phrase in (
+            "방향 기준·안전·검증에 약 20분",
+            "시연·로그·모바일 체험·계획에 약 20분",
+            "질문과 답변에 약 10분",
+            "여기까지는 수신·파싱·기록",
+            "아직 모터 출력에 영향을 주지 않",
+            "공중 프로브 2회",
+            "실제 접지 상태에서 얻은 프로브 10회",
+            "M3 평균은 1360.0",
+            "테더 하중의 영향으로 추정",
+            "실제 기체와 연결되는 화면이 아니라",
+        ):
+            self.assertIn(phrase, normalized)
+        self.assertGreaterEqual(len(script), 14500)
+        self.assertLessEqual(len(script), 18000)
+        for segmented_label in ("핵심 발화", "확장 발화", "선택 발화"):
+            self.assertNotIn(segmented_label, script)
+
     @unittest.skipUnless(shutil.which("ffprobe"), "ffprobe is required")
     def test_hover_demo_source_is_chrome_compatible_h264(self) -> None:
         result = subprocess.run(
@@ -293,6 +343,27 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             str(slide30["attrs"].get("data-speaker-notes", "")),
         )
 
+        slide31 = parser.sections[30]
+        slide31_boundary = _slide_text(slide31) + " " + str(
+            slide31["attrs"].get("data-speaker-notes", "")
+        )
+        for phrase in (
+            "먼저 collective",
+            "자세 차동",
+            "차동 폭",
+            "같은 비율",
+        ):
+            self.assertIn(phrase, slide31_boundary)
+
+        slide42 = parser.sections[41]
+        slide42_boundary = _slide_text(slide42) + " " + str(
+            slide42["attrs"].get("data-speaker-notes", "")
+        )
+        self.assertIn("Roll·Pitch", slide42_boundary)
+        self.assertIn("Yaw", slide42_boundary)
+        self.assertIn("별도 벤치 재검증", slide42_boundary)
+        self.assertNotIn("현재 검증된 여섯 줄", slide42_boundary)
+
         slide58 = parser.sections[57]
         slide58_text = _slide_text(slide58)
         slide58_notes = str(slide58["attrs"].get("data-speaker-notes", ""))
@@ -319,6 +390,11 @@ class PresentationVideoMarkupTests(unittest.TestCase):
             self.assertIn(phrase, slide60_text + " " + slide60_notes)
         self.assertNotIn("Mag_Enabled", slide60_text)
         self.assertNotIn("mag 1", slide60_text)
+
+        slide61 = parser.sections[60]
+        slide61_notes = str(slide61["attrs"].get("data-speaker-notes", ""))
+        for phrase in ("host shim은 no-op", "timeout·panic·재부팅", "실제 보드"):
+            self.assertIn(phrase, slide61_notes)
 
         slide65 = parser.sections[64]
         self.assertEqual(
@@ -363,6 +439,21 @@ class PresentationVideoMarkupTests(unittest.TestCase):
         )
         self.assertIn("가능한 경쟁", slide72_boundary)
         self.assertIn("관측된 비행사고는 아니다", slide72_boundary)
+
+        slide74 = parser.sections[73]
+        slide74_boundary = _slide_text(slide74) + " " + str(
+            slide74["attrs"].get("data-speaker-notes", "")
+        )
+        for phrase in ("지자기 보정 비활성·부호 반전", "Roll 믹서 부호 반전"):
+            self.assertIn(phrase, slide74_boundary)
+        self.assertNotIn("게이트 제거와 순서 변경", slide74_boundary)
+
+        slide76 = parser.sections[75]
+        slide76_text = _slide_text(slide76)
+        for phrase in ("주목적", "줄 하중", "별도 테더 로그"):
+            self.assertIn(phrase, slide76_text)
+        self.assertNotIn("이 순간 실제로 기록된 숫자", slide76_text)
+        self.assertNotIn("역할만 한다", slide76_text)
 
         slide80 = parser.sections[79]
         slide80_text = _slide_text(slide80)

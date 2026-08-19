@@ -515,7 +515,6 @@ class QuadcopterForceMotionStatic(StaticDiagramScene):
 
 def helicopter_top_view() -> tuple[VGroup, CurvedArrow, Arrow]:
     rotor_center = UP * 0.72
-    rotor_disk = Circle(radius=1.42, color=CYAN, stroke_width=4).move_to(rotor_center)
     rotor_blades = VGroup(
         Line(LEFT * 1.25, RIGHT * 1.25, color=WHITE, stroke_width=9),
         Line(DOWN * 1.25, UP * 1.25, color=WHITE, stroke_width=9),
@@ -537,121 +536,121 @@ def helicopter_top_view() -> tuple[VGroup, CurvedArrow, Arrow]:
     ).move_to(rotor_center)
     tail_end = rotor_center + DOWN * 2.55
     boom = Line(body.get_bottom(), tail_end, color=MUTED, stroke_width=10)
-    tail_rotor = Circle(radius=0.32, color=CYAN, stroke_width=5).move_to(tail_end)
-    rotor_spin = CurvedArrow(
-        rotor_center + LEFT * 1.0 + UP * 0.72,
-        rotor_center + RIGHT * 1.0 + UP * 0.72,
-        angle=-PI,
-        color=BLUE,
-        stroke_width=5,
-    )
+    tail_rotor = VGroup(
+        Circle(radius=0.30, color=CYAN, stroke_width=4),
+        Line(LEFT * 0.27, RIGHT * 0.27, color=WHITE, stroke_width=5),
+        Line(DOWN * 0.27, UP * 0.27, color=WHITE, stroke_width=5),
+    ).move_to(tail_end)
     reaction = CurvedArrow(
-        rotor_center + RIGHT * 0.78,
-        rotor_center + UP * 0.78,
+        rotor_center + RIGHT * 1.48 + DOWN * 0.52,
+        rotor_center + RIGHT * 1.48 + UP * 0.80,
         angle=PI / 2,
         color=ORANGE,
         stroke_width=7,
     )
     tail_force = Arrow(
-        tail_end,
-        tail_end + LEFT * 1.28,
+        tail_end + LEFT * 0.42,
+        tail_end + LEFT * 1.55,
         buff=0.05,
         color=CYAN,
         stroke_width=7,
     )
     return VGroup(
-        rotor_disk,
         rotor_blades,
         boom,
         tail_rotor,
         body,
         rotor_hub,
-        rotor_spin,
     ), reaction, tail_force
 
 
 class HelicopterQuadcopterTorqueStatic(StaticDiagramScene):
     def construct(self) -> None:
-        left_panel = card(7.25, 6.55, BLUE).move_to(LEFT * 3.82 + UP * 0.28)
-        right_panel = card(7.25, 6.55, CYAN).move_to(RIGHT * 3.82 + UP * 0.28)
+        divider = Line(UP * 3.25, DOWN * 3.55, color="#314664", stroke_width=2)
 
         helicopter, reaction, tail_force = helicopter_top_view()
         helicopter_diagram = VGroup(helicopter, reaction, tail_force)
-        helicopter_diagram.scale(0.72).move_to(left_panel.get_center() + UP * 0.28)
-        heli_name = text("헬리콥터", 30, BLUE, "BOLD").move_to(
-            left_panel.get_center() + UP * 2.7
+        helicopter_diagram.scale(0.68).move_to(LEFT * 3.72 + UP * 0.62)
+        heli_name = text("헬리콥터", 32, BLUE, "BOLD").move_to(
+            LEFT * 3.72 + UP * 3.12
         )
         viewpoint = text("위에서 본 모습", 24, MUTED, "BOLD").move_to(
-            left_panel.get_center() + UP * 2.15
+            LEFT * 3.72 + UP * 2.66
         )
-        rotor_label = text("메인로터 회전", 24, BLUE, "BOLD").move_to(
-            left_panel.get_center() + LEFT * 1.96 + UP * 1.57
-        )
-        reaction_label = text("동체 반작용 토크", 24, ORANGE, "BOLD").move_to(
-            left_panel.get_center() + RIGHT * 1.45 + UP * 0.15
-        )
-        tail_label = text("꼬리로터 힘", 24, CYAN, "BOLD").move_to(
-            left_panel.get_center() + RIGHT * 1.47 + DOWN * 1.2
-        )
-        heli_cancel = text("토크 상쇄", 28, WHITE, "BOLD").move_to(
-            left_panel.get_center() + DOWN * 2.38
-        )
+        heli_row_1 = VGroup(
+            text("메인로터 반작용", 25, ORANGE, "BOLD"),
+            text("→", 27, MUTED, "BOLD"),
+            text("동체 회전", 25, WHITE, "BOLD"),
+        ).arrange(RIGHT, buff=0.20)
+        heli_row_2 = VGroup(
+            text("꼬리로터 힘", 25, CYAN, "BOLD"),
+            text("→", 27, MUTED, "BOLD"),
+            text("반작용 상쇄", 25, WHITE, "BOLD"),
+        ).arrange(RIGHT, buff=0.20)
+        heli_explanation = VGroup(heli_row_1, heli_row_2).arrange(DOWN, buff=0.24)
+        heli_explanation.move_to(LEFT * 3.72 + DOWN * 2.72)
 
-        quad = x_quadcopter_icon(0.93, CYAN).move_to(
-            right_panel.get_center() + UP * 0.1
+        quad = VGroup(
+            Line(LEFT * 1.22 + UP * 1.22, RIGHT * 1.22 + DOWN * 1.22, color=MUTED, stroke_width=10),
+            Line(RIGHT * 1.22 + UP * 1.22, LEFT * 1.22 + DOWN * 1.22, color=MUTED, stroke_width=10),
         )
-        quad_name = text("쿼드콥터", 30, CYAN, "BOLD").move_to(
-            right_panel.get_center() + UP * 2.7
-        )
-        rotation_legend = text(
-            "CW · CCW = 로터 회전 방향", 24, YELLOW, "BOLD"
-        ).move_to(right_panel.get_center() + UP * 2.1)
         offsets = (
-            (-1.75, 1.15, "M1", "CW", ORANGE),
-            (1.75, 1.15, "M3", "CCW", CYAN),
-            (-1.75, -0.85, "M4", "CCW", CYAN),
-            (1.75, -0.85, "M2", "CW", ORANGE),
+            (-1.22, 1.22, "M1", ORANGE),
+            (1.22, 1.22, "M3", CYAN),
+            (-1.22, -1.22, "M4", CYAN),
+            (1.22, -1.22, "M2", ORANGE),
         )
-        rotor_labels = VGroup()
-        for x, y, motor_name, rotation, color in offsets:
-            motor_label = text(motor_name, 24, WHITE, "BOLD").move_to(
-                right_panel.get_center() + RIGHT * x + UP * y
+        for x, y, motor_name, color in offsets:
+            rotor = Circle(radius=0.38, color=color, stroke_width=5).move_to(
+                RIGHT * x + UP * y
             )
-            rotation_label = text(rotation, 24, color, "BOLD").next_to(
-                motor_label, UP if y > 0 else DOWN, buff=0.1
-            )
-            rotor_labels.add(motor_label, rotation_label)
-        cancel = text("평상시 토크 상쇄", 27, WHITE, "BOLD").move_to(
-            right_panel.get_center() + DOWN * 1.75
+            motor_label = text(motor_name, 24, WHITE, "BOLD").move_to(rotor)
+            quad.add(rotor, motor_label)
+        quad.add(
+            Circle(
+                radius=0.48,
+                fill_color=CYAN,
+                fill_opacity=1,
+                stroke_color=WHITE,
+                stroke_width=2,
+            ),
+            Triangle(fill_color=YELLOW, fill_opacity=1, stroke_width=0)
+            .scale(0.14)
+            .shift(UP * 0.12),
         )
-        yaw_pair = VGroup(
-            text("M3·M4 출력 ↑", 24, CYAN, "BOLD"),
-            text("M1·M2 출력 ↓", 24, ORANGE, "BOLD"),
-        ).arrange(RIGHT, buff=0.42).move_to(
-            right_panel.get_center() + DOWN * 2.25
+        quad.move_to(RIGHT * 3.72 + UP * 0.72)
+        quad_name = text("쿼드콥터", 32, CYAN, "BOLD").move_to(
+            RIGHT * 3.72 + UP * 3.12
         )
-        yaw = text("기체 Yaw CW", 25, YELLOW, "BOLD").move_to(
-            right_panel.get_center() + DOWN * 2.78
-        )
-        note = takeaway("헬기 · 꼬리 힘 / 쿼드 · CW·CCW 반작용 토크", YELLOW)
+        rotation_legend = VGroup(
+            text("M1·M2  CW", 24, ORANGE, "BOLD"),
+            text("M3·M4  CCW", 24, CYAN, "BOLD"),
+        ).arrange(RIGHT, buff=0.58)
+        rotation_legend.move_to(RIGHT * 3.72 + DOWN * 1.45)
+        quad_row_1 = VGroup(
+            text("두 쌍의 출력이 같음", 24, WHITE, "BOLD"),
+            text("→ 토크 상쇄", 24, MUTED, "BOLD"),
+        ).arrange(RIGHT, buff=0.22)
+        quad_row_2 = VGroup(
+            text("두 쌍의 출력이 다름", 24, WHITE, "BOLD"),
+            text("→ Yaw 회전", 24, YELLOW, "BOLD"),
+        ).arrange(RIGHT, buff=0.22)
+        quad_explanation = VGroup(quad_row_1, quad_row_2).arrange(DOWN, buff=0.24)
+        quad_explanation.move_to(RIGHT * 3.72 + DOWN * 2.72)
+        rotor_direction_note = text(
+            "CW·CCW는 로터 회전 방향", 24, MUTED, "BOLD"
+        ).move_to(RIGHT * 3.72 + UP * 2.66)
         self.add(
-            left_panel,
-            right_panel,
+            divider,
             helicopter_diagram,
             heli_name,
             viewpoint,
-            rotor_label,
-            reaction_label,
-            tail_label,
-            heli_cancel,
+            heli_explanation,
             quad,
             quad_name,
+            rotor_direction_note,
             rotation_legend,
-            rotor_labels,
-            cancel,
-            yaw_pair,
-            yaw,
-            note,
+            quad_explanation,
         )
 
 

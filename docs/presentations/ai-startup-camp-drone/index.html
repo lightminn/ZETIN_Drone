@@ -634,7 +634,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="핀 배치" data-screen-label="31" data-speaker-notes="모터 번호와 위치, 회전 방향은 하드웨어와 소프트웨어가 함께 지켜야 하는 약속이다. 오른쪽 영상은 보정 명령이 출력 상한을 넘을 때 세 축의 비율을 유지한 채 함께 줄이는 과정을 보여준다." style="background:#fff">
+  <section data-label="핀 배치" data-screen-label="31" data-speaker-notes="모터 번호와 위치, 회전 방향은 하드웨어와 소프트웨어가 함께 지켜야 하는 약속이다. 믹서는 먼저 collective를 옮겨 자세 차동을 보존하고, 차동 폭 자체가 출력 범위를 넘을 때만 Roll·Pitch·Yaw 차동을 같은 비율로 줄인다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="모터 핀 배치와 믹서">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:.76fr 1.24fr;gap:28px;align-items:center">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:22px;align-self:center">
@@ -669,9 +669,9 @@ CAD에서 실물 프레임까지"></x-import>
           </tbody>
         </table>
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-width:0">
-          <video src="assets/mixer-saturation.mp4" controls loop muted playsinline preload="metadata" aria-label="모터 보정 명령이 출력 상한을 넘을 때 같은 비율로 줄여 자세 토크 비율을 보존하는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
-          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">출력 상한에 닿으면 Roll·Pitch·Yaw 보정량을 같은 비율로 축소</figcaption>
-          <div style="border-left:6px solid var(--uos-blue);padding:12px 0 12px 18px;font-size:22px;line-height:1.45"><strong>토크 비율 보존</strong> · 한 축만 잘라내지 않고 세 보정량을 함께 줄인다.</div>
+          <video src="assets/mixer-saturation.mp4" controls loop muted playsinline preload="metadata" aria-label="collective를 먼저 이동해 자세 차동을 보존하고 차동 폭이 출력 범위를 넘을 때만 세 축을 같은 비율로 줄이는 시각화" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#06152f;border-radius:4px"></video>
+          <figcaption style="font-size:20.5337px;color:var(--uos-ink-muted);text-align:center">먼저 collective 이동 · 그래도 넘을 때만 세 축 차동 축소</figcaption>
+          <div style="border-left:6px solid var(--uos-blue);padding:12px 0 12px 18px;font-size:22px;line-height:1.45"><strong>자세 차동 우선</strong> · 가능한 범위에서는 Roll·Pitch·Yaw 토크 비율을 그대로 전달한다.</div>
         </figure>
       </div>
     </x-import>
@@ -914,7 +914,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="문제 3 축 변환" data-screen-label="42" data-speaker-notes="센서가 읽는 축과 기체의 축은 다르다. 변환식에서 가속도는 맞았는데 자이로만 부호가 뒤집혀 있었다." style="background:#fff">
+  <section data-label="문제 3 축 변환" data-screen-label="42" data-speaker-notes="센서가 읽는 축과 기체의 축은 다르다. Roll·Pitch 자이로 부호는 벤치에서 다시 확인했으며, Yaw 변환은 현행 코드에 반영되어 있지만 별도 벤치 재검증이 남아 있다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="문제 3 — 센서축 변환">
       <div style="width:100%;height:100%;display:grid;grid-template-columns:1.08fr 1fr;gap:32px">
         <figure style="margin:0;display:flex;flex-direction:column;gap:10px;justify-content:center;min-height:0">
@@ -923,8 +923,8 @@ CAD에서 실물 프레임까지"></x-import>
         </figure>
         <div style="display:flex;flex-direction:column;gap:16px;justify-content:center">
           <div style="background:var(--uos-surface);border-radius:4px;padding:21px;font-family:ui-monospace,monospace;font-size:20.5337px;line-height:1.7">Roll 각속도 = + 센서 Y<br />Pitch 각속도 = − 센서 X<br />Yaw 각속도 = − 센서 Z<br /><br />가속도 X = + 센서 Y<br />가속도 Y = − 센서 X<br />가속도 Z = + 센서 Z</div>
-          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:22px;font-size:22px;line-height:1.5">가속도 부호는 맞았지만 자이로만 반대로 들어갔다. 이 경우 제어기는 기울기를 <strong>줄이는 대신 키운다</strong>.</div>
-          <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">현재 검증된 여섯 줄 — 하드웨어와 자세 추정 코드가 만나는 경계</div>
+          <div style="background:var(--uos-blue);color:#fff;border-radius:4px;padding:22px;font-size:22px;line-height:1.5">Roll·Pitch 자이로 부호가 반대로 들어가면 제어기는 기울기를 <strong>줄이는 대신 키운다</strong>.</div>
+          <div style="font-size:20.5337px;color:var(--uos-ink-muted);line-height:1.5">Roll·Pitch · 벤치 재확인　Yaw · 코드 반영 후 별도 벤치 재검증 예정</div>
         </div>
       </div>
     </x-import>
@@ -1434,7 +1434,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="태스크 워치독" data-screen-label="61" data-speaker-notes="제어 코드가 멈추면 모터는 마지막 출력으로 계속 돈다. 그것을 막는 장치이다." style="background:#fff">
+  <section data-label="태스크 워치독" data-screen-label="61" data-speaker-notes="제어 코드가 멈추면 모터가 마지막 출력에 남을 수 있어 워치독을 설정했다. 소스에서 설정과 호출 경로는 확인했지만 host shim은 no-op이므로 timeout·panic·재부팅 동작은 실제 보드에서 별도로 검증해야 한다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="태스크 워치독">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:26px">
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:34px">
@@ -1794,7 +1794,7 @@ CAD에서 실물 프레임까지"></x-import>
     </x-import>
   </section>
 
-  <section data-label="4겹 검증" data-screen-label="74" data-speaker-notes="셋째 교시의 검증 결론이다. 네 겹이 각각 다른 종류의 실수를 잡는다." style="background:#fff">
+  <section data-label="4겹 검증" data-screen-label="74" data-speaker-notes="셋째 교시의 검증 결론이다. 실제 변이 사례는 지자기 보정 비활성·부호 반전과 Roll 믹서 부호 반전이며, 해당 테스트가 의도한 오류에 반응하는지 확인했다." style="background:#fff">
     <x-import component-from-global-scope="UOSSlideDS.ContentSlide" hint-size="100%,100%" title="검증 체계">
       <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:20px">
         <div style="display:flex;flex-direction:column;flex:1;border-top:6px solid var(--uos-blue)">
@@ -1810,7 +1810,7 @@ CAD에서 실물 프레임까지"></x-import>
           </div>
           <div style="display:grid;grid-template-columns:220px 1fr 280px;gap:26px;align-items:center;padding:18px 0;border-bottom:1px solid var(--uos-rule)">
             <div style="font-size:24.2px;font-weight:700;color:var(--uos-blue)">변이 테스트</div>
-            <div style="font-size:22px;line-height:1.45">게이트 제거와 순서 변경을 주입해 테스트가 실제로 실패하는지 확인</div>
+            <div style="font-size:22px;line-height:1.45">지자기 보정 비활성·부호 반전과 Roll 믹서 부호 반전을 주입해 실패 확인</div>
             <div style="font-size:20.5337px;color:var(--uos-ink-muted)">테스트의 검출력</div>
           </div>
           <div style="display:grid;grid-template-columns:220px 1fr 280px;gap:26px;align-items:center;padding:18px 0;border-bottom:1px solid var(--uos-rule)">
@@ -1871,9 +1871,9 @@ CAD에서 실물 프레임까지"></x-import>
           <ul style="margin:0;padding-left:28px;font-size:22px;line-height:1.55;display:flex;flex-direction:column;gap:14px;list-style-type:disc">
             <li>기체가 <strong>가만히 있는 것처럼 보이는 동안</strong>에도, 네 모터의 출력은 계속 미세하게 바뀌고 있다</li>
             <li>기울어지는 순간마다 반대쪽 모터가 먼저 반응한다</li>
-            <li>테더는 기체를 들어주는 것이 아니라, <strong>범위를 제한하는</strong> 역할만 한다</li>
+            <li>테더의 주목적은 <strong>이동 범위 제한</strong>이며, 줄 하중은 모터 출력에 영향을 줄 수 있다</li>
           </ul>
-          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:22px;line-height:1.5;margin-top:12px">다음 두 장에서, 이 순간 실제로 기록된 숫자를 보겠다.</div>
+          <div style="background:var(--uos-surface);border-radius:4px;padding:24px;font-size:22px;line-height:1.5;margin-top:12px">다음 두 장에서 별도 테더 로그에 기록된 숫자를 보겠다.</div>
         </div>
       </div>
     </x-import>
