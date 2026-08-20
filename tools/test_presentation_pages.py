@@ -44,6 +44,12 @@ class PresentationPagesBuildTests(unittest.TestCase):
                 "assets/accelerometer.mp4",
                 "assets/hover_demo.mp4",
                 "assets/mobile-lab-qr.svg",
+                "10min/index.html",
+                "10min/support.js",
+                "10min/deck-stage.js",
+                "10min/vendor/uos-slide-template/_ds_bundle.js",
+                "10min/vendor/uos-slide-template/fonts/NotoSansCJKkr-Medium.woff2",
+                "10min/assets/hover_demo.mp4",
             }
             missing = sorted(path for path in required if not (site / path).is_file())
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the browser-only AI startup camp presentation site."""
+"""Build both browser-only AI startup camp presentation decks."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DECK_ROOT = REPO_ROOT / "docs" / "presentations" / "ai-startup-camp-drone"
+DECKS = (
+    ("ai-startup-camp-drone", ""),
+    ("ai-startup-camp-drone-10min", "10min"),
+)
 RUNTIME_FILES = ("index.html", "support.js", "deck-stage.js")
 
 
@@ -30,23 +33,29 @@ def build_site(output: Path) -> None:
         raise SystemExit(f"output directory is not empty: {output}")
 
     output.mkdir(parents=True, exist_ok=True)
-    for filename in RUNTIME_FILES:
-        shutil.copy2(DECK_ROOT / filename, output / filename)
+    for deck_name, subdir in DECKS:
+        deck_root = REPO_ROOT / "docs" / "presentations" / deck_name
+        deck_output = output / subdir
+        deck_output.mkdir(parents=True, exist_ok=True)
 
-    shutil.copytree(
-        DECK_ROOT / "assets",
-        output / "assets",
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("*.zip"),
-    )
-    shutil.copytree(
-        DECK_ROOT / "vendor",
-        output / "vendor",
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns(
-            "*.cjs", "*.md", "*.pdf", "*.pptx", "*.py", "*.sh", "*.zip"
-        ),
-    )
+        for filename in RUNTIME_FILES:
+            shutil.copy2(deck_root / filename, deck_output / filename)
+
+        shutil.copytree(
+            deck_root / "assets",
+            deck_output / "assets",
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("*.zip"),
+        )
+        shutil.copytree(
+            deck_root / "vendor",
+            deck_output / "vendor",
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(
+                "*.cjs", "*.md", "*.pdf", "*.pptx", "*.py", "*.sh", "*.zip"
+            ),
+        )
+
     (output / ".nojekyll").touch()
 
     file_count = sum(path.is_file() for path in output.rglob("*"))

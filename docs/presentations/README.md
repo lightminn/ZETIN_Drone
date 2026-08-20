@@ -9,8 +9,20 @@
 - 편집 원본: [ai-startup-camp-drone/index.html](ai-startup-camp-drone/index.html)
 - 실행·편집 방법: [ai-startup-camp-drone/README.md](ai-startup-camp-drone/README.md)
 - 주장·근거 목록: [ai-startup-camp-drone/SOURCES.md](ai-startup-camp-drone/SOURCES.md)
+- 공개 URL: https://lightminn.github.io/zetin-drone/
 
 현재 자료는 84장 HTML 덱이며 12개의 개념 영상과 76번의 테더 호버 영상 1개,
 총 13개 영상을 로컬 자산으로 포함한다. 저장소만 복제하면 네트워크 없이
 발표할 수 있다. 내용이 동결되기 전에는 HTML을 계속 고치고, PPTX/PDF는
 배포 시점에 별도 산출한다.
+
+## AI 창업캠프 드론 기술 10분 요약본
+
+- 대상: 자작 드론 비행 제어 개발 결과를 소개하는 10분 발표
+- 편집 원본: [ai-startup-camp-drone-10min/index.html](ai-startup-camp-drone-10min/index.html)
+- 실행·편집 방법: [ai-startup-camp-drone-10min/README.md](ai-startup-camp-drone-10min/README.md)
+- 주장·근거 목록: [ai-startup-camp-drone-10min/SOURCES.md](ai-startup-camp-drone-10min/SOURCES.md)
+- 공개 URL: https://lightminn.github.io/zetin-drone/10min/
+
+현재 자료는 14장 HTML 덱이며 실제 테더 호버 영상 1개를 로컬 자산으로
+포함한다. 메인 교안과 같은 Pages 사이트에서 별도 경로로 배포한다.
