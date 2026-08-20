@@ -47,6 +47,16 @@ node export_pptx.cjs
 산출물이다. 14장 발표자 노트와 실기 영상 1개를 포함하며, HTML을 다시 수정한
 뒤에는 위 명령으로 PPTX도 함께 갱신한다.
 
+## 링크 카드
+
+```bash
+cd docs/presentations/ai-startup-camp-drone-10min
+typst compile presentation-link.typ 발표자료_링크.pdf
+```
+
+`발표자료_링크.pdf`는 공개본 주소로 바로 넘어가는 16:9 안내 장표이다. 공개 URL이
+바뀌면 `presentation-link.typ`의 `deck-url`을 고친 뒤 위 명령으로 다시 만든다.
+
 ## 검증
 
 ```bash
