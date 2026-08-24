@@ -11,22 +11,14 @@
 - [BMM350 yaw 융합 벤치 시험](bmm350_yaw_bench_test.md)
 - [자동착륙 착지 감지 연구](failsafe_land_research.md)
 - [노션 문서 컨벤션](notion_doc_convention.md)
-- [Oracle 재사용 웹 호스팅 운영 가이드](oracle_web_hosting.md)
 - [저장소 마이그레이션 맵](migration_map.md)
-
-## 발표자료
-
-- [발표자료 디렉터리 안내](presentations/README.md) — AI 창업캠프 드론 기술 교안과
-  10분 요약본. 편집 원본은 HTML이고 PDF·PPTX는 배포 시점 산출물이다.
-- 주장과 저장소 근거의 대응은 각 덱의 `SOURCES.md`가 갖는다. 수치의 정답은
-  항상 `firmware/`와 이 디렉터리의 규격 문서다.
 
 ## 설계·계획 기록
 
 날짜가 박힌 기록이다. 사후 수정하지 않고, 틀린 것으로 밝혀지면 정정을 병기한다.
 
 - [`superpowers/specs/`](superpowers/) — 기능별 설계 문서 (자동착륙, yaw 각속도
-  명령, 자기계 캘리브레이션, Tier 1 관측성, 발표자료·웹 배포 등)
+  명령, 자기계 캘리브레이션, Tier 1 관측성)
 - [`superpowers/plans/`](superpowers/) — 그 설계의 구현 계획
 - [저장소 정리 설계](design/2026-07-13-repository-cleanup-design.md) ·
   [구현 계획](plans/2026-07-13-repository-cleanup.md)
@@ -40,3 +32,11 @@
 
 - [PID/DShot 발표용 코드 조각](archive/pid_dshot_presentation_snippet.c)
 - [과거 커밋 메시지 스냅샷](archive/commit_message_snapshot.txt)
+
+## 발표자료는 여기 없다
+
+2026-08-24에 별도 저장소로 분리했다 —
+[lightminn/zetin-drone-presentations](https://github.com/lightminn/zetin-drone-presentations),
+공개본은 <https://lightminn.github.io/zetin-drone-presentations/>다. 옛 주소
+`lightminn.github.io/zetin-drone/`와 `/10min/`은 리다이렉트로 살려 두었다.
+Oracle 웹 호스팅 가이드와 모바일 실습 랩도 그쪽으로 갔다.
