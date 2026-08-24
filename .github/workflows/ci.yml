@@ -13,11 +13,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # numpy: magcal_fit.py 의 제약 타원체 선형대수.
-      # matplotlib: failsafe_telemetry.py 가 임포트하므로 그 테스트가 이것 없이는
-      # 수집조차 되지 않는다.
-      - name: Install test dependencies
-        run: python -m pip install "numpy>=1.26" "matplotlib>=3.7"
+      # requirements.txt 를 그대로 쓴다. 개별 패키지를 골라 넣었더니 matplotlib
+      # 다음에 pandas 가 또 걸렸다 — scripts/ 도구를 실행하는 테스트는 지상국
+      # 의존성 전체를 필요로 하므로, 목록이 갈라지지 않게 선언된 파일을 쓴다.
+      - name: Install ground station dependencies
+        run: python -m pip install -r requirements.txt
       - name: Byte-compile PC tools
         run: python -m py_compile scripts/*.py
       - name: Repository layout checks
