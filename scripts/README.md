@@ -11,6 +11,7 @@ python scripts/monitor_telemetry.py
 python scripts/analyze_flight_log.py [optional-log.csv]
 python scripts/analyze_probe_response.py <csv> [<csv> ...] [--label ground|air]
 python scripts/decode_imu_raw.py <input.bin> [output.csv]
+python scripts/magcal_fit.py <capture.csv>
 python scripts/receive_dual_imu_debug.py
 python scripts/test_dualsense_input.py
 ```
@@ -18,22 +19,20 @@ python scripts/test_dualsense_input.py
 `receive_telemetry.py`와 `monitor_telemetry.py`는 모두 UDP 4210을 사용하고
 수신 내용을 `logs/`에 기록한다. 두 도구는
 [`telemetry_schema.py`](telemetry_schema.py)의 동일한 필드 정의와 파서를
-공유하므로 10개, 14개, 21개, 22개, 30개, 31개 필드 레거시 텔레메트리와 현재
-64개 필드 패킷을 같은 방식으로 해석한다. 필드 44~55는
-body frame의 `IMU1_Gyro_X/Y/Z`, `IMU1_Accel_X/Y/Z`,
-`IMU2_Gyro_X/Y/Z`, `IMU2_Accel_X/Y/Z`다. gyro는 소프트웨어 LPF 적용
-후 값이고 accel에는 소프트웨어 LPF가 없다. 마지막 3개 필드는
-`TgtAngle_Roll/Pitch/Yaw` 목표 각도와 실제 융합 상태 `Mag_Enabled`가
-뒤따른다. `Mag_Z`에서 끝나는 34필드,
-`Yaw_Hold`에서 끝나는 35필드, `Trim_Pitch`에서 끝나는 38필드 패킷도
-레거시로 받아들인다. `Hover_Valid`에서 끝나는 40필드도 프로브 진단 도입 전
-패킷으로 수락하며, `Failsafe_Probe_Response_G`에서 끝나는 43필드는 IMU별
-텔레메트리 도입 전 패킷으로 수락한다. `IMU2_Accel_Z`에서 끝나는 55필드도
-목표 각도 텔레메트리 도입 전 패킷으로 수락하고, `TgtAngle_Yaw`에서 끝나는
-58필드는 mag 상태 텔레메트리 도입 전 패킷으로 수락하며, `Mag_Enabled`에서
-끝나는 59필드는 3901-L0X 텔레메트리 도입 전 패킷으로 수락한다. 필드 60~64는
-`Range_MM`, `Range_Quality`, `Flow_X`, `Flow_Y`, `Flow_Quality`다. CSV에는
-PC 수신 시각까지 포함해 65개 열을 쓴다.
+공유하므로 현재 **65개 필드** 패킷과 과거 패킷을 같은 방식으로 해석한다.
+CSV에는 PC 수신 시각까지 포함해 **66개 열**을 쓴다.
+
+필드 44~55는 body frame의 `IMU1_Gyro_X/Y/Z`, `IMU1_Accel_X/Y/Z`,
+`IMU2_Gyro_X/Y/Z`, `IMU2_Accel_X/Y/Z`다. gyro는 소프트웨어 LPF 적용 후
+값이고 accel에는 소프트웨어 LPF가 없다. 뒤이어 `TgtAngle_Roll/Pitch/Yaw`
+목표 각도(56~58), 실제 융합 상태 `Mag_Enabled`(59), 3901-L0X 상태
+`Range_MM`·`Range_Quality`·`Flow_X`·`Flow_Y`·`Flow_Quality`(60~64),
+`Mag_Cal_Active`(65)가 온다.
+
+파서가 레거시로 수락하는 패킷 길이는 10·14·21·22·30·31·34·35·38·40·43·55·58·
+59·64필드다. 각 길이가 어느 기능 도입 이전을 뜻하는지는
+[`docs/udp_protocol.md`](../docs/udp_protocol.md)의 목록이 원본이며, 없는
+값은 빈 CSV 셀로 남는다.
 
 `analyze_probe_response.py`는 Stage E-4a용으로 프로브 판정 이벤트와
 `Hover_Est` 일관성을 확인하고, 지면/공중 응답 분포 및 1.5배 여유를 판정한다.

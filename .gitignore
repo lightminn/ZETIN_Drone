@@ -20,3 +20,7 @@ __pycache__/
 
 # 1kHz IMU raw 로그 (바이너리, 세션당 수십 MB)
 logs/*.bin
+
+# Manim 렌더 스크래치. 발표 덱은 여기가 아니라 assets/ 의 산출물을 참조한다.
+# 재생성: docs/presentations/*/visualizations/render_visualizations.sh
+media/

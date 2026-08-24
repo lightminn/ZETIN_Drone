@@ -4,9 +4,16 @@
 보관된 스케치는 원형 그대로 보존하며, 복구하거나 빌드 검증하지 않는다.
 모터 제어 스케치를 실행하기 전에는 프로펠러를 제거한다.
 
+주력 스케치는 단일 `.ino`가 아니라 같은 디렉터리의 헤더와 함께 빌드된다:
+`failsafe_land.h`(자동착륙 상태·호버 추정·프로브), `mag_yaw_fusion.h`(BMM350
+융합 수학), `yaw_command.h`(yaw 각속도 명령·heading 자동 잠금),
+`msp_sensor.h`(3901-L0X INAV MSPv2 파서). 이 헤더들은
+[`tools/native_tests/`](../tools/native_tests/)에서 호스트 SIL로 따로
+검증한다.
+
 | 수명주기 | 대상 MCU | 센서 | 모터 프로토콜 | 안전/빌드 메모 | 링크 |
 |---|---|---|---|---|---|
-| 현행·**주력** | ESP32-S3 | 듀얼 ICM42670 | PWM | **주력 트랙**(2026-07-22 결정). 첫 호버 목표. Tier1 관측성(모터·루프주파수·목표각속도)·RC 워치독·시퀀스 하드닝 포함, 실기 벤치 검증 | [`dual_imu_cascade_pwm`](../firmware/flight/dual_imu_cascade_pwm/) |
+| 현행·**주력** | ESP32-S3 | 듀얼 ICM42670 + BMM350 + 3901-L0X | PWM | **주력 트랙**(2026-07-22 결정). **2026-08-01 첫 실비행 검증**(176초·고장 0건). Tier1 관측성·RC 워치독·시퀀스 하드닝·자기계 yaw 융합·RC 두절 자동착륙 포함. 3901-L0X는 기록만 하고 제어에 쓰지 않는다 | [`dual_imu_cascade_pwm`](../firmware/flight/dual_imu_cascade_pwm/) |
 | **보류** | ESP32-S3 | 듀얼 ICM42670 | PWM | **보류**(2026-07-22, 캐스케이드 집중 결정). flix 기반 쿼터니언 후보 — bench-only, 미해결 이슈(gains 미구현·22필드 텔레메트리·accel 매핑 검증) → README 참조 | [`dual_imu_flix_quat_pwm`](../firmware/flight/dual_imu_flix_quat_pwm/) |
 | 현행 | ESP32-S3 | 없음 | PWM | 프로펠러 제거 상태. 4채널 ESC 벤치 테스트(4모터 동시 자동 램프) | [`motor_pwm_bench`](../firmware/diagnostics/motor_pwm_bench/) |
 | 현행 | ESP32-S3 | 없음 | PWM | 프로펠러 제거 상태. 시리얼로 한 번에 한 모터만 저속 구동(CAP 1250µs). GPIO→모터 매핑·회전방향 확인. 벤치 절차 Stage A. **비행펌웨어와 동일한 LEDC PWM 사용**(ESP32Servo는 S3에서 채널 오할당→핀 쌍묶임) | [`motor_id_single`](../firmware/diagnostics/motor_id_single/) |

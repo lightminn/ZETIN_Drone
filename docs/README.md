@@ -13,8 +13,23 @@
 - [노션 문서 컨벤션](notion_doc_convention.md)
 - [Oracle 재사용 웹 호스팅 운영 가이드](oracle_web_hosting.md)
 - [저장소 마이그레이션 맵](migration_map.md)
-- [저장소 정리 설계](design/2026-07-13-repository-cleanup-design.md)
-- [저장소 정리 구현 계획](plans/2026-07-13-repository-cleanup.md)
+
+## 발표자료
+
+- [발표자료 디렉터리 안내](presentations/README.md) — AI 창업캠프 드론 기술 교안과
+  10분 요약본. 편집 원본은 HTML이고 PDF·PPTX는 배포 시점 산출물이다.
+- 주장과 저장소 근거의 대응은 각 덱의 `SOURCES.md`가 갖는다. 수치의 정답은
+  항상 `firmware/`와 이 디렉터리의 규격 문서다.
+
+## 설계·계획 기록
+
+날짜가 박힌 기록이다. 사후 수정하지 않고, 틀린 것으로 밝혀지면 정정을 병기한다.
+
+- [`superpowers/specs/`](superpowers/) — 기능별 설계 문서 (자동착륙, yaw 각속도
+  명령, 자기계 캘리브레이션, Tier 1 관측성, 발표자료·웹 배포 등)
+- [`superpowers/plans/`](superpowers/) — 그 설계의 구현 계획
+- [저장소 정리 설계](design/2026-07-13-repository-cleanup-design.md) ·
+  [구현 계획](plans/2026-07-13-repository-cleanup.md)
 
 ## 과거 문서
 
