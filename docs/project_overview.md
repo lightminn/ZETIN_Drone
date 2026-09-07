@@ -3,6 +3,11 @@
 이 문서는 현재 지원하는 경로와 역사 보관 경로를 구분해 처음 보는 사람이
 올바른 파일에서 시작하도록 안내한다.
 
+현행 설명은 **2026-09-07 기본 지원 코드와 대조**했다. 최신 실험과 통합 전
+개선의 적용 범위는 [현재 상태](current_status.md), 실행 순서는
+[작업 흐름](workflow.md), 실물 확인이 필요한 구성은
+[하드웨어 구성](hardware_configuration.md)에서 확인한다.
+
 ## 지원 범위와 성숙도
 
 현행 하드웨어·제어 조합은 **ESP32-S3 + 듀얼 ICM42670 + PWM ESC**다.
@@ -15,13 +20,14 @@
 | BMM350 yaw 융합 | 벤치 4단계 + 실비행 heading-hold 검증됨 | [`bmm350_yaw_bench_test.md`](bmm350_yaw_bench_test.md) |
 | RC 두절 자동착륙 | 실비행 4회 수행. 착지 감지는 **미해결**(시간 기반 하강) | [`failsafe_land_research.md`](failsafe_land_research.md) |
 | 3901-L0X 광류·거리계 | 텔레메트리 기록만. **제어에 쓰지 않음** | [`msp_sensor.h`](../firmware/flight/dual_imu_cascade_pwm/msp_sensor.h) |
-| 반복 가능한 안정 호버·위치 유지 | 검증 완료 아님 | 고도·위치 센서 폐루프가 없다 |
+| 테더 이륙·수동 호버·착륙 반복 | 별도 실험 구성에서 2026-08-19 5회 기록 | [현재 상태와 적용 범위](current_status.md) |
+| 자동 고도·위치 유지 | 미구현 | 거리·광류 피드백을 제어에 연결하지 않음 |
 
 로그 한 번이 반복 가능한 비행을 보장하지 않는다. 2026-08-01 비행은 자세
 제어와 안전 경로가 공중에서 동작한다는 증거이지, 실내 자유 비행이 가능하다는
 뜻이 아니다. **고도와 위치를 측정하는 센서가 폐루프에 들어가 있지 않아, 조종
-스틱을 중립에 두면 기체는 계속 흘러간다**(2026-08-09 테더 시험에서 조종자가
-호버 내내 역방향 조향을 해야 했다). 보관 코드의 과거 성공 기록은 현행 지원
+스틱을 중립에 두면 기체는 계속 흘러간다**(2026-08-18~19 테더 시험 기록에서
+조종자가 호버 내내 역방향 조향을 했다고 설명했다). 보관 코드의 과거 성공 기록은 현행 지원
 근거로 사용하지 않는다.
 
 ## 저장소 구조
@@ -55,10 +61,11 @@ ESP32-S3의 FreeRTOS 태스크에서 듀얼 IMU를 읽고, 자세 바깥 루프�
 yaw 스틱은 절대 각도가 아니라 `rcr` 각속도 명령이다. 스틱이 중립이고 실제
 yaw 각속도까지 정착하면 회전이 멈춘 heading을 자동으로 잠그며, 정착하지
 않으면 강제 잠금 없이 rate 모드에 남는다. BMM350 자기계 융합(`mag 1`)을 켜면
-그 잠금을 자이로 적분 드리프트 없이 유지한다. **펌웨어 기본값은 OFF지만
-`control_dualsense.py`가 매 시동 직전 `mag 1`을 보내므로 운용 기본값은 ON**
-이다. hard/soft-iron 보정은 Li & Griffiths 제약 타원체 피팅으로 구하고
-(`scripts/magcal_fit.py`), 모터 전류 간섭은 raw XYZ 도메인 throttle 보정으로
+자이로 적분 드리프트를 보정한다. 정확도는 자기계 보정·간섭·장착 조건에
+영향받는다. **펌웨어 기본값은 OFF, 지상국의 조종자 선택 기본값은 ON**이다.
+`control_dualsense.py`는 시동 직전 선택값을 전송하며 `--no-mag`나
+`mag off`로 끈 선택을 유지한다. 실제 적용 상태는 `Mag_Enabled`로 확인한다. hard/soft-iron 보정은 Li & Griffiths 제약 타원체 피팅으로 구하고
+(`scripts/magcal_fit.py`), 모터 전류 간섭은 hard/soft-iron·body 변환 후 XYZ의 throttle 보정으로
 상쇄한다([`bmm350_yaw_bench_test.md`](bmm350_yaw_bench_test.md)). PID 태스크가
 SPI 행업 등으로 정지하면 태스크 워치독(500ms)이 재부팅을 강제해 마지막
 PWM으로 모터가 고정되는 것을 막는다.
@@ -68,13 +75,15 @@ Matek 3901-L0X(PMW3901 광류 + VL53L0X ToF)는 GPIO16으로 INAV MSPv2 프레�
 않는다.** 거리 원값은 작동 범위(80~2000mm) 밖이면 음수이고 너무 가까울 때와
 너무 멀 때가 같은 음수이므로, 신선도는 반드시 `*_Quality`의 −1로 판단한다.
 
-RC 입력이 500ms 끊기면 즉시 모터를 끄지 않고, 펌웨어에 저장된 roll·pitch
-트림을 유지하며 자동착륙한다. 하강값 `FS_DESCENT_DELTA_US=60`은
+RC 입력이 500ms를 초과해 끊기면 호버 추정이 유효하지 않거나 스로틀이
+`FS_GROUND_CUT_MAX_US=1150` 이하일 때 즉시 컷한다. 그 외에는 저장된
+roll·pitch 트림을 유지하며 시간 기반 자동착륙에 진입한다. 하강값 `FS_DESCENT_DELTA_US=60`은
 `CTRL_MARGIN=150`보다 작게 유지한다. **자동착륙은 착지를 감지하지 않고
-`FS_MAX_MS=3000`ms 동안 내려간 뒤 백스톱이 자른다.** 2026-08-01 실기 로그에서
-IMU 기반 착지 판별식 6종이 전부 배제됐고, 공중 오판 컷을 원리적으로 없애는
-쪽을 택했기 때문이다. 능동 스로틀 프로브는 다음 판별식 설계용 기록으로만
-계속 돈다. RC 타임아웃만 이 경로를 사용하고, IMU 전멸·과도 기울기·`stop`은
+`FS_MAX_MS=3000`ms 동안 내려간 뒤 백스톱이 자른다.** IMU 기반 후보는
+평가·보류 상태이며 착지 판정에 채택되지 않았다. 접지 여부를 확인하지
+않으므로 시간 종료 시 공중 컷도 배제할 수 없다. 능동 스로틀 프로브는
+실제 스로틀 딥과 기록을 계속하지만 착지 컷을 결정하지 않는다.
+RC 타임아웃만 이 경로를 사용하고, IMU 전멸·과도 기울기·`stop`은
 즉시 컷한다. 자세한 근거는
 [`failsafe_land_research.md`](failsafe_land_research.md).
 
@@ -98,8 +107,8 @@ IMU2는 IMU1 기준 X와 Z 부호가 반대이고 Y는 같다. 두 센서를 평
 현재 변환은 다음과 같다.
 
 ```text
-body roll rate X  = -sensor Y
-body pitch rate Y =  sensor X
+body roll rate X  =  sensor Y
+body pitch rate Y = -sensor X
 body yaw rate Z   = -sensor Z
 body accel X      =  sensor Y
 body accel Y      = -sensor X
@@ -180,18 +189,19 @@ PC를 펌웨어의 `Drone_Tuning` SoftAP에 연결한 뒤 필요한 도구를 �
 - 옛 GPS 수신기와 TCP 테스트:
   [`scripts/archive/`](../scripts/archive/)
 
-23개 스케치의 상태는 [`firmware_catalog.md`](firmware_catalog.md), 모든 옛
+26개 스케치의 상태는 [`firmware_catalog.md`](firmware_catalog.md), 모든 옛
 경로와 새 경로의 대응은 [`migration_map.md`](migration_map.md)에서 찾는다.
 
 ## 안전한 확인 순서
 
 1. 프로펠러를 제거한다.
-2. [`motor_pwm_bench`](../firmware/diagnostics/motor_pwm_bench/)로 모터 번호와
-   PWM 반응을 확인한다.
+2. [`motor_id_single`](../firmware/diagnostics/motor_id_single/)로 한 모터씩
+   번호·방향·PWM 반응을 확인한다. 자동 4모터 램프인 `motor_pwm_bench`와 구분한다.
 3. [`icm42670_single_raw`](../firmware/diagnostics/icm42670_single_raw/)과
    [`icm42670_dual_raw`](../firmware/diagnostics/icm42670_dual_raw/)로 센서축과
    두 IMU 부호를 확인한다.
 4. [`icm42670_dual_loop_debug`](../firmware/diagnostics/icm42670_dual_loop_debug/)로
-   추정각·루프 주기·보정 방향을 확인한다.
+   추정각·루프 주기를 확인한다. 이 진단은 PID·믹서가 없으므로 보정 방향은
+   주력 비행 펌웨어의 프롭 OFF 벤치 단계에서 확인한다.
 5. 전원 극성, 비상 정지, RC timeout 자동착륙, 과도 기울기 정지를 확인한
    뒤에만 제한된 테스트 리그에서 비행 후보를 평가한다.
